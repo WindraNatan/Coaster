@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Hydration Coaster · Simulator FSM</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0C1F27; --panel:#132B35; --panel2:#0F242D; --line:#20404D;
+  --ink:#DCEDEF; --dim:#7FA6B0; --water:#3CC2E0; --ok:#5BC98F;
+  --warn:#E8B84B; --alarm:#E4585B;
+  --mono:'JetBrains Mono',ui-monospace,'Consolas',monospace;
+  --disp:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--disp);min-height:100vh}
+header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+  padding:20px 28px 14px;border-bottom:1px solid var(--line)}
+h1{font-size:19px;font-weight:700;letter-spacing:.2px}
+h1 span{color:var(--water)}
+.clock{font-family:var(--mono);font-size:13px;color:var(--dim);margin-left:auto}
+.clock b{color:var(--ink);font-weight:600}
+.warp{display:flex;gap:4px}
+.warp button{font-family:var(--mono);font-size:11px;padding:3px 8px;background:none;
+  border:1px solid var(--line);color:var(--dim);cursor:pointer;border-radius:4px}
+.warp button.on{border-color:var(--water);color:var(--water)}
+.warp button:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+main{display:grid;grid-template-columns:minmax(320px,1fr) 430px;gap:0;
+  max-width:1120px;margin:0 auto;min-height:calc(100vh - 58px)}
+.stage{padding:26px 30px;border-right:1px solid var(--line)}
+.tele{padding:26px 30px;background:var(--panel2)}
+@media(max-width:940px){main{grid-template-columns:1fr}.stage{border-right:none;border-bottom:1px solid var(--line)}}
+/* ---------- panggung gelas ---------- */
+.stage-top{display:flex;align-items:flex-end;gap:26px}
+.glass-box{flex:0 0 150px}
+.gram{font-size:40px;font-weight:700;font-family:var(--mono);line-height:1}
+.gram small{font-size:14px;color:var(--dim);font-weight:400}
+.water-ml{font-family:var(--mono);font-size:13px;color:var(--water);margin-top:4px}
+.cup-absent{color:var(--dim);font-size:12px;font-family:var(--mono);margin-top:6px;display:none}
+input[type=range]{width:100%;accent-color:var(--water);margin-top:18px}
+.slider-cap{display:flex;justify-content:space-between;font-family:var(--mono);
+  font-size:10px;color:var(--dim)}
+.stab-bar{height:3px;background:var(--line);margin-top:14px;border-radius:2px;overflow:hidden}
+.stab-bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .12s linear}
+.stab-lab{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+button.act{font-family:var(--mono);font-size:12px;padding:7px 12px;border-radius:6px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button.act:hover{border-color:var(--water)}
+button.act:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+h2{font-size:12px;font-weight:500;color:var(--dim);letter-spacing:.4px;margin:26px 0 10px}
+.scen{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.scen button{text-align:left;width:100%;padding:9px 11px;font-size:12px;line-height:1.35}
+.scen small{display:block;color:var(--dim);font-size:10.5px;margin-top:2px}
+/* ---------- telemetri ---------- */
+.badge{border:2px solid var(--line);border-radius:8px;padding:18px 20px 16px;background:var(--panel)}
+.badge .nm{font-size:30px;font-weight:700;letter-spacing:.5px;font-family:var(--disp)}
+.badge .why{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px;min-height:14px}
+.badge.st-IDLE .nm{color:var(--dim)}
+.badge.st-STABLE .nm{color:var(--ok)}
+.badge.st-TIMING .nm{color:var(--water)}
+.badge.st-LIFTED .nm{color:var(--dim)}
+.badge.st-ALERT_DRINK .nm{color:var(--warn)}
+.badge.st-ALERT_CHEAT .nm{color:var(--alarm)}
+.badge.st-ALERT_REFILL .nm{color:var(--warn)}
+.badge.alert{animation:pulse var(--pulse,500ms) steps(2,jump-none) infinite}
+@keyframes pulse{50%{border-color:currentColor}}
+.count{font-family:var(--mono);font-size:15px;margin-top:10px;color:var(--dim)}
+.count b{color:var(--ink);font-size:22px}
+.counts{display:flex;gap:0;margin-top:16px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.counts div{flex:1;padding:10px 6px;text-align:center}
+.counts div+div{border-left:1px solid var(--line)}
+.counts b{display:block;font-family:var(--mono);font-size:19px}
+.counts span{font-size:10.5px;color:var(--dim)}
+.adaptive{margin-top:18px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.adaptive b{color:var(--water);font-size:14px}
+.adaptive label{display:block;margin:10px 0 2px;color:var(--ink)}
+.demo-row{margin-top:16px;display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}
+.demo-on{color:var(--warn)}
+.cfg{margin-top:16px;display:flex;gap:8px;align-items:center;font-size:12px}
+.cfg input{width:76px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+  font-family:var(--mono);padding:5px 7px;border-radius:5px}
+.cfg button{padding:6px 10px}
+/* log serial */
+.log{margin-top:20px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  font-family:var(--mono);font-size:11px;line-height:1.7;padding:12px 14px;height:220px;
+  overflow-y:auto;color:var(--dim)}
+.log .t{color:#51727C}
+.log .ev-STABLE{color:var(--ok)}
+.log .ev-TIMING{color:var(--water)}
+.log .ev-LIFTED{color:var(--dim)}
+.log .ev-ALERT_DRINK{color:var(--warn)}
+.log .ev-ALERT_CHEAT{color:var(--alarm)}
+.log .ev-ALERT_REFILL{color:var(--warn)}
+.log .info{color:var(--dim)}
+.foot{font-family:var(--mono);font-size:10px;color:#51727C;margin-top:14px;line-height:1.6}
+@media (prefers-reduced-motion: reduce){.badge.alert{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Smart Hydration Coaster <span>·</span> Simulator FSM</h1>
+  <div class="clock">T+<b id="simClock">00:00</b></div>
+  <div class="warp" role="group" aria-label="Percepatan waktu simulasi">
+    <button data-warp="1" class="on">x1</button>
+    <button data-warp="10">x10</button>
+    <button data-warp="60">x60</button>
+    <button data-warp="600">x600</button>
+  </div>
+</header>
+<main>
+  <section class="stage">
+    <div class="stage-top">
+      <div class="glass-box">
+        <svg id="glassSvg" width="130" height="170" viewBox="0 0 120 158" aria-hidden="true">
+          <defs>
+            <clipPath id="cupClip"><path d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z"/></clipPath>
+          </defs>
+          <path d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z"
+                fill="none" stroke="#2A5462" stroke-width="3"/>
+          <rect id="waterRect" x="30" y="148" width="60" height="0" fill="#3CC2E0"
+                opacity="0.85" clip-path="url(#cupClip)"/>
+          <ellipse id="cupGhost" cx="60" cy="146" rx="32" ry="5" fill="none"
+                   stroke="#2A5462" stroke-dasharray="4 4" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="gram"><span id="wOut">0.0</span><small> g</small></div>
+        <div class="water-ml" id="wMl">air 0 ml</div>
+        <div class="cup-absent" id="cupAbsent">gelas tidak ada di tatakan</div>
+        <div class="stab-bar" aria-hidden="true"><i id="stabFill"></i></div>
+        <div class="stab-lab" id="stabLab">stabilitas: menunggu</div>
+      </div>
+    </div>
+    <input type="range" id="wSlider" min="0" max="500" step="1" value="0"
+           aria-label="Berat di tatakan (gram)">
+    <div class="slider-cap"><span>0 g (diangkat)</span><span>berat aktual di tatakan</span><span>500 g</span></div>
+    <div class="actions">
+      <button class="act" id="bLift">Angkat gelas</button>
+      <button class="act" id="bPlace">Taruh kembali</button>
+      <button class="act" id="bSip">Sedot -30 g</button>
+      <button class="act" id="bPour">Tuang +50 g</button>
+      <button class="act" id="bEmpty">Kosongkan gelas</button>
+    </div>
+
+    <h2>Skenario uji (PRD)</h2>
+    <div class="scen">
+      <button class="act" data-sc="0">1. Taruh gelas terisi<small>stabil 1,5 s menuju TIMING</small></button>
+      <button class="act" data-sc="1">2. Timer habis<small>tidak minum sesuai jadwal</small></button>
+      <button class="act" data-sc="2">3. Sentuhan tipuan<small>naik turun &lt; 20 g</small></button>
+      <button class="act" data-sc="3">4. Minum sah<small>turun 120 g, tercatat</small></button>
+      <button class="act" data-sc="4">5. Gelas kosong<small>alarm isi ulang</small></button>
+      <button class="act" data-sc="5">6. Isi ulang<small>kembali ke TIMING</small></button>
+      <button class="act" data-sc="6">7. Gelas dibawa pergi<small>MISSING lalu pulih</small></button>
+      <button class="act" data-sc="7">8. Isi ulang di tatakan<small>+50 g tanpa angkat</small></button>
+    </div>
+    <p class="foot">Port 1:1 dari fsm.h + config.h. Skenario memakai interval demo 15 s;
+    percepatan waktu otomatis x10 saat skenario dijalankan.<!--SEAM: Phase 2, telemetri PATCH ke Firebase RTDB dari loop simulasi ini--></p>
+  </section>
+
+  <aside class="tele">
+    <div class="badge st-IDLE" id="badge">
+      <div class="nm" id="stName">IDLE</div>
+      <div class="why" id="stWhy"></div>
+      <div class="count">sisa waktu <b id="cd">--:--</b></div>
+    </div>
+    <div class="counts">
+      <div><b id="cDrink">0</b><span>gelas minum</span></div>
+      <div><b id="cCheat">0</b><span>curang</span></div>
+      <div><b id="cRefill">0</b><span>isi ulang</span></div>
+      <div><b id="cTotal">0</b><span>total ml</span></div>
+    </div>
+    <div class="adaptive">
+      <b id="interval">--</b> <span id="intervalWhy"></span>
+      <label>Suhu <span id="tVal" style="float:right">27 °C</span></label>
+      <input type="range" id="sTemp" min="18" max="40" step="0.5" value="27">
+      <label>Kelembapan <span id="tHum" style="float:right">60 %</span></label>
+      <input type="range" id="sHum" min="20" max="95" step="1" value="60">
+    </div>
+    <div class="demo-row">
+      <button class="act" id="bDemo">Mode demo: ON</button>
+      <button class="act" id="bReset">Reset statistik</button>
+      <span id="demoLab" class="demo-on">interval 15 s, batas angkat 10 s</span>
+    </div>
+    <div class="cfg">
+      <label for="emptyIn">Gelas kosong (g):</label>
+      <input type="number" id="emptyIn" min="35" max="300" step="1" value="130">
+      <button class="act" id="bCal">Kalibrasi</button>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+  </aside>
+</main>
+<script>
+
+'use strict';
+// ===== Konstanta: mirror config.h. Jangan ubah terpisah dari firmware. =====
+const CFG = {
+  CUP_ON:35.0, CUP_OFF:25.0, DEFAULT_EMPTY:130.0, MAX_EMPTY:300.0,
+  EMPTY_TOL:15.0, MIN_DRINK:20.0, REFILL:30.0,
+  STAB_BAND:3.0, STAB_MS:1500,
+  DEMO_INTERVAL:15000, BASE_INTERVAL:1800000,
+  DEMO_MAX_LIFT:10000, MAX_LIFT:180000,
+  K_COLD:1.20, K_NORM:1.00, K_WARM:0.75, K_HOT:0.50, K_DRY:0.85, FLOOR:5000
+};
+
+function computeAdaptiveIntervalMs(baseMs, tempC, hum){
+  if (!isFinite(tempC) || !isFinite(hum)) return baseMs;
+  let kt = tempC < 24 ? CFG.K_COLD : tempC <= 28 ? CFG.K_NORM
+         : tempC <= 32 ? CFG.K_WARM : CFG.K_HOT;
+  const kh = hum < 40 ? CFG.K_DRY : 1.0;
+  return Math.max(CFG.FLOOR, Math.round(baseMs * kt * kh));
+}
+
+// ===== Port 1:1 dari fsm.h. Cabang dan urutan cabang identik. =====
+class CoasterFSM {
+  constructor(emptyCup = CFG.DEFAULT_EMPTY, interval = CFG.DEMO_INTERVAL){
+    this.state = 'IDLE';
+    this.baseline = 0; this.emptyCup = emptyCup;
+    this.timerStart = 0; this.liftStart = 0;
+    this.interval = interval; this.maxLift = CFG.DEMO_MAX_LIFT;
+    this.stableCand = 0; this.stableStart = 0;
+    this.totalDrank = 0; this.drinkCount = 0;
+    this.cheatCount = 0; this.refillCount = 0;
+    this.missing = false;
+  }
+  get emptyLimit(){ return this.emptyCup + CFG.EMPTY_TOL; }
+  get stateString(){
+    return this.state === 'ALERT_REFILL'
+      ? (this.missing ? 'ALERT_MISSING_CUP' : 'ALERT_EMPTY_CUP') : this.state;
+  }
+  setState(next, w, now){ this.state = next; this.stableCand = w; this.stableStart = now; }
+  isStable(w, now){
+    if (w - this.stableCand > CFG.STAB_BAND || this.stableCand - w > CFG.STAB_BAND){
+      this.stableCand = w; this.stableStart = now; return false;
+    }
+    return (now - this.stableStart) >= CFG.STAB_MS;
+  }
+  recordDrink(g){ this.totalDrank += g; this.drinkCount++; }
+  setInterval_(ms){ this.interval = ms; }
+  setMaxLift(ms){ this.maxLift = ms; }
+  setEmptyCup(g){
+    if (g >= CFG.CUP_ON && g <= CFG.MAX_EMPTY){ this.emptyCup = g; return true; }
+    return false;
+  }
+  resetStats(){ this.totalDrank = 0; this.drinkCount = 0; this.cheatCount = 0; this.refillCount = 0; }
+  get alertActive(){
+    return this.state === 'ALERT_DRINK' || this.state === 'ALERT_CHEAT'
+        || this.state === 'ALERT_REFILL';
+  }
+  remaining(now){
+    if (this.state !== 'TIMING') return null;
+    return Math.max(0, this.interval - (now - this.timerStart));
+  }
+  waterMl(w){ return w <= this.emptyCup ? 0 : w - this.emptyCup; }
+
+  update(w, now){
+    const el = this.emptyCup + CFG.EMPTY_TOL;
+    switch (this.state){
+      case 'IDLE':
+        this.missing = false;
+        if (w >= CFG.CUP_ON) this.setState('STABLE', w, now);
+        break;
+      case 'STABLE':
+        if (w < CFG.CUP_OFF){ this.setState('IDLE', w, now); break; }
+        if (this.isStable(w, now)){
+          this.baseline = w;
+          if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
+          else { this.timerStart = now; this.setState('TIMING', w, now); }
+        }
+        break;
+      case 'TIMING':
+        if (w < CFG.CUP_OFF){ this.liftStart = now; this.setState('LIFTED', w, now); break; }
+        if (w - this.baseline >= CFG.REFILL){
+          // Isi ulang langsung di atas tatakan (PRD skenario 8).
+          // Fix C4: keputusan baru sah setelah berat BARU stabil.
+          if (this.isStable(w, now)){ this.baseline = w; this.timerStart = now; this.refillCount++; }
+          break;
+        }
+        if (this.baseline - w >= CFG.MIN_DRINK){
+          // Fix C4: gerbang stabilitas WAJIB. Mengangkat gelas menurunkan berat
+          // ~46 g per sampel (10 Hz); tanpa gerbang ini tiap sampel turun dicatat
+          // sebagai satu kali minum.
+          if (this.isStable(w, now)){
+            this.recordDrink(this.baseline - w); this.baseline = w;
+            if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
+            else this.timerStart = now;
+          }
+          break;
+        }
+        if (now - this.timerStart >= this.interval) this.setState('ALERT_DRINK', w, now);
+        break;
+      case 'LIFTED':
+        if (w >= CFG.CUP_ON){
+          if (this.isStable(w, now)) this.evalReturned(w, el, now);
+        } else if (now - this.liftStart >= this.maxLift){
+          this.missing = true; this.setState('ALERT_REFILL', w, now);
+        }
+        break;
+      case 'ALERT_DRINK':
+      case 'ALERT_CHEAT':
+        if (w < CFG.CUP_OFF){ this.liftStart = now; this.setState('LIFTED', w, now); break; }
+        if (w - this.baseline >= CFG.REFILL){
+          // Fix C4: sama seperti TIMING, tunggu berat baru stabil
+          if (this.isStable(w, now)){
+            this.baseline = w; this.timerStart = now; this.refillCount++;
+            this.setState('TIMING', w, now);
+          }
+          break;
+        }
+        if (this.baseline - w >= CFG.MIN_DRINK){
+          // Fix C4: gerbang stabilitas sebelum mencatat minum
+          if (this.isStable(w, now)){
+            this.recordDrink(this.baseline - w); this.baseline = w;
+            if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
+            else { this.timerStart = now; this.setState('TIMING', w, now); }
+          }
+          break;
+        }
+        break;
+      case 'ALERT_REFILL':
+        if (w < CFG.CUP_OFF){
+          if (!this.missing){ this.liftStart = now; this.setState('LIFTED', w, now); }
+          break;
+        }
+        if (w > el){
+          if (this.isStable(w, now)){
+            const dec = this.baseline - w;
+            if (dec >= CFG.MIN_DRINK) this.recordDrink(dec); else this.refillCount++;
+            this.baseline = w; this.timerStart = now;
+            this.missing = false; this.setState('TIMING', w, now);
+          }
+        } else {
+          this.missing = false;
+        }
+        break;
+    }
+  }
+  evalReturned(w, el, now){
+    const dec = this.baseline - w, inc = w - this.baseline;
+    if (w <= el){
+      if (dec >= CFG.MIN_DRINK) this.recordDrink(dec);
+      this.baseline = w; this.missing = false;
+      this.setState('ALERT_REFILL', w, now); return;
+    }
+    if (inc >= CFG.REFILL){
+      this.baseline = w; this.timerStart = now; this.refillCount++;
+      this.setState('TIMING', w, now); return;
+    }
+    if (dec >= CFG.MIN_DRINK){
+      this.recordDrink(dec); this.baseline = w; this.timerStart = now;
+      this.setState('TIMING', w, now); return;
+    }
+    this.cheatCount++; this.setState('ALERT_CHEAT', w, now);
+  }
+}
+
+
+// ===== Sisi UI / simulator =====
+// Status simulator. Wajib 'let'/'const': di bawah 'use strict' penugasan ke nama
+// yang tidak dideklarasikan langsung melempar ReferenceError dan halaman mati.
+let weight = 0, simMs = 0, demo = true, warp = 1, sc = null, lastFull = 380;
+let roomT = 27, roomHum = 60;
+let fsm = new CoasterFSM(CFG.DEFAULT_EMPTY, CFG.DEMO_INTERVAL);
+
+const $ = id => document.getElementById(id);
+const $w = $('wSlider');
+
+function log(msg, cls){
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  const t = document.createElement('span'); t.className = 't';
+  t.textContent = 'T+' + (simMs/1000).toFixed(1) + 's  ';
+  div.appendChild(t); div.appendChild(document.createTextNode(msg));
+  const el = $('log');
+  el.prepend(div);
+  while (el.childElementCount > 80) el.lastChild.remove();
+}
+function evCls(st){ return st.startsWith('ALERT') ? 'ev-' + st.split('_')[1] : 'ev-' + st; }
+
+function setWeight(w, fromSlider){
+  weight = Math.max(0, Math.min(500, w));
+  if (weight >= CFG.CUP_ON) lastFull = weight;
+  if (!fromSlider) $w.value = weight;
+}
+function setWarp(x){
+  warp = x;
+  document.querySelectorAll('.warp button').forEach(b =>
+    b.classList.toggle('on', +b.dataset.warp === x));
+}
+document.querySelectorAll('.warp button').forEach(b =>
+  b.addEventListener('click', () => setWarp(+b.dataset.warp)));
+
+function recomputeAdaptive(){
+  const base = demo ? CFG.DEMO_INTERVAL : CFG.BASE_INTERVAL;
+  fsm.setInterval_(computeAdaptiveIntervalMs(base, roomT, roomHum));
+}
+function applyDemo(){
+  fsm.setMaxLift(demo ? CFG.DEMO_MAX_LIFT : CFG.MAX_LIFT);
+  recomputeAdaptive();
+  $('bDemo').textContent = 'Mode demo: ' + (demo ? 'ON' : 'OFF');
+  $('demoLab').textContent = demo
+    ? 'interval 15 s, batas angkat 10 s'
+    : 'interval 30 mnt, batas angkat 3 mnt';
+  $('demoLab').classList.toggle('demo-on', demo);
+}
+
+// skenario: [jeda sejak mulai (ms), berat (g)] -- diumpankan ke FSM penuh, bukan ganti label.
+// Dua syarat yang harus dipenuhi data ini:
+//   1. Jeda antar langkah > 1 tick pada warp x10 (1000 ms). Kalau tidak, dua langkah
+//      jatuh di tick yang sama dan FSM tak pernah melihat keadaan antara.
+//   2. Tiap skenario mengisi gelasnya sendiri, karena FSM di-reset tiap tombol.
+const SCEN = [
+  [[0,380]],                             // 1. taruh gelas -> STABLE -> TIMING
+  [[0,380]],                             // 2. gelas sama, timer 15 s habis -> ALERT_DRINK
+  [[0,380],[4000,0],[6000,372]],         // 3. angkat, taruh lagi -8 g -> ALERT_CHEAT
+  [[0,380],[4000,0],[6000,260]],         // 4. angkat, taruh lagi -120 g -> minum tercatat
+  [[0,380],[4000,0],[6000,135]],         // 5. kembali dalam keadaan kosong -> ALERT_EMPTY_CUP
+  [[0,380],[4000,0],[6000,135],[9000,350]], // 6. isi ulang 350 g -> kembali ke TIMING
+  [[0,380],[4000,0],[16000,200]],        // 7. dibawa pergi > 10 s -> ALERT_MISSING_CUP, lalu pulih
+  [[0,380],[5000,430]]                   // 8. isi ulang +50 g di atas tatakan
+];
+function runScenario(idx){
+  // Berangkat dari FSM bersih: tanpa ini hasil tiap tombol bergantung pada
+  // skenario yang dijalankan sebelumnya.
+  demo = true;
+  fsm = new CoasterFSM(fsm.emptyCup, CFG.DEMO_INTERVAL);
+  applyDemo();
+  sc = { steps: SCEN[idx], i: 0, t0: simMs };
+  setWarp(10);
+  log('Skenario ' + (idx+1) + ' dijalankan, waktu dipercepat x10', '');
+}
+document.querySelectorAll('[data-sc]').forEach(b =>
+  b.addEventListener('click', () => runScenario(+b.dataset.sc)));
+
+// kontrol manual (membatalkan skenario berjalan)
+$w.addEventListener('input', () => { sc = null; setWeight(+$w.value, true); });
+$('bLift').addEventListener('click', () => { sc = null; setWeight(0); });
+$('bPlace').addEventListener('click', () => { sc = null; setWeight(lastFull); });
+$('bSip').addEventListener('click', () => { sc = null; setWeight(weight - 30); });
+$('bPour').addEventListener('click', () => { sc = null; setWeight(weight + 50); });
+$('bEmpty').addEventListener('click', () => { sc = null; setWeight(fsm.emptyCup + 5); });
+$('bDemo').addEventListener('click', () => { demo = !demo; applyDemo(); });
+$('sTemp').addEventListener('input', e => { roomT = +e.target.value; $('tVal').textContent = roomT + '°C'; recomputeAdaptive(); });
+$('sHum').addEventListener('input', e => { roomHum = +e.target.value; $('tHum').textContent = roomHum + ' %'; recomputeAdaptive(); });
+$('bCal').addEventListener('click', () => {
+  const g = +$('emptyIn').value;
+  if (fsm.setEmptyCup(g)) log('Berat gelas kosong disimpan: ' + fsm.emptyCup.toFixed(1) + ' g', '');
+  else log('DITOLAK: ' + g + ' g di luar rentang gelas kosong (35-300 g). Kosongkan gelas dulu.', '');
+  $('emptyIn').value = fsm.emptyCup;
+});
+$('bReset').addEventListener('click', () => { fsm.resetStats(); log('Statistik harian di-reset', ''); });
+
+function fmtClock(ms){
+  const s = Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+}
+function fmt(ms){ return ms >= 60000 ? fmtClock(ms) : (ms/1000).toFixed(1) + ' s'; }
+
+function render(){
+  const w = weight, st = fsm.stateString;
+  const badge = $('badge');
+  badge.className = 'badge st-' + fsm.state + (fsm.alertActive ? ' alert' : '');
+  $('stName').textContent = st.replace('ALERT_', 'ALERT ');
+  $('stWhy').textContent = {
+    IDLE: 'taruh gelas untuk mulai',
+    STABLE: 'menunggu berat stabil 1,5 s',
+    TIMING: 'baseline ' + fsm.baseline.toFixed(0) + ' g',
+    LIFTED: 'diangkat ' + Math.floor((simMs - fsm.liftStart)/1000) + ' s / ' + Math.round(fsm.maxLift/1000) + ' s',
+    ALERT_DRINK: 'saatnya minum!',
+    ALERT_CHEAT: 'berat kembali tanpa minum cukup',
+    ALERT_REFILL: fsm.missing ? 'gelas tidak di tatakan' : 'gelas kosong, isi ulang'
+  }[fsm.state] || '';
+  if (fsm.alertActive){
+    badge.style.setProperty('--pulse',
+      (fsm.state === 'ALERT_CHEAT' ? 150 : fsm.state === 'ALERT_REFILL' ? 750 : 500) + 'ms');
+    badge.classList.add('alert');
+  } else badge.classList.remove('alert');
+  const rem = fsm.remaining(simMs);
+  $('cd').textContent = rem === null ? '--:--' : fmt(rem);
+
+  $('cDrink').textContent = fsm.drinkCount;
+  $('cCheat').textContent = fsm.cheatCount;
+  $('cRefill').textContent = fsm.refillCount;
+  $('cTotal').textContent = Math.round(fsm.totalDrank);
+
+  const ml = fsm.waterMl(weight);
+  $('wOut').textContent = weight.toFixed(1);
+  $('wMl').textContent = 'air ' + ml.toFixed(0) + ' ml';
+  $('cupAbsent').style.display = weight < CFG.CUP_OFF ? 'block' : 'none';
+  const h = 118 * ml / 400;
+  $('waterRect').setAttribute('y', (148 - h).toFixed(1));
+  $('waterRect').setAttribute('height', h.toFixed(1));
+  $('glassSvg').style.opacity = weight >= CFG.CUP_OFF ? 1 : 0.35;
+  $('cupGhost').style.opacity = weight < CFG.CUP_ON ? 1 : 0.15;
+
+  const inBand = Math.abs(weight - fsm.stableCand) <= CFG.STAB_BAND &&
+    (fsm.state === 'STABLE' || fsm.state === 'LIFTED' || fsm.state === 'ALERT_REFILL');
+  const prog = inBand ? Math.min(1, (simMs - fsm.stableStart) / CFG.STAB_MS) : 0;
+  $('stabFill').style.width = (prog * 100) + '%';
+  $('stabLab').textContent = weight < CFG.CUP_ON ? 'stabilitas: menunggu gelas'
+    : prog >= 1 ? 'stabil' : 'stabilitas: ' + Math.round(prog * 100) + '%';
+
+  $('simClock').textContent = fmtClock(simMs);
+  const base = demo ? CFG.DEMO_INTERVAL : CFG.BASE_INTERVAL;
+  $('interval').textContent = fmt(computeAdaptiveIntervalMs(base, roomT, roomHum));
+  $('intervalWhy').textContent = demo ? 'demo 15 s x faktor DHT11' : 'basis 30 mnt x faktor DHT11';
+}
+
+// loop simulasi: 1 tick = 100 ms waktu simulasi (10 Hz, paritas SAMPLE_INTERVAL_MS)
+setInterval(() => {
+  simMs += 100 * warp;
+  if (sc){
+    while (sc.i < sc.steps.length && simMs - sc.t0 >= sc.steps[sc.i][0]){
+      setWeight(sc.steps[sc.i][1]); sc.i++;
+    }
+  }
+  const beforeSt = fsm.stateString,
+        bd = fsm.drinkCount, bc = fsm.cheatCount, br = fsm.refillCount, bt = fsm.totalDrank;
+  fsm.update(weight, simMs);
+  if (fsm.stateString !== beforeSt){
+    let extra = '';
+    if (fsm.state === 'TIMING') extra = ' (baseline ' + fsm.baseline.toFixed(0) + ' g)';
+    if (fsm.state === 'ALERT_REFILL' && fsm.missing) extra = ' (gelas tidak kembali > ' + fsm.maxLift/1000 + ' s)';
+    log(beforeSt + ' -> ' + fsm.stateString + extra, evCls(fsm.stateString));
+  }
+  if (fsm.drinkCount > bd) log('minum tercatat +' + Math.round(fsm.totalDrank - bt) + ' g, total ' + Math.round(fsm.totalDrank) + ' ml', 'ev-TIMING');
+  if (fsm.cheatCount > bc) log('curangan ke-' + fsm.cheatCount, 'ev-ALERT_CHEAT');
+  if (fsm.refillCount > br) log('isi ulang ke-' + fsm.refillCount, 'ev-ALERT_DRINK');
+  render();
+}, 100);
+
+applyDemo();
+log('Smart Hydration Coaster siap. Taruh gelas atau jalankan skenario.', '');
+</script>
+</body>
+</html>
