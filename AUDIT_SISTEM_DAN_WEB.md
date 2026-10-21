@@ -126,7 +126,7 @@ Belum ada satu halaman yang memandu perakitan dan penyalaan dari nol untuk orang
 
 ## 6. Sisi developer
 
-Tiga port identik, tetapi sinkronisasinya manual; tidak ada skrip atau CI yang menjalankan ketiga suite sekaligus. Port web juga tidak punya uji mandiri: kelas FSM tertanam di dalam HTML sehingga tidak bisa diimpor Node, dan delapan tombol skenario hanya mencakup skenario PRD. Saya mengekstrak kelas itu secara ad hoc dan 32 asersi lulus, tetapi hasilnya tidak tersimpan. Kelas itu kini hidup di `web/fsm.js` dengan `web/fsm.test.js` (30 asersi, 4 skenario regresi K1/K3); mirror penuh 21 skenario Python/C++ belum ada, sekaligus masih ada sekitar 6.6 KB kode inline di HTML.
+Tiga port identik, tetapi sinkronisasinya manual; tidak ada skrip atau CI yang menjalankan ketiga suite sekaligus. Saat audit, port web tidak punya uji mandiri: kelas FSM tertanam di dalam HTML sehingga tidak bisa diimpor Node, dan delapan tombol skenario hanya mencakup skenario PRD. Saya mengekstrak kelas itu secara ad hoc dan 32 asersi lulus, tetapi hasilnya tidak tersimpan. Kelas itu kini sudah diekstrak ke `web/fsm.js`, diimpor `web/index.html` lewat `<script src="fsm.js">`, dengan `web/fsm.test.js` (30 asersi, 4 skenario regresi K1/K3 bernomor 18-21). Sisa pekerjaan: mirror penuh 21 skenario Python/C++ di JS, dan delapan tombol skenario di `web/index.html` masih hanya mencakup skenario PRD.
 
 Tambahkan regresi K1 dan K3 ke ketiga port. Tanpa itu perbaikan bisa hilang diam-diam seperti kasus gerbang stabilitas sebelumnya.
 

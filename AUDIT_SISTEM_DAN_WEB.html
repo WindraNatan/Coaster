@@ -316,7 +316,7 @@ settle(f, 380, 3000)          # refill=1, tanpa isi ulang</code></pre>
 <h2>Sisi developer</h2>
 <ol>
   <li>Tiga port identik, tetapi sinkronisasinya manual. Tidak ada skrip atau CI yang menjalankan ketiga suite sekaligus.</li>
-  <li>Port web tidak punya uji mandiri. Kelas FSM tertanam di dalam HTML, jadi tidak bisa diimpor Node dan delapan tombol skenario hanya mencakup skenario PRD. Saya mengekstrak kelas itu secara ad hoc dan 32 asersi lulus, tetapi hasilnya tidak tersimpan. Kelas itu kini hidup di <code>web/fsm.js</code> dengan <code>web/fsm.test.js</code> (30 asersi, 4 skenario regresi K1/K3); mirror penuh 21 skenario Python/C++ belum ada, dan masih ada sekitar 6.6 KB kode inline di HTML.</li>
+  <li>Saat audit, port web tidak punya uji mandiri: kelas FSM tertanam di dalam HTML, jadi tidak bisa diimpor Node dan delapan tombol skenario hanya mencakup skenario PRD. Saya mengekstrak kelas itu secara ad hoc dan 32 asersi lulus, tetapi hasilnya tidak tersimpan. Kelas itu kini sudah diekstrak ke <code>web/fsm.js</code>, diimpor <code>web/index.html</code> lewat <code>&lt;script src="fsm.js"&gt;</code>, dengan <code>web/fsm.test.js</code> (30 asersi, 4 skenario regresi K1/K3 bernomor 18-21). Sisa: mirror penuh 21 skenario Python/C++ di JS, dan delapan tombol skenario di <code>web/index.html</code> masih hanya mencakup skenario PRD.</li>
   <li>Tambahkan regresi K1 dan K3 ke ketiga port. Tanpa itu, perbaikan bisa hilang diam-diam seperti kasus gerbang stabilitas sebelumnya.</li>
   <li>Firmware dan PRD berbeda soal cloud. Pilih satu kebenaran; yang termurah adalah memperbarui dokumen, bukan menambah fitur.</li>
   <li>Biner <code>uji_fsm.exe</code> ikut ter-commit dan sudah basi dibanding sumber.</li>
