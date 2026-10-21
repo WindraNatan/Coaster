@@ -4,3 +4,6 @@ __pycache__/
 /_c[0-9]*.json
 /_c[0-9]*_out.json
 /test_*.png
+
+# aset lama yang disimpan lokal, tidak untuk repo
+/_aset_arsip/
