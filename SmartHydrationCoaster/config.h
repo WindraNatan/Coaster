@@ -30,6 +30,12 @@
 #define STABILITY_TIME_MS     1500UL   // Berat harus bertahan selama 1,5 detik
 #define STABILITY_BAND_G      3.0f     // Band +-3 g dari kandidat stabil
 
+// K1: isi ulang langsung di tatakan baru sah setelah berat baru bertahan sekian
+// lama. Bila berat kembali ke baseline pra-isi-ulang dalam batas ini, itu pola
+// tekan-lepas gelas (load cell tak bisa membedakannya dari tuangan, tapi
+// tuangan tidak pernah kembali ke berat lama).
+#define REFILL_CONFIRM_MS     5000UL
+
 // Parameter Pewaktuan (satuan: milidetik)
 #define SAMPLE_INTERVAL_MS    100UL      // Periode baca Load Cell (10 Hz)
 #define DHT_INTERVAL_MS       2000UL     // Periode baca DHT11 (0.5 Hz)
@@ -46,13 +52,26 @@
 // Kalibrasi load cell: terverifikasi fisik dengan beban acuan 500 g -> 450.7f
 #define DEFAULT_CALIBRATION_FACTOR 450.7f
 
-// Nilai faktor adaptif (harus identik dengan test_simulation.py dan web/index.html)
-#define K_TEMP_COLD   1.20f  // T < 24 C
-#define K_TEMP_NORMAL 1.00f  // 24..28 C
-#define K_TEMP_WARM   0.75f  // 28..32 C
-#define K_TEMP_HOT    0.50f  // > 32 C
-#define K_HUM_DRY     0.85f  // RH < 40 %
-#define K_HUM_NORMAL  1.00f
+#define MIN_CUSTOM_INTERVAL_MIN 1UL
+#define MAX_CUSTOM_INTERVAL_MIN 180UL
+
+// Titik jangkar interpolasi kontinu DHT11 (identik di test_simulation.py dan web/index.html)
+#define TEMP_COLD_C   18.0f
+#define TEMP_NORM_C   26.0f
+#define TEMP_HOT_C    34.0f
+#define K_TEMP_COLD   1.20f  // T <= 18 C
+#define K_TEMP_NORMAL 1.00f  // T == 26 C
+#define K_TEMP_HOT    0.50f  // T >= 34 C (pada 30 C bernilai 0.75f)
+
+#define HUM_DRY_PCT   30.0f
+#define HUM_NORM_PCT  50.0f
+#define K_HUM_DRY     0.85f  // RH <= 30 %
+#define K_HUM_NORMAL  1.00f  // RH >= 50 %
 #define ADAPT_FLOOR_MS 5000UL
+
+// Konfigurasi opsional Wi-Fi & Firebase RTDB (kosongkan untuk mode standalone/USB)
+#define WIFI_SSID       ""
+#define WIFI_PASSWORD   ""
+#define FIREBASE_DB_URL ""
 
 #endif

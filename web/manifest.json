@@ -1,0 +1,19 @@
+{
+  "name": "Smart Hydration Coaster",
+  "short_name": "Hydration",
+  "description": "Pemantau hidrasi closed-loop berbasis ESP32, HX711, dan DHT11.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0C1F27",
+  "theme_color": "#0C1F27",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

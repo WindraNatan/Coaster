@@ -15,21 +15,47 @@ MIN_DRINK_DELTA = 20.0
 REFILL_DELTA = 30.0
 STABILITY_BAND_G = 3.0
 STABILITY_TIME_MS = 1500
+# K1: isi ulang di tempat baru sah setelah bertahan sekian lama; kembali ke
+# baseline pra-isi-ulang dalam batas ini = pola tekan-lepas gelas.
+REFILL_CONFIRM_MS = 5000
+
+
+TEMP_COLD_C = 18.0
+TEMP_NORM_C = 26.0
+TEMP_HOT_C = 34.0
+K_TEMP_COLD = 1.20
+K_TEMP_NORMAL = 1.00
+K_TEMP_HOT = 0.50
+HUM_DRY_PCT = 30.0
+HUM_NORM_PCT = 50.0
+K_HUM_DRY = 0.85
+K_HUM_NORMAL = 1.00
+ADAPT_FLOOR_MS = 5000
 
 
 def compute_adaptive_interval_ms(base_interval_ms: int, temp_c: float, humidity_pct: float) -> int:
     if temp_c != temp_c or humidity_pct != humidity_pct:  # NaN guard, paritas dengan firmware
         return base_interval_ms
-    if temp_c < 24.0:
-        k_temp = 1.20
-    elif temp_c <= 28.0:
-        k_temp = 1.00
-    elif temp_c <= 32.0:
-        k_temp = 0.75
+    if temp_c <= TEMP_COLD_C:
+        k_temp = K_TEMP_COLD
+    elif temp_c <= TEMP_NORM_C:
+        k_temp = K_TEMP_COLD - (K_TEMP_COLD - K_TEMP_NORMAL) * ((temp_c - TEMP_COLD_C) / (TEMP_NORM_C - TEMP_COLD_C))
+    elif temp_c < TEMP_HOT_C:
+        k_temp = K_TEMP_NORMAL - (K_TEMP_NORMAL - K_TEMP_HOT) * ((temp_c - TEMP_NORM_C) / (TEMP_HOT_C - TEMP_NORM_C))
     else:
-        k_temp = 0.50
-    k_hum = 0.85 if humidity_pct < 40.0 else 1.00
-    return max(5000, int(base_interval_ms * k_temp * k_hum))
+        k_temp = K_TEMP_HOT
+
+    if humidity_pct <= HUM_DRY_PCT:
+        k_hum = K_HUM_DRY
+    elif humidity_pct < HUM_NORM_PCT:
+        k_hum = K_HUM_DRY + (K_HUM_NORMAL - K_HUM_DRY) * ((humidity_pct - HUM_DRY_PCT) / (HUM_NORM_PCT - HUM_DRY_PCT))
+    else:
+        k_hum = K_HUM_NORMAL
+
+    adapted = base_interval_ms * k_temp * k_hum
+    if adapted < ADAPT_FLOOR_MS:
+        adapted = float(ADAPT_FLOOR_MS)
+    return int(adapted + 0.5)
 
 
 class CoasterFSM:
@@ -50,6 +76,12 @@ class CoasterFSM:
         self.cheat_count = 0
         self.refill_count = 0
         self.missing_cup_alert = False
+        self.refill_pending = False
+        self.pre_refill_baseline = 0.0
+        self.last_refill_ms = 0
+        self.calibration_align = False
+        self.pre_refill_state = "IDLE"
+        self.pre_refill_timer_start = 0
 
     @property
     def state_string(self):
@@ -76,31 +108,91 @@ class CoasterFSM:
             return False
         return (now_ms - self.stable_start_ms) >= STABILITY_TIME_MS
 
-    def record_drink(self, grams):
+    def set_empty_cup_weight(self, weight_g):
+        if CUP_ON_THRESHOLD <= weight_g <= MAX_EMPTY_CUP_G:
+            self.empty_cup_weight = weight_g
+            self.baseline_weight = weight_g
+            if self.state != "IDLE":
+                self.missing_cup_alert = False
+                # K3: update() menyelaraskan baseline ke berat aktual dulu,
+                # tidak menghitung isi ulang untuk air yang sudah ada di gelas.
+                self.calibration_align = True
+                self.state = "ALERT_REFILL"
+            return True
+        return False
+
+    def refill_reversed(self, w, now_ms):
+        # K1: heuristik pembalik. Tekan lebih lama dari REFILL_CONFIRM_MS tetap lolos.
+        if not self.refill_pending or now_ms - self.last_refill_ms > REFILL_CONFIRM_MS:
+            return False
+        d = w - self.pre_refill_baseline
+        return -STABILITY_BAND_G <= d <= STABILITY_BAND_G
+
+    def register_refill(self, old_baseline, w, now_ms):
+        # K1: simpan state & timer pra-isi-ulang supaya pembatalan (tekan-lepas)
+        # bisa memulihkannya — lihat cancel_pending_refill.
+        self.pre_refill_state = self.state
+        self.pre_refill_timer_start = self.timer_start_ms
+        self.baseline_weight = w
+        self.timer_start_ms = now_ms
+        self.refill_count += 1
+        self.refill_pending = True
+        self.pre_refill_baseline = old_baseline
+        self.last_refill_ms = now_ms
+
+    def cancel_pending_refill(self, now_ms):
+        self.refill_count -= 1
+        self.refill_pending = False
+        self.baseline_weight = self.pre_refill_baseline
+        # K1: pulihkan state & timer pra-tekanan. Tanpa ini, tekan-lepas
+        # membunuh alarm minum sampai interval penuh berikutnya dan menekan
+        # berulang menunda pengingat tanpa batas. LIFTED/ALERT_REFILL sengaja
+        # tidak dipulihkan: gelas sudah kembali di tatakan, memulihkan LIFTED
+        # mengevaluasi ulang kembalinya gelas (cheat palsu) dan memulihkan
+        # ALERT_REFILL bisa menyangkutkan gelas penuh di alarm kosong.
+        if self.pre_refill_state in ("TIMING", "ALERT_DRINK", "ALERT_CHEAT"):
+            self.state = self.pre_refill_state
+            self.timer_start_ms = self.pre_refill_timer_start
+        else:
+            self.timer_start_ms = now_ms
+
+    def record_drink(self, grams, w, now_ms):
+        # False = minum dibatalkan karena pola tekan-lepas
+        if self.refill_reversed(w, now_ms):
+            self.cancel_pending_refill(now_ms)
+            return False
+        self.refill_pending = False
         self.total_consumed_ml += grams
         self.drink_count += 1
+        return True
+
+    def restore_daily_stats(self, total_ml, drinks, refills, cheats):
+        self.total_consumed_ml = total_ml if total_ml >= 0.0 else 0.0
+        self.drink_count = drinks
+        self.refill_count = refills
+        self.cheat_count = cheats
 
     def evaluate_returned_cup(self, w, now_ms):
         decreased = self.baseline_weight - w
         increased = w - self.baseline_weight
+        self.missing_cup_alert = False
 
         if w <= self.empty_limit:
             if decreased >= MIN_DRINK_DELTA:
-                self.record_drink(decreased)
+                # K1: false = tekan-lepas, isi ulang pending sudah dibatalkan
+                self.record_drink(decreased, w, now_ms)
             self.baseline_weight = w
-            self.missing_cup_alert = False
             self.enter_state("ALERT_REFILL", w, now_ms)
             return
 
         if increased >= REFILL_DELTA:
-            self.baseline_weight = w
-            self.timer_start_ms = now_ms
-            self.refill_count += 1
+            self.register_refill(self.baseline_weight, w, now_ms)
             self.enter_state("TIMING", w, now_ms)
             return
 
         if decreased >= MIN_DRINK_DELTA:
-            self.record_drink(decreased)
+            # K1: false = tekan-lepas, isi ulang pending sudah dibatalkan
+            self.record_drink(decreased, w, now_ms)
             self.baseline_weight = w
             self.timer_start_ms = now_ms
             self.enter_state("TIMING", w, now_ms)
@@ -136,21 +228,21 @@ class CoasterFSM:
             elif w - self.baseline_weight >= REFILL_DELTA:
                 # Isi ulang langsung di atas tatakan (PRD skenario 8).
                 # Fix C4: tunggu berat baru stabil sebelum mencatat.
+                # K1: pending sampai terbukti bertahan (register_refill).
                 if self.is_stable(w, now_ms):
-                    self.baseline_weight = w
-                    self.timer_start_ms = now_ms
-                    self.refill_count += 1
+                    self.register_refill(self.baseline_weight, w, now_ms)
             elif self.baseline_weight - w >= MIN_DRINK_DELTA:
                 # Fix C4: gerbang stabilitas. Tanpa ini, penurunan saat mengangkat
                 # gelas (~46 g/sampel) tercatat sebagai deretan minum palsu.
                 if self.is_stable(w, now_ms):
-                    self.record_drink(self.baseline_weight - w)
-                    self.baseline_weight = w
-                    if w <= el:
-                        self.missing_cup_alert = False
-                        self.enter_state("ALERT_REFILL", w, now_ms)
-                    else:
-                        self.timer_start_ms = now_ms
+                    # K1: false = tekan-lepas, isi ulang pending dibatalkan
+                    if self.record_drink(self.baseline_weight - w, w, now_ms):
+                        self.baseline_weight = w
+                        if w <= el:
+                            self.missing_cup_alert = False
+                            self.enter_state("ALERT_REFILL", w, now_ms)
+                        else:
+                            self.timer_start_ms = now_ms
             elif (now_ms - self.timer_start_ms) >= self.target_interval_ms:
                 self.enter_state("ALERT_DRINK", w, now_ms)
 
@@ -170,44 +262,47 @@ class CoasterFSM:
             elif w - self.baseline_weight >= REFILL_DELTA:
                 # Fix C4: tunggu berat baru stabil sebelum mencatat
                 if self.is_stable(w, now_ms):
-                    self.baseline_weight = w
-                    self.timer_start_ms = now_ms
-                    self.refill_count += 1
+                    self.register_refill(self.baseline_weight, w, now_ms)
                     self.enter_state("TIMING", w, now_ms)
             elif self.baseline_weight - w >= MIN_DRINK_DELTA:
                 # Fix C4: gerbang stabilitas sebelum mencatat minum
                 if self.is_stable(w, now_ms):
-                    self.record_drink(self.baseline_weight - w)
-                    self.baseline_weight = w
-                    if w <= el:
-                        self.missing_cup_alert = False
-                        self.enter_state("ALERT_REFILL", w, now_ms)
-                    else:
-                        self.timer_start_ms = now_ms
-                        self.enter_state("TIMING", w, now_ms)
+                    # K1: false = tekan-lepas, minum tidak dicatat
+                    if self.record_drink(self.baseline_weight - w, w, now_ms):
+                        self.baseline_weight = w
+                        if w <= el:
+                            self.missing_cup_alert = False
+                            self.enter_state("ALERT_REFILL", w, now_ms)
+                        else:
+                            self.timer_start_ms = now_ms
+                            self.enter_state("TIMING", w, now_ms)
 
         elif self.state == "ALERT_REFILL":
-            if w < CUP_OFF_THRESHOLD:
-                if not self.missing_cup_alert:
-                    # gelas kosong diangkat untuk diisi
-                    self.lift_start_ms = now_ms
-                    self.enter_state("LIFTED", w, now_ms)
-                # kasus MISSING_CUP: alarm tetap sampai gelas kembali
-            elif w > el:
-                # Fix M4: satu pintu pemulihan untuk EMPTY dan MISSING
+            if self.missing_cup_alert:
+                if w >= CUP_ON_THRESHOLD and self.is_stable(w, now_ms):
+                    self.evaluate_returned_cup(w, now_ms)
+            elif w < CUP_OFF_THRESHOLD:
+                self.lift_start_ms = now_ms
+                self.enter_state("LIFTED", w, now_ms)
+            elif w <= el:
+                # K3: gelas kosong teramati di state ini. Kalibrasi dapat
+                # memaksa state ini dengan gelas berisi (calibration_align);
+                # bila gelas lalu diangkat, flag itu basi dan menekan
+                # refill_count yang sah. Berat kosong = aman menghitung isi
+                # ulang lagi.
+                self.calibration_align = False
+            elif self.calibration_align:
+                # K3: jangan hitung isi ulang untuk air yang sudah ada saat
+                # kalibrasi; selaraskan baseline ke berat aktual.
                 if self.is_stable(w, now_ms):
-                    decreased = self.baseline_weight - w
-                    if decreased >= MIN_DRINK_DELTA:
-                        self.record_drink(decreased)
-                    else:
-                        self.refill_count += 1
-                    self.baseline_weight = w
-                    self.timer_start_ms = now_ms
-                    self.missing_cup_alert = False
-                    self.enter_state("TIMING", w, now_ms)
-            else:
-                # gelas kosong ditaruh saat MISSING: alarm tetap, alasan ganti EMPTY
-                self.missing_cup_alert = False
+                    self.calibration_align = False
+                    if w > el:
+                        self.baseline_weight = w
+                        self.timer_start_ms = now_ms
+                        self.enter_state("TIMING", w, now_ms)
+            elif w > el and self.is_stable(w, now_ms):
+                self.register_refill(self.baseline_weight, w, now_ms)
+                self.enter_state("TIMING", w, now_ms)
 
 
 def settle(f, w, t0):
@@ -218,15 +313,23 @@ def settle(f, w, t0):
 
 
 def test_all_scenarios():
-    # 1. Formula adaptif DHT11
+    # 1. Formula adaptif kontinu DHT11 + kustomisasi interval dasar
     base_ms = 30 * 60 * 1000
-    hot = compute_adaptive_interval_ms(base_ms, temp_c=33.0, humidity_pct=45.0)
-    cool = compute_adaptive_interval_ms(base_ms, temp_c=22.0, humidity_pct=75.0)
-    dry = compute_adaptive_interval_ms(base_ms, temp_c=27.0, humidity_pct=35.0)
-    assert hot == int(base_ms * 0.50), hot
-    assert cool == int(base_ms * 1.20), cool
-    assert dry == int(base_ms * 0.85), dry
-    print(f"[PASS] 1. Adaptif DHT11: 33C/45% -> {hot/60000:.1f} mnt | 22C/75% -> {cool/60000:.1f} mnt | 27C/35% -> {dry/60000:.1f} mnt")
+    hot = compute_adaptive_interval_ms(base_ms, temp_c=34.0, humidity_pct=55.0)
+    warm_mid = compute_adaptive_interval_ms(base_ms, temp_c=30.0, humidity_pct=55.0)
+    cool_mid = compute_adaptive_interval_ms(base_ms, temp_c=22.0, humidity_pct=75.0)
+    cold = compute_adaptive_interval_ms(base_ms, temp_c=18.0, humidity_pct=75.0)
+    dry = compute_adaptive_interval_ms(base_ms, temp_c=26.0, humidity_pct=30.0)
+    dry_mid = compute_adaptive_interval_ms(base_ms, temp_c=26.0, humidity_pct=40.0)
+    custom_20m = compute_adaptive_interval_ms(20 * 60 * 1000, temp_c=30.0, humidity_pct=55.0)
+    assert hot == 900000, hot
+    assert warm_mid == 1350000, warm_mid
+    assert cool_mid == 1980000, cool_mid
+    assert cold == 2160000, cold
+    assert dry == 1530000, dry
+    assert dry_mid == 1665000, dry_mid
+    assert custom_20m == 900000, custom_20m
+    print(f"[PASS] 1. Adaptif kontinu DHT11: 34C->{hot/60000:.1f}m | 30C->{warm_mid/60000:.1f}m | 22C->{cool_mid/60000:.1f}m | 18C->{cold/60000:.1f}m | 26C/30%->{dry/60000:.1f}m | custom 20m@30C->{custom_20m/60000:.1f}m")
 
     f = CoasterFSM(empty_cup_weight=130.0, target_interval_ms=15000)
 
@@ -342,6 +445,79 @@ def test_all_scenarios():
     settle(g, 372.0, t)
     assert g.state == "ALERT_CHEAT" and g.cheat_count == 1, (g.state, g.cheat_count)
     print("[PASS] 15. Setelah angkat bertahap, sentuh 372g (-8g) -> ALERT_CHEAT")
+
+    # 16. Celah 1: kembali dari ALERT_MISSING_CUP tanpa minum cukup (-18.1g) -> ALERT_CHEAT, bukan REFILL
+    g.update(0.0, 6000)
+    g.update(0.0, 16100)
+    assert g.state_string == "ALERT_MISSING_CUP"
+    settle(g, 362.0, 16200)
+    assert g.state == "ALERT_CHEAT" and g.cheat_count == 2 and g.refill_count == 0
+    assert g.baseline_weight == 380.0
+    print("[PASS] 16. Kembali dari ALERT_MISSING_CUP dengan -18g -> ALERT_CHEAT (refill=0, baseline utuh)")
+
+    # 17. Celah 2: set_empty_cup_weight menyelaraskan baseline agar tidak memicu minum palsu
+    g.set_empty_cup_weight(76.8)
+    assert g.state_string == "ALERT_EMPTY_CUP" and g.baseline_weight == 76.8
+    g.update(0.0, 20000)
+    settle(g, 77.0, 20200)
+    assert g.drink_count == 0 and g.total_consumed_ml == 0.0
+    print("[PASS] 17. Kalibrasi gelas kosong 76.8g menyelaraskan baseline -> 0 minum palsu")
+
+    # 18. K1: tekan-lepas gelas di TIMING tidak boleh menghasilkan isi ulang/minum palsu.
+    #     Eksploit audit: 5x tekan-lepas 35g -> 175 ml minum + 5x isi ulang palsu.
+    k = CoasterFSM(empty_cup_weight=130.0, target_interval_ms=15000)
+    settle(k, 380.0, 1000)
+    assert k.state == "TIMING" and k.baseline_weight == 380.0
+    k.update(380.0, 30000)          # timer habis -> alarm
+    assert k.state == "ALERT_DRINK"
+    settle(k, 415.0, 30000)         # tekan +35 g, stabil 1,5 s -> isi ulang pending
+    assert k.refill_count == 1 and k.refill_pending is True
+    settle(k, 380.0, 33000)         # lepas; kembali ke baseline pra-tekanan dalam 5 s
+    assert k.refill_count == 0 and k.drink_count == 0 and k.total_consumed_ml == 0.0
+    assert k.baseline_weight == 380.0
+    # K1: alarm dipulihkan — tekan-lepas tidak boleh membunuh alarm minum.
+    assert k.state == "ALERT_DRINK"
+    print("[PASS] 18. Tekan-lepas 35g: refill pending dibatalkan, 0 minum palsu, baseline utuh, alarm pulih")
+
+    # 19. K3: kalibrasi (Simpan Gelas) saat gelas BERISI di tatakan tidak boleh
+    #     memicu isi ulang palsu 250 g.
+    k.set_empty_cup_weight(130.0)
+    assert k.state_string == "ALERT_EMPTY_CUP"
+    settle(k, 380.0, 36000)
+    assert k.refill_count == 0 and k.drink_count == 0 and k.total_consumed_ml == 0.0
+    assert k.state == "TIMING" and k.baseline_weight == 380.0
+    print("[PASS] 19. Kalibrasi dengan gelas berisi 380g: 0 refill palsu, baseline = berat aktual")
+
+    # 20. K1: tekan-lepas di TIMING tidak boleh menunda timer. Alarm yang sudah
+    #     ditunda sekali bisa ditunda berulang kali (pengingat tak pernah bunyi).
+    k = CoasterFSM(empty_cup_weight=130.0, target_interval_ms=15000)
+    settle(k, 380.0, 1000)               # TIMING, timer mulai 2600 ms
+    assert k.state == "TIMING" and k.baseline_weight == 380.0
+    settle(k, 415.0, 12000)              # tekan +35 g stabil -> isi ulang pending
+    assert k.refill_count == 1 and k.refill_pending is True
+    settle(k, 380.0, 14000)              # lepas dalam 5 s -> dibatalkan, timer dipulihkan
+    assert k.refill_count == 0 and k.drink_count == 0 and k.total_consumed_ml == 0.0
+    assert k.baseline_weight == 380.0 and k.state == "TIMING"
+    k.update(380.0, 17700)               # 17700 - 2600 = 15100 >= 15000: alarm TIDAK tertunda
+    assert k.state == "ALERT_DRINK"
+    print("[PASS] 20. Tekan-lepas di TIMING: timer dipulihkan, alarm tidak tertunda")
+
+    # 21. K3: flag kalibrasi tidak boleh basi. Kalibrasi dengan gelas berisi lalu
+    #     gelas diangkat melewati jalur selaras; gelas kembali kosong dan diisi
+    #     ulang cepat -> isi ulang sah harus tetap terhitung.
+    k = CoasterFSM(empty_cup_weight=130.0, target_interval_ms=15000)
+    settle(k, 380.0, 1000)               # TIMING baseline 380
+    k.set_empty_cup_weight(130.0)        # ALERT_REFILL + calibration_align, baseline 130
+    assert k.state_string == "ALERT_EMPTY_CUP"
+    k.update(0.0, 3000)                  # diangkat sebelum align selesai -> LIFTED (flag basi)
+    assert k.state == "LIFTED"
+    settle(k, 100.0, 4000)               # kembali kosong: baseline kalibrasi 130 -> -30 g tercatat minum
+    assert k.state_string == "ALERT_EMPTY_CUP" and k.drink_count == 1
+    settle(k, 400.0, 5700)               # isi ulang cepat (<1,5 s di 100 g): align tak sempat firing
+    # refill_count == 1: isi ulang sah. Tanpa re-arm: 0 (align menyerap isi ulang).
+    # drink_count == 1 di atas adalah quirk baseline kalibrasi (sudah ada sebelum fix).
+    assert k.refill_count == 1 and k.state == "TIMING" and k.baseline_weight == 400.0
+    print("[PASS] 21. Flag kalibrasi tidak basi: isi ulang cepat setelah lift tetap terhitung")
 
     print("\nSEMUA SKENARIO LULUS")
 

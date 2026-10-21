@@ -17,13 +17,17 @@ static void settle(CoasterFSM& f, float w, uint32_t t0){
 }
 
 int main(){
-    // 1. Formula adaptif DHT11 -- nilai harapan sama dengan test_simulation.py dan web.
+    // 1. Formula adaptif kontinu DHT11 -- nilai harapan sama dengan test_simulation.py dan web.
     const uint32_t baseMs = BASE_INTERVAL_MS;
-    CHECK(computeAdaptiveIntervalMs(baseMs, 33.0f, 45.0f) == 900000u,  "1. 33C/45% -> 15,0 mnt");
-    CHECK(computeAdaptiveIntervalMs(baseMs, 22.0f, 75.0f) == 2160000u, "1b. 22C/75% -> 36,0 mnt");
-    CHECK(computeAdaptiveIntervalMs(baseMs, 27.0f, 35.0f) == 1530000u, "1c. 27C/35% -> 25,5 mnt");
-    CHECK(computeAdaptiveIntervalMs(60000u, NAN, 50.0f) == 60000u,     "1d. NaN -> interval dasar");
-    CHECK(computeAdaptiveIntervalMs(1000u, 40.0f, 10.0f) == ADAPT_FLOOR_MS, "1e. lantai 5 s berlaku");
+    CHECK(computeAdaptiveIntervalMs(baseMs, 34.0f, 55.0f) == 900000u,  "1. 34C/55% -> 15,0 mnt");
+    CHECK(computeAdaptiveIntervalMs(baseMs, 30.0f, 55.0f) == 1350000u, "1b. 30C/55% (interpolasi) -> 22,5 mnt");
+    CHECK(computeAdaptiveIntervalMs(baseMs, 22.0f, 75.0f) == 1980000u, "1c. 22C/75% (interpolasi) -> 33,0 mnt");
+    CHECK(computeAdaptiveIntervalMs(baseMs, 18.0f, 75.0f) == 2160000u, "1d. 18C/75% -> 36,0 mnt");
+    CHECK(computeAdaptiveIntervalMs(baseMs, 26.0f, 30.0f) == 1530000u, "1e. 26C/30% -> 25,5 mnt");
+    CHECK(computeAdaptiveIntervalMs(baseMs, 26.0f, 40.0f) == 1665000u, "1f. 26C/40% (interpolasi RH) -> 27,75 mnt");
+    CHECK(computeAdaptiveIntervalMs(1200000u, 30.0f, 55.0f) == 900000u, "1g. custom 20 mnt @ 30C/55% -> 15,0 mnt");
+    CHECK(computeAdaptiveIntervalMs(60000u, NAN, 50.0f) == 60000u,     "1h. NaN -> interval dasar");
+    CHECK(computeAdaptiveIntervalMs(1000u, 40.0f, 10.0f) == ADAPT_FLOOR_MS, "1i. lantai 5 s berlaku");
 
     CoasterFSM f;
     f.setEmptyCupWeight(130.0f);
@@ -85,6 +89,82 @@ int main(){
     CHECK(g.getState() == STATE_LIFTED && g.getBaselineWeight() == 380.0f, "14c. -> LIFTED, baseline utuh 380");
     settle(g, 372, t);
     CHECK(g.getState() == STATE_ALERT_CHEAT && g.getCheatCount() == 1, "15. sentuh 372g setelah angkat bertahap -> ALERT_CHEAT");
+
+    g.update(0, 6000); g.update(0, 16100);
+    CHECK(g.getState() == STATE_ALERT_REFILL && g.isMissingCup(), "16a. diangkat >10s dari CHEAT -> ALERT_MISSING_CUP");
+    settle(g, 362, 16200);
+    CHECK(g.getState() == STATE_ALERT_CHEAT && g.getCheatCount() == 2 && g.getRefillCount() == 0 && g.getBaselineWeight() == 380.0f,
+          "16b. kembali dari MISSING_CUP -18g -> ALERT_CHEAT (refill=0, baseline utuh)");
+
+    CHECK(g.setEmptyCupWeight(76.8f) && !g.setEmptyCupWeight(350.0f),
+          "17a. setEmptyCupWeight mengembalikan true (76.8g) dan false (350g di luar rentang)");
+    CHECK(g.getState() == STATE_ALERT_REFILL && !g.isMissingCup() && fabs(g.getBaselineWeight() - 76.8f) < 0.01f,
+          "17a-state. setEmptyCupWeight(76.8) -> ALERT_EMPTY_CUP, baseline=76.8");
+    g.update(0, 20000); settle(g, 77.0f, 20200);
+    CHECK(g.getDrinkCount() == 0 && g.getTotalDrank() == 0.0f, "17b. angkat-taruh gelas kosong 77g -> 0 minum palsu");
+    g.restoreDailyStats(650.0f, 4, 2, 1);
+    CHECK(fabs(g.getTotalDrank() - 650.0f) < 0.01f && g.getDrinkCount() == 4 && g.getRefillCount() == 2 && g.getCheatCount() == 1 && g.getTargetIntervalMs() == 15000u,
+          "17c. restoreDailyStats & getTargetIntervalMs memulihkan nilai NVS dengan akurat");
+
+    // 18. K1: tekan-lepas gelas di TIMING tidak boleh menghasilkan isi ulang/minum palsu.
+    //     Eksploit audit: 5x tekan-lepas 35g -> 175 ml minum + 5x isi ulang palsu.
+    CoasterFSM k;
+    k.setEmptyCupWeight(130.0f);
+    k.setInterval(15000);
+    k.setMaxLiftDuration(10000);
+    settle(k, 380, 1000);
+    CHECK(k.getState() == STATE_TIMING && k.getBaselineWeight() == 380.0f, "18a. siap: TIMING baseline 380");
+    k.update(380, 30000);
+    CHECK(k.getState() == STATE_ALERT_DRINK, "18b. timer habis -> ALERT_DRINK");
+    settle(k, 415, 30000);
+    CHECK(k.getRefillCount() == 1, "18c. tekan +35g stabil -> refill pending tercatat");
+    settle(k, 380, 33000);
+    CHECK(k.getRefillCount() == 0 && k.getDrinkCount() == 0 && k.getTotalDrank() == 0.0f && fabs(k.getBaselineWeight() - 380.0f) < 0.01f,
+          "18d. lepas tekan -> refill dibatalkan, 0 minum palsu, baseline utuh");
+    CHECK(k.getState() == STATE_ALERT_DRINK, "18e. alarm dipulihkan, tidak dibunuh tekan-lepas");
+
+    // 19. K3: kalibrasi (Simpan Gelas) saat gelas BERISI di tatakan tidak boleh
+    //     memicu isi ulang palsu 250 g.
+    k.setEmptyCupWeight(130.0f);
+    CHECK(k.getState() == STATE_ALERT_REFILL && !k.isMissingCup(), "19a. kalibrasi dengan gelas berisi -> ALERT_EMPTY_CUP");
+    settle(k, 380, 36000);
+    CHECK(k.getRefillCount() == 0 && k.getDrinkCount() == 0 && k.getTotalDrank() == 0.0f && k.getState() == STATE_TIMING && fabs(k.getBaselineWeight() - 380.0f) < 0.01f,
+          "19b. gelas berisi 380g saat kalibrasi -> 0 refill palsu, baseline 380, TIMING");
+
+    // 20. K1: tekan-lepas di TIMING tidak boleh menunda timer. Alarm yang ditunda
+    //     sekali bisa ditunda berulang kali (pengingat tak pernah bunyi).
+    CoasterFSM m;
+    m.setEmptyCupWeight(130.0f);
+    m.setInterval(15000);
+    m.setMaxLiftDuration(10000);
+    settle(m, 380, 1000);
+    CHECK(m.getState() == STATE_TIMING && fabs(m.getBaselineWeight() - 380.0f) < 0.01f, "20a. siap: TIMING baseline 380");
+    settle(m, 415, 12000);
+    CHECK(m.getRefillCount() == 1, "20b. tekan +35g stabil -> refill pending tercatat");
+    settle(m, 380, 14000);
+    CHECK(m.getRefillCount() == 0 && m.getDrinkCount() == 0 && fabs(m.getBaselineWeight() - 380.0f) < 0.01f && m.getState() == STATE_TIMING,
+          "20c. lepas tekan -> dibatalkan, timer dipulihkan, tetap TIMING");
+    m.update(380, 17700);
+    CHECK(m.getState() == STATE_ALERT_DRINK, "20d. 17700-2600 >= 15000 -> alarm tidak tertunda");
+
+    // 21. K3: flag kalibrasi tidak boleh basi — kalibrasi dengan gelas berisi,
+    //     gelas diangkat lalu kembali kosong, isi ulang cepat tetap terhitung.
+    CoasterFSM n;
+    n.setEmptyCupWeight(130.0f);
+    n.setInterval(15000);
+    n.setMaxLiftDuration(10000);
+    settle(n, 380, 1000);
+    CHECK(n.getState() == STATE_TIMING && fabs(n.getBaselineWeight() - 380.0f) < 0.01f, "21a. siap: TIMING baseline 380");
+    n.setEmptyCupWeight(130.0f);
+    CHECK(n.getState() == STATE_ALERT_REFILL && !n.isMissingCup(), "21b. kalibrasi gelas berisi -> ALERT_EMPTY_CUP");
+    n.update(0, 3000);
+    CHECK(n.getState() == STATE_LIFTED, "21c. diangkat sebelum align selesai -> LIFTED (flag basi)");
+    settle(n, 100, 4000);
+    CHECK(n.getState() == STATE_ALERT_REFILL && n.getDrinkCount() == 1, "21d. kembali kosong -> ALERT_EMPTY_CUP (minum 30g dari baseline kalibrasi)");
+    settle(n, 400, 5700);
+    // refill == 1: isi ulang sah. Tanpa re-arm: 0 (align menyerap isi ulang).
+    CHECK(n.getRefillCount() == 1 && n.getState() == STATE_TIMING && fabs(n.getBaselineWeight() - 400.0f) < 0.01f,
+          "21e. isi ulang cepat setelah lift tetap terhitung");
 
     printf("\n%s (%d gagal)\n", fails ? "ADA YANG GAGAL" : "SEMUA LULUS", fails);
     return fails ? 1 : 0;

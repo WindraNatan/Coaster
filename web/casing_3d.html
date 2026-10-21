@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HydroCoaster - Panduan 3D Sasis 28mm &amp; Perakitan Meja Solder</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg: #071015;
+      --card: #0D1F27;
+      --card-alpha: rgba(13, 31, 39, 0.94);
+      --border: #1C3B49;
+      --border-focus: #44C8E6;
+      --text: #E5F3F7;
+      --muted: #8AA8B4;
+      --cyan: #44C8E6;
+      --green: #5FD195;
+      --orange: #F5A623;
+      --purple: #B28DFF;
+      --red: #FF6B6B;
+      --yellow: #F0E64A;
+      --blue: #2B90E8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+      user-select: none;
+    }
+
+    header {
+      background: var(--card-alpha);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 30;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .brand img {
+      height: 24px;
+      width: auto;
+    }
+    .brand h1 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .brand span { color: var(--cyan); }
+    .badge-capsule {
+      background: #173746;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-size: 9.5px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      white-space: nowrap;
+    }
+
+    .stepper-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #08161D;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px 6px;
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+    .step-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      padding: 4px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 10.5px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .step-btn:hover {
+      color: var(--text);
+      background: rgba(68, 200, 230, 0.12);
+    }
+    .step-btn.active {
+      background: var(--cyan);
+      color: #041217;
+      font-weight: 700;
+    }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      font-size: 9px;
+    }
+    .step-btn.active .step-num {
+      background: #041217;
+      color: var(--cyan);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .tool-btn {
+      background: #14323E;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 9px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 10.5px;
+      font-weight: 600;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .tool-btn:hover {
+      background: var(--cyan);
+      color: #041217;
+      border-color: var(--cyan);
+    }
+    .tool-btn.active {
+      background: var(--green);
+      color: #041217;
+      border-color: var(--green);
+    }
+
+    #viewport {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    #annotation-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .callout-tag {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      background: var(--card-alpha);
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--text);
+      pointer-events: auto;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .callout-tag:hover, .callout-tag.active {
+      border-color: var(--cyan);
+      box-shadow: 0 4px 18px rgba(68, 200, 230, 0.4);
+      transform: translate(-50%, -110%) scale(1.04);
+    }
+    .callout-tag .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    #info-panel {
+      position: absolute;
+      bottom: 18px;
+      left: 18px;
+      background: var(--card-alpha);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      max-width: 490px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.55);
+      z-index: 20;
+    }
+    #info-panel h3 {
+      font-size: 13.5px;
+      color: var(--cyan);
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #info-panel p {
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .info-meta {
+      font-size: 10.5px;
+      color: var(--muted);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+    .info-badge {
+      font-family: monospace;
+      padding: 2px 7px;
+      background: #193846;
+      border-radius: 4px;
+      color: var(--green);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .step-controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .btn-step-action {
+      background: #173B49;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-step-action:hover {
+      background: var(--cyan);
+      color: #041217;
+    }
+
+    #exploded-bar {
+      position: absolute;
+      bottom: 18px;
+      right: 18px;
+      background: var(--card-alpha);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 24px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      z-index: 20;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    }
+    .slider-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    input[type=range] {
+      accent-color: var(--cyan);
+      cursor: pointer;
+      width: 100px;
+    }
+
+    #wiring-filter-bar {
+      position: absolute;
+      top: 62px;
+      left: 18px;
+      background: var(--card-alpha);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 5px 8px;
+      display: flex;
+      gap: 5px;
+      z-index: 20;
+      backdrop-filter: blur(10px);
+    }
+    .filter-chip {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .filter-chip:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.08);
+    }
+    .filter-chip.active {
+      background: var(--cyan);
+      color: #041217;
+    }
+
+    #pin-legend-panel {
+      position: absolute;
+      top: 104px;
+      left: 18px;
+      background: var(--card-alpha);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      z-index: 20;
+      font-size: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-width: 290px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+    }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--text);
+    }
+    .legend-color-box {
+      width: 12px;
+      height: 4px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    #desktopNotice { display: none; }
+    /* M3: panduan 3D butuh pointer & ruang layar (annotasi, legenda, orbit);
+       di bawah 760px tampilkan pemberitahuan, bukan layout yang rusak. */
+    @media (max-width: 760px) {
+      body > header, body > #viewport { display: none !important; }
+      body { overflow: auto; }
+      #desktopNotice {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 28px auto;
+        max-width: 430px;
+        padding: 22px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--card-alpha);
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      #desktopNotice h2 { margin: 0; font-size: 15px; color: var(--cyan); }
+      #desktopNotice p { margin: 0; }
+      #desktopNotice .hint { color: var(--muted); font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="icon.svg" alt="HydroCoaster Logo">
+      <h1>HYDRO<span>COASTER</span> <small style="font-size:10px; color:var(--muted); font-weight:normal;">| Sasis 28mm, Bibir Depan 23.2mm</small></h1>
+      <span class="badge-capsule">BEBAS GANJALAN 360°</span>
+    </div>
+
+    <div class="stepper-nav">
+      <button id="stepBtn0" class="step-btn active" onclick="setAssemblyStep(0)">
+        <span class="step-num">1</span> Perfboard &amp; ESP32
+      </button>
+      <button id="stepBtn1" class="step-btn" onclick="setAssemblyStep(1)">
+        <span class="step-num">2</span> 4 Header Sensor
+      </button>
+      <button id="stepBtn2" class="step-btn" onclick="setAssemblyStep(2)">
+        <span class="step-num">3</span> Bus Daya &amp; GND
+      </button>
+      <button id="stepBtn3" class="step-btn" onclick="setAssemblyStep(3)">
+        <span class="step-num">4</span> Jalur GPIO
+      </button>
+      <button id="stepBtn4" class="step-btn" onclick="setAssemblyStep(4)">
+        <span class="step-num">5</span> Pasang Buzzer &amp; DHT11
+      </button>
+      <button id="stepBtn5" class="step-btn" onclick="setAssemblyStep(5)">
+        <span class="step-num">6</span> Sasis 28mm Selesai
+      </button>
+    </div>
+
+    <div class="header-actions">
+      <button id="btnFocusSensors" class="tool-btn" onclick="focusSensors()" style="background:#173B49; border-color:var(--cyan); color:var(--cyan);">🔍 Fokus Buzzer &amp; DHT11</button>
+      <button id="btnTopDown" class="tool-btn" onclick="toggleTopDown()">Tampak Atas Solder</button>
+      <button id="btnXRay" class="tool-btn" onclick="toggleXRay()">X-Ray Bodi</button>
+      <button class="tool-btn" onclick="resetCurrentCamera()">Reset Kamera</button>
+      <a href="/cad/coaster_casing.scad" download class="tool-btn" style="background:#5FD195; color:#041217; border-color:#5FD195; font-weight:700;">Unduh .SCAD</a>
+    </div>
+  </header>
+
+  <div id="viewport">
+    <div id="annotation-layer">
+      <div id="tag-board" class="callout-tag" onclick="inspectPart('board')">
+        <span class="dot" style="background:var(--green);"></span>
+        <span>Perfboard 50.8x70 mm</span>
+      </div>
+      <div id="tag-esp32" class="callout-tag" onclick="inspectPart('esp32')">
+        <span class="dot" style="background:#93B8C2;"></span>
+        <span>Soket ESP32 (Belakang Papan)</span>
+      </div>
+      <div id="tag-hx711-hdr" class="callout-tag" onclick="inspectPart('hx711_hdr')">
+        <span class="dot" style="background:#5FD195;"></span>
+        <span>Modul HX711 (Wadah Depan Kiri)</span>
+      </div>
+      <div id="tag-buzzer-mod" class="callout-tag" onclick="inspectPart('buzzer_mod')">
+        <span class="dot" style="background:var(--purple);"></span>
+        <span>Modul Buzzer (Strip Kiri Papan)</span>
+      </div>
+      <div id="tag-dht-mod" class="callout-tag" onclick="inspectPart('dht_mod')">
+        <span class="dot" style="background:var(--blue);"></span>
+        <span>Modul DHT11 (Wadah Depan Kanan)</span>
+      </div>
+      <div id="tag-motor-mod" class="callout-tag" onclick="inspectPart('motor_mod')">
+        <span class="dot" style="background:var(--orange);"></span>
+        <span>Motor Getar 23x21 mm (Bawah Tutup)</span>
+      </div>
+      <div id="tag-coaster" class="callout-tag" onclick="inspectPart('coaster')">
+        <span class="dot" style="background:var(--cyan);"></span>
+        <span>Tatakan Akrilik Bebas 360° (24.2mm)</span>
+      </div>
+    </div>
+
+    <div id="wiring-filter-bar">
+      <button class="filter-chip active" onclick="filterWires('all', this)">Semua Kawat</button>
+      <button class="filter-chip" onclick="filterWires('power5v', this)">5V (Motor)</button>
+      <button class="filter-chip" onclick="filterWires('power3v3', this)">3.3V (Sensor)</button>
+      <button class="filter-chip" onclick="filterWires('gnd', this)">GND Bus</button>
+      <button class="filter-chip" onclick="filterWires('gpio', this)">GPIO Sinyal</button>
+    </div>
+
+    <div id="pin-legend-panel">
+      <strong style="color:var(--cyan); margin-bottom:2px;">Petunjuk Solder Jalur Kawat:</strong>
+      <div class="legend-row"><div class="legend-color-box" style="background:#00E5FF;"></div><span>Common GND Bus (ESP32 Pin 14)</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:#FF4444;"></div><span>5V VIN ke Motor Getar (Pin 15 Kiri)</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:#FFA020;"></div><span>3.3V ke DHT11, Buzzer, HX711 (Pin 15 Kanan)</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--green);"></div><span>GPIO16 ke HX711 DOUT</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--yellow);"></div><span>GPIO4 ke HX711 SCK</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--blue);"></div><span>GPIO19 ke DHT11 Data</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--purple);"></div><span>GPIO18 ke Buzzer I/O (Active-LOW)</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--orange);"></div><span>GPIO17 ke Motor IN (Active-HIGH)</span></div>
+    </div>
+
+    <div id="info-panel">
+      <h3 id="panel-title">Langkah 1: Perfboard &amp; Soket Female Header ESP32</h3>
+      <p id="panel-desc">
+        Siapkan papan <em>perfboard</em> cokelat 50.8x70 mm (18 kolom x 24 baris lubang). Pasang 2 baris <em>female header</em> 15-pin berjarak 22.86 mm di <strong>separuh belakang papan</strong>, mulai baris ke-9 dari depan. Port USB menghadap lurus ke lubang sasis. Modul buzzer 13 x 32 mm tidak muat melintang di sisa 18 mm depan papan, jadi dipasang memanjang di strip kiri.
+      </p>
+      <div class="info-meta">
+        <span id="panel-rule">ESP32 48.26 mm di Belakang | Buzzer 13 x 32 mm di Strip Kiri</span>
+        <span id="panel-badge" class="info-badge">Langkah 1 / 6</span>
+      </div>
+      <div class="step-controls">
+        <button id="btnPrevStep" class="btn-step-action" onclick="prevStep()">← Sebelumnya</button>
+        <button id="btnNextStep" class="btn-step-action" onclick="nextStep()" style="background:var(--cyan); color:#041217; font-weight:700;">Selanjutnya →</button>
+      </div>
+    </div>
+
+    <div id="exploded-bar">
+      <span class="slider-label">Rapat</span>
+      <input type="range" id="explodeSlider" min="0" max="65" value="0" oninput="setExplode(this.value)">
+      <span class="slider-label">Bongkar (<em>Exploded</em>)</span>
+    </div>
+  </div>
+
+  <div id="desktopNotice">
+    <h2>Panduan 3D butuh layar desktop</h2>
+    <p>Halaman ini menampilkan model 3D interaktif sasis kapsul 28 mm beserta annotasi komponen, legenda GPIO, dan kontrol kamera orbit yang membutuhkan ruang layar serta pointer presisi.</p>
+    <p>Buka dari komputer, atau putar perangkat ke mode landscape pada tablet dengan lebar minimal 760 px.</p>
+    <p class="hint">Smart Hydration Coaster &mdash; panduan perakitan casing.</p>
+  </div>
+
+  <script>
+    let scene, camera, renderer, controls;
+    let chassisGroup, frontShellGroup, lidGroup, platterGroup, perfboardGroup, headersGroup, powerBusGroup, gpioTracesGroup, modulesGroup, flexibleWiresGroup;
+    let calloutTargets = {};
+    let currentStep = 0;
+    let isXRay = false;
+    let isTopDown = false;
+    let activeWireFilter = 'all';
+
+    const STEP_DATA = [
+      {
+        title: "Langkah 1: Perfboard & Soket Female Header ESP32",
+        desc: "Siapkan papan <em>perfboard</em> cokelat 50.8x70 mm (18 kolom x 24 baris, pitch 2.54). Pasang 2 deret <em>female header</em> 15-pin berjarak 22.86 mm (9 lubang) di separuh belakang papan. ESP32 48.26 mm menempati 19 baris; sisa 18 mm di depan tidak cukup untuk modul buzzer 32 mm, jadi modul dipasang memanjang di strip kiri.",
+        rule: "ESP32 48.26 mm di Belakang | Buzzer 13 x 32 mm di Strip Kiri",
+        badge: "Langkah 1 / 6",
+        camPos: new THREE.Vector3(0, 120, 100),
+        camLook: new THREE.Vector3(0, 4, 93),
+        visibleGroups: ['perfboard', 'headers_esp32']
+      },
+      {
+        title: "Langkah 2: Solder Header Modul Buzzer & Header Wadah Depan",
+        desc: "Solder header male pendarat jumper pada papan <em>perfboard</em>. Semua modul punya pin mendatar, jadi tidak ada modul yang disolder langsung ke papan:<br>• <strong>Header 3-Pin Buzzer</strong> di baris grid z 104.43, kolom x -16.51.<br>• <strong>Header 4-Pin HX711</strong> di baris z 71.41, x -6.35..1.27.<br>• <strong>Header 3-Pin DHT11</strong> di baris z 63.79, x 1.27..6.35 (pusat 3.81).<br>• <strong>Header 3-Pin Motor</strong> di kolom x -21.59, z 94.27..99.35.",
+        rule: "Sensor DHT11 & HX711 tinggal di wadah depan, TIDAK menjejali papan!",
+        badge: "Langkah 2 / 6",
+        camPos: new THREE.Vector3(0, 100, 70),
+        camLook: new THREE.Vector3(0, 4, 62),
+        visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors']
+      },
+      {
+        title: "Langkah 3: Jalur Bus Daya (5V, 3.3V) & Common GND",
+        desc: "Tarik jalur kawat di balik papan:<br>• <strong>Kawat Merah (5V VIN)</strong>: Dari pin 15 kiri ESP32 ke pin VCC motor getar.<br>• <strong>Kawat Oranye (3.3V)</strong>: Dari pin 15 kanan ESP32 dibagikan ke pin 1 modul buzzer dan header sensor wadah depan (HX711 & DHT11).<br>• <strong>Kawat Biru Muda (GND Bus)</strong>: Hubungkan pin GND ESP32 ke seluruh pin GND sensor.",
+        rule: "VCC Buzzer WAJIB 3.3V (mencegah transistor PNP bocor). Motor mengambil 5V dari VIN.",
+        badge: "Langkah 3 / 6",
+        camPos: new THREE.Vector3(0, 100, 70),
+        camLook: new THREE.Vector3(0, 4, 62),
+        visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors', 'power_bus']
+      },
+      {
+        title: "Langkah 4: Solder Jalur Sinyal GPIO ESP32",
+        desc: "Solder kawat sinyal dari soket ESP32 ke header pendarat jumper masing-masing:<br>• <strong>Ungu (GPIO18)</strong>: Ke pin 1 header buzzer di baris z 104.43.<br>• <strong>Biru (GPIO19)</strong>: Ke header DHT11 di baris depan z 63.79.<br>• <strong>Hijau (GPIO16) & Kuning (GPIO4)</strong>: Ke header HX711 DOUT dan SCK di baris z 71.41.<br>• <strong>Oranye (GPIO17)</strong>: Ke header Motor di kolom x -21.59.",
+        rule: "Seluruh pin sinyal GPIO 16, 4, 19, 18 berada di deret kanan ESP32 sehingga kabel solder sangat pendek dan rapi.",
+        badge: "Langkah 4 / 6",
+        camPos: new THREE.Vector3(0, 100, 70),
+        camLook: new THREE.Vector3(0, 4, 62),
+        visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors', 'power_bus', 'gpio_traces']
+      },
+      {
+        title: "Langkah 5: Tata Letak (Buzzer di Strip Kiri Papan, DHT11 & HX711 di Wadah Depan)",
+        desc: "<strong>Tata letak yang muat secara mekanis:</strong><br>• <strong>Modul Buzzer</strong>: Memanjang 13 x 32 mm di strip kiri papan (x -23.0..-10.0, z 59.73..91.73). Can Ø12 mm di ujung depan, tepat di bawah kisi 3x3 tutup di x -16.51, z 69.73. Pin 3 keluar mendatar ke belakang; jumper ke header 104.43.<br>• <strong>Modul DHT11</strong>: 32 x 14 mm di wadah depan kanan atas piringan akrilik bawah, diputar sehingga pin 3 menghadap septum. Jumper naik lewat terowongan x -8..8, z 52..56 ke header z 63.79.<br>• <strong>Modul HX711</strong>: 34.5 x 21 mm di wadah depan kiri, header 4-pin menghadap ke luar di x -44.79..-42.25 supaya kabel keluar menjauhi batang. Tepi kanan PCB berjarak 1.40 mm dari batang. Kabel masuk terowongan septum z 52..56.<br>• <strong>Motor getar</strong>: 23 x 21 mm digantung di bawah tutup di atas kaleng RF ESP32. Header male dilepas, kabel disolder langsung ke pad lalu turun ke header papan di x -21.59.",
+        rule: "Papan 50.8x70 mm memuat ESP32 48.26 mm di separuh belakang + buzzer memanjang di strip kiri. DHT11 dan HX711 di wadah depan.",
+        badge: "Langkah 5 / 6",
+        camPos: new THREE.Vector3(70, 80, 70),
+        camLook: new THREE.Vector3(0, 8, 40),
+        visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors', 'power_bus', 'gpio_traces', 'esp32_module', 'modules', 'wires', 'chassis', 'platter']
+      },
+      {
+        title: "Langkah 6: Perakitan Dua Part & Penutup",
+        desc: "Sasis dicetak dua part dan disatukan di seam y=56: kerah 3.5 mm part depan membungkus hidung part belakang dengan clearance 0.3 mm, lalu dikunci <strong>2 baut M3x8 horizontal</strong> di x ±47, y 58.5. Setelah itu tutup atas dipasang dengan 4 baut M3 di bahu luar tanpa menyentuh area PCB. Kompartemen belakang 28.0 mm dengan interior 23.3 mm, bibir depan 23.2 mm. Piringan akrilik atas bertumpu pada ujung bebas load cell di ketinggian 21.2 mm, puncaknya 24.2 mm atau 1.0 mm di atas bibir depan, sehingga gelas menumpu hanya pada piringan.",
+        rule: "Belakang 28.0 mm | Bibir Depan 23.2 mm | Puncak Piringan 24.2 mm",
+        badge: "Langkah 6 / 6 (Selesai)",
+        camPos: new THREE.Vector3(130, 140, 175),
+        camLook: new THREE.Vector3(0, 11, 55),
+        visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors', 'power_bus', 'gpio_traces', 'esp32_module', 'modules', 'wires', 'chassis', 'platter', 'lid']
+      }
+    ];
+
+    function init() {
+      const container = document.getElementById('viewport');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x071015);
+
+      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 1000);
+      camera.position.copy(STEP_DATA[0].camPos);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.target.copy(STEP_DATA[0].camLook);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+      scene.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0xEAF6FF, 0.95);
+      dirLight1.position.set(80, 160, 90);
+      dirLight1.castShadow = true;
+      scene.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0x44C8E6, 0.45);
+      dirLight2.position.set(-90, 60, -40);
+      scene.add(dirLight2);
+
+      const grid = new THREE.GridHelper(300, 30, 0x1C3B49, 0x0E242E);
+      grid.position.y = -0.1;
+      scene.add(grid);
+
+      buildAllModels();
+      setAssemblyStep(0);
+
+      window.addEventListener('resize', onWindowResize, false);
+      animate();
+    }
+
+    function buildAllModels() {
+      chassisGroup = new THREE.Group();
+      // Part depan (wadah piringan + kerah seam) dipisah supaya bisa dibongkar.
+      frontShellGroup = new THREE.Group();
+      chassisGroup.add(frontShellGroup);
+      lidGroup = new THREE.Group();
+      platterGroup = new THREE.Group();
+      perfboardGroup = new THREE.Group();
+      headersGroup = new THREE.Group();
+      powerBusGroup = new THREE.Group();
+      gpioTracesGroup = new THREE.Group();
+      modulesGroup = new THREE.Group();
+      flexibleWiresGroup = new THREE.Group();
+
+      const matPcb = new THREE.MeshStandardMaterial({ color: 0x82441D, roughness: 0.7, metalness: 0.05 });
+      const matCopperRing = new THREE.MeshStandardMaterial({ color: 0xD4A359, metalness: 0.8, roughness: 0.3 });
+      const matHeaderPlastic = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.65 });
+      const matHeaderPinHole = new THREE.MeshBasicMaterial({ color: 0x050505 });
+      const matMetalShield = new THREE.MeshStandardMaterial({ color: 0xC8D2D6, metalness: 0.88, roughness: 0.22 });
+      const matBlackChip = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.5 });
+      const matChassisBody = new THREE.MeshStandardMaterial({ color: 0x15252E, roughness: 0.55, metalness: 0.1 });
+      const matLidBody = new THREE.MeshStandardMaterial({ color: 0x1E333E, roughness: 0.5, metalness: 0.12 });
+      const matAcrylicTop = new THREE.MeshPhysicalMaterial({ color: 0xD8A055, roughness: 0.35, metalness: 0.05 });
+      const matAcrylicBase = new THREE.MeshPhysicalMaterial({ color: 0x5EE2FF, transparent: true, opacity: 0.55, roughness: 0.1, transmission: 0.7 });
+      const matNylon = new THREE.MeshStandardMaterial({ color: 0xEEEEEE, roughness: 0.3 });
+      const matLoadCell = new THREE.MeshStandardMaterial({ color: 0xCCD7DC, metalness: 0.85, roughness: 0.25 });
+      const matDarkSlot = new THREE.MeshBasicMaterial({ color: 0x060B0E });
+
+      // 1. PERFBOARD 50x70 mm (18 x 24 LUBANG)
+      // Papan 50.8 x 70 mm, Z dari 58 s/d 128, di atas 4 riser 1.2 mm
+      const pcbMesh = new THREE.Mesh(new THREE.BoxGeometry(50.8, 1.6, 70.0), matPcb);
+      pcbMesh.position.set(0, 4.5, 93.0);
+      pcbMesh.receiveShadow = true;
+      perfboardGroup.add(pcbMesh);
+
+      // Grid lubang tembaga: 18 kolom (x = -21.59 + 2.54k), 24 baris (z = 63.79 + 2.54k)
+      const ringGeo = new THREE.RingGeometry(0.5, 1.05, 16);
+      ringGeo.rotateX(-Math.PI / 2);
+      const ringInstMesh = new THREE.InstancedMesh(ringGeo, matCopperRing, 18 * 24);
+      let ringIdx = 0;
+      const dummy = new THREE.Object3D();
+      for (let col = 0; col < 18; col++) {
+        for (let row = 0; row < 24; row++) {
+          const rx = -21.59 + col * 2.54;
+          const rz = 63.79 + row * 2.54;
+          dummy.position.set(rx, 5.31, rz);
+          dummy.updateMatrix();
+          ringInstMesh.setMatrixAt(ringIdx++, dummy.matrix);
+        }
+      }
+      perfboardGroup.add(ringInstMesh);
+
+      // 4 Riser Papan di Sudut
+      [[-22, 61], [22, 61], [-22, 125], [22, 125]].forEach(([rx, rz]) => {
+        const riser = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 1.2, 16), matNylon);
+        riser.position.set(rx, 3.1, rz);
+        perfboardGroup.add(riser);
+      });
+      calloutTargets.board = new THREE.Vector3(0, 6, 93);
+
+      // 2. SOKET FEMALE HEADER ESP32 DI SEPARUH BELAKANG PAPAN
+      // ESP32 berada di separuh belakang papan, Z 77.76..126.02. Baris pin 22.86 mm
+      // (0.9 inci, 9 pitch) jatuh di kolom grid -6.35 dan 16.51.
+      const ESP_X = 5.08, ESP_Z = 101.89;
+      const headerGeo = new THREE.BoxGeometry(2.54, 8.5, 35.56);
+      const hEspLeft = new THREE.Mesh(headerGeo, matHeaderPlastic);
+      hEspLeft.position.set(ESP_X - 11.43, 9.55, ESP_Z);
+      headersGroup.add(hEspLeft);
+
+      const hEspRight = new THREE.Mesh(headerGeo, matHeaderPlastic);
+      hEspRight.position.set(ESP_X + 11.43, 9.55, ESP_Z);
+      headersGroup.add(hEspRight);
+
+      // Lubang Pin Kontak Emas di Atas Header
+      for (let i = 0; i < 15; i++) {
+        const pz = ESP_Z - 17.78 + i * 2.54;
+        const pinHoleL = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), matHeaderPinHole);
+        pinHoleL.rotateX(-Math.PI / 2);
+        pinHoleL.position.set(ESP_X - 11.43, 13.81, pz);
+        headersGroup.add(pinHoleL);
+
+        const pinHoleR = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), matHeaderPinHole);
+        pinHoleR.rotateX(-Math.PI / 2);
+        pinHoleR.position.set(ESP_X + 11.43, 13.81, pz);
+        headersGroup.add(pinHoleR);
+      }
+      calloutTargets.esp32 = new THREE.Vector3(ESP_X, 16.0, ESP_Z);
+
+      // 3. DERET HEADER PENDARAT JUMPER PADA PAPAN PERFBOARD
+      // Semua modul punya pin mendatar, jadi tidak ada yang disolder langsung ke papan.
+      // Header male 3-pin dipasang di baris grid; jumper female-female menghubungkannya
+      // ke pin modul. Baris grid: z = 63.79 + 2.54k, kolom x = -21.59 + 2.54k.
+      //
+      // A. Buzzer: pin modul di z 91.73 keluar ke +z, jumper ke baris 104.43.
+      const hBuzzer = new THREE.Mesh(new THREE.BoxGeometry(7.62, 2.5, 2.54), matHeaderPlastic);
+      hBuzzer.position.set(-16.51, 6.55, 104.43);
+      headersGroup.add(hBuzzer);
+
+      // B. DHT11: pin modul keluar ke +z dari (x 24, z 22), jumper melewati terowongan
+      // septum (x -8..8, z 52..56) ke baris depan. Tiga pin di x -1.27..3.81.
+      const hDht = new THREE.Mesh(new THREE.BoxGeometry(7.62, 2.5, 2.54), matHeaderPlastic);
+      hDht.position.set(3.81, 6.55, 63.79);
+      headersGroup.add(hDht);
+
+      // C. HX711: empat pin di x -6.35..1.27, baris kedua supaya tidak bertumpuk dengan DHT.
+      // Empat pin ganjil-genap, jadi pusat header setengah pitch dari lubang.
+      const hHx711 = new THREE.Mesh(new THREE.BoxGeometry(10.16, 2.5, 2.54), matHeaderPlastic);
+      hHx711.position.set(-2.54, 6.55, 71.41);
+      headersGroup.add(hHx711);
+
+      // D. Motor: tiga pin di kolom -21.59, deret sejajar sumbu z (y 94.27..99.35).
+      const hMotor = new THREE.Mesh(new THREE.BoxGeometry(2.54, 2.5, 7.62), matHeaderPlastic);
+      hMotor.position.set(-21.59, 6.55, 96.81);
+      headersGroup.add(hMotor);
+
+      // 4. JALUR BUS DAYA (5V, 3.3V) & COMMON GND PADA PAPAN
+      const createBoardTrace = (points, colorHex, radius = 0.5, name = '') => {
+        const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(p[0], p[1], p[2])));
+        const geo = new THREE.TubeGeometry(curve, 24, radius, 8, false);
+        const mat = new THREE.MeshStandardMaterial({
+          color: colorHex,
+          roughness: 0.2,
+          metalness: 0.4,
+          emissive: colorHex,
+          emissiveIntensity: 0.35
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.userData = { name, colorHex };
+        return mesh;
+      };
+
+      // Jalur 5V VIN: pin 15 kiri ESP32 ke VCC motor (header motor di x -21.59, z 96.81)
+      const tVinMotor = createBoardTrace([
+        [ESP_X - 11.43, 5.35, 119.67],
+        [-21.59, 5.35, 119.67],
+        [-21.59, 5.35, 96.81]
+      ], 0xFF4444, 0.55, 'power5v');
+      powerBusGroup.add(tVinMotor);
+
+      // Jalur 3.3V dari pin 15 kanan: menyusur kanan ke HX711, turun ke DHT11, lalu ke
+      // buzzer di strip kiri. Semua titik akhir = pin header pendarat jumper.
+      const t3v3Bus1 = createBoardTrace([
+        [ESP_X + 11.43, 5.38, 119.67],
+        [20.32, 5.38, 119.67],
+        [20.32, 5.38, 71.41],
+        [-6.35, 5.38, 71.41]
+      ], 0xFFA020, 0.52, 'power3v3');
+      const t3v3Bus2 = createBoardTrace([
+        [-6.35, 5.38, 71.41],
+        [6.35, 5.38, 71.41],
+        [6.35, 5.38, 63.79],
+        [1.27, 5.38, 63.79]
+      ], 0xFFA020, 0.52, 'power3v3');
+      const t3v3Bus3 = createBoardTrace([
+        [1.27, 5.38, 63.79],
+        [-16.51, 5.38, 63.79],
+        [-16.51, 5.38, 104.43]
+      ], 0xFFA020, 0.52, 'power3v3');
+      powerBusGroup.add(t3v3Bus1);
+      powerBusGroup.add(t3v3Bus2);
+      powerBusGroup.add(t3v3Bus3);
+
+      // Common GND: pin 14 kiri dan kanan, menyuplai motor, DHT11, HX711, buzzer
+      const tGnd1 = createBoardTrace([
+        [ESP_X - 11.43, 5.4, 117.13],
+        [-21.59, 5.4, 117.13],
+        [-21.59, 5.4, 96.81]
+      ], 0x00E5FF, 0.52, 'gnd');
+      const tGnd2 = createBoardTrace([
+        [ESP_X + 11.43, 5.4, 117.13],
+        [17.78, 5.4, 117.13],
+        [17.78, 5.4, 63.79],
+        [3.81, 5.4, 63.79]
+      ], 0x00E5FF, 0.52, 'gnd');
+      const tGnd3 = createBoardTrace([
+        [3.81, 5.4, 63.79],
+        [3.81, 5.4, 71.41],
+        [1.27, 5.4, 71.41]
+      ], 0x00E5FF, 0.52, 'gnd');
+      const tGnd4 = createBoardTrace([
+        [-16.51, 5.4, 104.43],
+        [-19.05, 5.4, 104.43],
+        [-19.05, 5.4, 117.13],
+        [ESP_X - 11.43, 5.4, 117.13]
+      ], 0x00E5FF, 0.52, 'gnd');
+      powerBusGroup.add(tGnd1);
+      powerBusGroup.add(tGnd2);
+      powerBusGroup.add(tGnd3);
+      powerBusGroup.add(tGnd4);
+
+      // 5. JALUR SINYAL GPIO ESP32 (19, 18, 17, 16, 4)
+      const tGpio19 = createBoardTrace([
+        [ESP_X + 11.43, 5.45, 96.81],
+        [10.46, 5.45, 96.81],
+        [10.46, 5.45, 63.79],
+        [3.81, 5.45, 63.79]
+      ], 0x2B90E8, 0.5, 'gpio19');
+      gpioTracesGroup.add(tGpio19);
+
+      const tGpio18 = createBoardTrace([
+        [ESP_X + 11.43, 5.45, 99.35],
+        [20.32, 5.45, 99.35],
+        [20.32, 5.45, 104.43],
+        [-16.51, 5.45, 104.43]
+      ], 0xB28DFF, 0.5, 'gpio18');
+      gpioTracesGroup.add(tGpio18);
+
+      const tGpio17 = createBoardTrace([
+        [ESP_X + 11.43, 5.45, 104.43],
+        [20.32, 5.45, 104.43],
+        [20.32, 5.45, 96.81],
+        [-21.59, 5.45, 96.81]
+      ], 0xF5A623, 0.5, 'gpio17');
+      gpioTracesGroup.add(tGpio17);
+
+      const tGpio16 = createBoardTrace([
+        [ESP_X + 11.43, 5.45, 106.97],
+        [8.0, 5.45, 106.97],
+        [8.0, 5.45, 76.0],
+        [-3.81, 5.45, 76.0],
+        [-3.81, 5.45, 71.41]
+      ], 0x5FD195, 0.5, 'gpio16');
+      gpioTracesGroup.add(tGpio16);
+
+      const tGpio4 = createBoardTrace([
+        [ESP_X + 11.43, 5.45, 109.51],
+        [6.0, 5.45, 109.51],
+        [6.0, 5.45, 80.0],
+        [-1.27, 5.45, 80.0],
+        [-1.27, 5.45, 71.41]
+      ], 0xF0E64A, 0.5, 'gpio4');
+      gpioTracesGroup.add(tGpio4);
+
+      // 6. MODUL ESP32 DEVKIT V1 DI SEPARUH BELAKANG PAPAN
+      const espGroup = new THREE.Group();
+      // ESP32 PCB: 25.4 x 48.26 mm, Z 75.2..123.5, di atas header female
+      const espPcb = new THREE.Mesh(new THREE.BoxGeometry(25.4, 1.6, 48.26), matBlackChip);
+      espPcb.position.set(ESP_X, 14.6, ESP_Z);
+      espPcb.castShadow = true;
+      espGroup.add(espPcb);
+
+      // Shield RF Kaleng Metal, menempel ke port USB di ujung belakang
+      const rfShield = new THREE.Mesh(new THREE.BoxGeometry(18.0, 2.6, 18.0), matMetalShield);
+      rfShield.position.set(ESP_X, 16.7, 117.02);
+      espGroup.add(rfShield);
+
+      // Micro-USB Port di ujung belakang papan, sejajar bukaan sasis z 12.5..20.5
+      const usbPort = new THREE.Mesh(new THREE.BoxGeometry(7.5, 3.2, 5.5), matMetalShield);
+      usbPort.position.set(ESP_X, 16.2, 124.5);
+      espGroup.add(usbPort);
+
+      // 30 Pin Kaki Logam
+      for (let i = 0; i < 15; i++) {
+        const pz = ESP_Z - 17.78 + i * 2.54;
+        const pinLegL = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3.5, 0.6), matMetalShield);
+        pinLegL.position.set(ESP_X - 11.43, 12.5, pz);
+        espGroup.add(pinLegL);
+        const pinLegR = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3.5, 0.6), matMetalShield);
+        pinLegR.position.set(ESP_X + 11.43, 12.5, pz);
+        espGroup.add(pinLegR);
+      }
+      modulesGroup.add(espGroup);
+
+      // 7. PENEMPATAN MODUL: BUZZER DI PAPAN, DHT11 & HX711 DI WADAH DEPAN
+      // A. MODUL BUZZER: memanjang di strip kiri papan (13 x 32 mm), duduk datar dengan
+      // tape 0.5 mm. Pin 3 keluar mendatar dari tepi belakang; jumper ke header 104.43.
+      const BZ_X = -16.51, BZ_Z = 69.73, BZ_PCB_Y = 6.6;
+      const bzGroup = new THREE.Group();
+      const bzPcb = new THREE.Mesh(
+        new THREE.BoxGeometry(13.0, 1.6, 32.0),
+        new THREE.MeshStandardMaterial({ color: 0x1A5AA8, roughness: 0.4 })
+      );
+      bzPcb.position.set(BZ_X, BZ_PCB_Y, BZ_Z + 6.0);
+      bzGroup.add(bzPcb);
+
+      // Silinder Buzzer Hitam (diameter 12.0 mm, tinggi 10.0 mm; spek modul 1 cm)
+      const bzCyl = new THREE.Mesh(
+        new THREE.CylinderGeometry(6.0, 6.0, 10.0, 32),
+        new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 })
+      );
+      bzCyl.position.set(BZ_X, BZ_PCB_Y + 0.8 + 5.0, BZ_Z);
+      bzGroup.add(bzCyl);
+
+      // Pin mendatar 3 buah di tepi belakang PCB (z 91.73), menonjol 7 mm ke +z
+      const bzPins = new THREE.Mesh(new THREE.BoxGeometry(5.08, 0.6, 7.0), matMetalShield);
+      bzPins.position.set(BZ_X, BZ_PCB_Y + 0.3, 91.73 + 3.5);
+      bzGroup.add(bzPins);
+
+      // Lubang Suara Tengah Buzzer
+      const bzHole = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.6, 16), matDarkSlot);
+      bzHole.position.set(BZ_X, BZ_PCB_Y + 0.8 + 10.0, BZ_Z);
+      bzGroup.add(bzHole);
+
+      // Transistor PNP S8550 di ujung belakang modul, dekat header 3-pin
+      const bzTr = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.0, 1.2), matBlackChip);
+      bzTr.position.set(-20.5, BZ_PCB_Y + 1.8, 87.0);
+      bzGroup.add(bzTr);
+
+      modulesGroup.add(bzGroup);
+      calloutTargets.buzzer_mod = new THREE.Vector3(BZ_X, 18.0, BZ_Z);
+
+      // B. MODUL DHT11 32 x 14 mm di wadah depan kanan, diputar: pin 3 keluar mendatar
+      // dari tepi +z (menuju septum), jadi jumper naik lurus lewat terowongan.
+      const dhtGroup = new THREE.Group();
+      const dhtPcb = new THREE.Mesh(
+        new THREE.BoxGeometry(14.0, 1.6, 32.0),
+        new THREE.MeshStandardMaterial({ color: 0x1A5AA8, roughness: 0.4 })
+      );
+      dhtPcb.position.set(24.0, 7.3, 6.0);
+      dhtGroup.add(dhtPcb);
+
+      // Rumah Plastik Biru Sensor DHT11 (15.5 x 5.5 x 12.0 mm), diputar sejajar PCB
+      const dhtBox = new THREE.Mesh(
+        new THREE.BoxGeometry(12.0, 5.5, 15.5),
+        new THREE.MeshStandardMaterial({ color: 0x1E90FF, roughness: 0.35 })
+      );
+      dhtBox.position.set(24.0, 10.85, 0.5);
+      dhtGroup.add(dhtBox);
+
+      // Pin mendatar 3 buah di tepi +z PCB (z 22), menonjol 7 mm
+      const dhtPins = new THREE.Mesh(new THREE.BoxGeometry(5.08, 0.6, 7.0), matMetalShield);
+      dhtPins.position.set(24.0, 7.6, 25.5);
+      dhtGroup.add(dhtPins);
+
+      modulesGroup.add(dhtGroup);
+      calloutTargets.dht_mod = new THREE.Vector3(24.0, 11.0, 0.5);
+
+      // C. MODUL MOTOR GETAR 23 x 21 mm menempel di bawah tutup (Y 24.2), motor koin
+      // menggantung ke bawah. Pin 3 keluar mendatar ke -x; header male dilepas dan
+      // kabel disolder ke pad karena pin header 11.5 mm menembus shield RF.
+      const motorGroup = new THREE.Group();
+      const motorPcb = new THREE.Mesh(new THREE.BoxGeometry(23.0, 1.6, 21.0), matBlackChip);
+      motorPcb.position.set(5.08, 25.0, 100.0);
+      motorGroup.add(motorPcb);
+      const coinMotor = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 3.0, 24), matMetalShield);
+      coinMotor.position.set(5.08, 22.7, 100.0);
+      motorGroup.add(coinMotor);
+      const motorPins = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.6, 5.08), matMetalShield);
+      motorPins.position.set(5.08 - 11.5 - 3.5, 25.3, 100.0);
+      motorGroup.add(motorPins);
+      modulesGroup.add(motorGroup);
+      calloutTargets.motor_mod = new THREE.Vector3(5.08, 23.0, 100.0);
+
+      // D. MODUL HX711 34.5 x 21 mm di wadah depan kiri, di atas piringan akrilik bawah.
+      // Header 4-pin di tepi luar (-x), jadi kabel keluar menjauhi batang load cell.
+      // Tepi kanan PCB x = -7.75, batang mulai x = -6.35: celah 1.40 mm.
+      const hxGroup = new THREE.Group();
+      const hxPcb = new THREE.Mesh(new THREE.BoxGeometry(34.5, 1.6, 21.0), new THREE.MeshStandardMaterial({ color: 0x1E7B3A, roughness: 0.5 }));
+      hxPcb.position.set(-25.0, 7.3, 6.0);
+      hxGroup.add(hxPcb);
+
+      const hxHeader = new THREE.Mesh(new THREE.BoxGeometry(2.54, 8.5, 10.16), matHeaderPlastic);
+      hxHeader.position.set(-43.52, 12.35, 6.0);
+      hxGroup.add(hxHeader);
+
+      modulesGroup.add(hxGroup);
+      calloutTargets.hx711_hdr = new THREE.Vector3(-43.52, 14.0, 6.0);
+
+      // KABEL JUMPER LENTUR DARI HEADER KE MODUL
+      const createFlexWire = (pStart, pMid, pEnd, colorHex) => {
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(...pStart),
+          new THREE.Vector3(...pMid),
+          new THREE.Vector3(...pEnd)
+        ]);
+        const geo = new THREE.TubeGeometry(curve, 20, 0.5, 8, false);
+        const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.4 });
+        return new THREE.Mesh(geo, mat);
+      };
+
+      // Buzzer: pin modul di (x -16.51, z 91.73) lurus ke header di baris 104.43
+      flexibleWiresGroup.add(createFlexWire([-16.51, 8.0, 98.73], [-16.51, 8.4, 101.0], [-16.51, 7.9, 104.43], 0xB28DFF));
+      // DHT11: pin modul di (x 24, z 25.5) menyusur ke terowongan septum, lalu ke header
+      // baris depan (x 1.27, z 63.79)
+      flexibleWiresGroup.add(createFlexWire([24.0, 8.0, 25.5], [17.0, 9.2, 45.0], [6.0, 9.0, 56.0], 0x2B90E8));
+      flexibleWiresGroup.add(createFlexWire([6.0, 9.0, 56.0], [3.0, 8.4, 60.0], [1.27, 7.9, 63.79], 0x2B90E8));
+      // Motor: pin modul di (x -6.42, y 25.3) turun ke header kolom -21.59
+      flexibleWiresGroup.add(createFlexWire([-6.42, 25.3, 100.0], [-18.0, 16.0, 99.0], [-21.59, 7.9, 96.81], 0xF5A623));
+      // HX711: keluar dari header tepi luar (-43.52), menyusur sisi kiri batang load cell
+      // di luar z 35, lalu masuk terowongan septum (x -8..8, z 52..56).
+      flexibleWiresGroup.add(createFlexWire([-43.52, 16.8, 6.0], [-34.0, 9.0, 30.0], [-19.0, 8.4, 46.0], 0x5FD195));
+      flexibleWiresGroup.add(createFlexWire([-19.0, 8.4, 46.0], [-6.0, 8.4, 58.0], [-5.08, 7.9, 71.41], 0x5FD195));
+
+      // 8. SASIS KAPSUL (belakang 28 mm, bibir depan 23.2 mm)
+      const TOTAL_H = 28.0, RIM_H = 23.2, CAVITY_Y0 = 56.0, CAVITY_Y1 = 130.0;
+
+      const floorFront = new THREE.Mesh(new THREE.CylinderGeometry(55.4, 55.4, 2.5, 64), matChassisBody);
+      floorFront.position.set(0, 1.25, 0);
+      frontShellGroup.add(floorFront);
+
+      const floorRear = new THREE.Mesh(new THREE.BoxGeometry(76.0, 2.5, 86.0), matChassisBody);
+      floorRear.position.set(0, 1.25, 93.0);
+      chassisGroup.add(floorRear);
+
+      // Bibir depan berhenti 1 mm di bawah puncak piringan, supaya gelas menumpu di piringan.
+      const ringShape = new THREE.Shape();
+      ringShape.absarc(0, 0, 55.4, 0, Math.PI * 2, false);
+      const ringHole = new THREE.Path();
+      ringHole.absarc(0, 0, 53.0, 0, Math.PI * 2, true);
+      ringShape.holes.push(ringHole);
+      const frontRimGeo = new THREE.ExtrudeGeometry(ringShape, { depth: RIM_H - 2.5, bevelEnabled: false, curveSegments: 64 });
+      const frontRimWall = new THREE.Mesh(frontRimGeo, matChassisBody);
+      frontRimWall.rotateX(-Math.PI / 2);
+      frontRimWall.position.set(0, 2.5, 0);
+      frontShellGroup.add(frontRimWall);
+
+      const wallH = TOTAL_H - 2.5, wallY = 2.5 + wallH / 2;
+      const leftWall = new THREE.Mesh(new THREE.BoxGeometry(8.5, wallH, 78.0), matChassisBody);
+      leftWall.position.set(-31.3, wallY, 93.0);
+      chassisGroup.add(leftWall);
+
+      const rightWall = new THREE.Mesh(new THREE.BoxGeometry(8.5, wallH, 78.0), matChassisBody);
+      rightWall.position.set(31.3, wallY, 93.0);
+      chassisGroup.add(rightWall);
+
+      // Dinding belakang: bukaan USB mengikuti pusat ESP32 (x 5.08), bukan pusat sasis.
+      // Bukaan 15 mm -> x -2.42..12.58; selubung port 7.5 mm di x 1.33..8.83 muat penuh.
+      // Versi lama memusatkan celah di x 0, sehingga dinding menutup 1.33 mm port.
+      const USB_HALF = 7.5, USB_Z1 = 20.5;
+      const rearWallL = new THREE.Mesh(new THREE.BoxGeometry(27.05 + ESP_X - USB_HALF, wallH, 6.0), matChassisBody);
+      rearWallL.position.set((-27.05 + ESP_X - USB_HALF) / 2, wallY, 133.0);
+      chassisGroup.add(rearWallL);
+
+      const rearWallR = new THREE.Mesh(new THREE.BoxGeometry(27.05 - ESP_X - USB_HALF, wallH, 6.0), matChassisBody);
+      rearWallR.position.set((27.05 + ESP_X + USB_HALF) / 2, wallY, 133.0);
+      chassisGroup.add(rearWallR);
+
+      const rearWallTop = new THREE.Mesh(new THREE.BoxGeometry(USB_HALF * 2, TOTAL_H - USB_Z1, 6.0), matChassisBody);
+      rearWallTop.position.set(ESP_X, (USB_Z1 + TOTAL_H) / 2, 133.0);
+      chassisGroup.add(rearWallTop);
+
+      const rearWallBottom = new THREE.Mesh(new THREE.BoxGeometry(USB_HALF * 2, 12.5 - 2.5, 6.0), matChassisBody);
+      rearWallBottom.position.set(ESP_X, (2.5 + 12.5) / 2, 133.0);
+      chassisGroup.add(rearWallBottom);
+
+      // Sekat depan di z 52..56, dengan terowongan kabel di tengah
+      const divWallL = new THREE.Mesh(new THREE.BoxGeometry(19.0, wallH, 4.0), matChassisBody);
+      divWallL.position.set(-17.5, wallY, 54.0);
+      frontShellGroup.add(divWallL);
+
+      const divWallR = new THREE.Mesh(new THREE.BoxGeometry(19.0, wallH, 4.0), matChassisBody);
+      divWallR.position.set(17.5, wallY, 54.0);
+      frontShellGroup.add(divWallR);
+
+      const divWallTop = new THREE.Mesh(new THREE.BoxGeometry(16.0, TOTAL_H - 10.5, 4.0), matChassisBody);
+      divWallTop.position.set(0, (10.5 + TOTAL_H) / 2, 54.0);
+      frontShellGroup.add(divWallTop);
+
+      // Sambungan y=56: kerah 3.5 mm part depan membungkus hidung part belakang,
+      // dikunci 2 baut M3x8 horizontal. Garis gelap menandai bidang seam.
+      const seamPlate = new THREE.Mesh(new THREE.BoxGeometry(72.8, TOTAL_H, 0.8), matDarkSlot);
+      seamPlate.position.set(0, TOTAL_H / 2, CAVITY_Y0);
+      frontShellGroup.add(seamPlate);
+
+      const seamHeadGeo = new THREE.CylinderGeometry(2.75, 2.75, 2.4, 16);
+      const seamSocketGeo = new THREE.CylinderGeometry(1.5, 1.5, 0.8, 6);
+      [1, -1].forEach(s => {
+        const head = new THREE.Mesh(seamHeadGeo, matLoadCell);
+        head.rotation.z = Math.PI / 2;
+        head.position.set(s * 36.0, 14.0, 58.5);
+        chassisGroup.add(head);
+
+        const socket = new THREE.Mesh(seamSocketGeo, matDarkSlot);
+        socket.rotation.z = Math.PI / 2;
+        socket.position.set(s * 37.1, 14.0, 58.5);
+        chassisGroup.add(socket);
+      });
+
+      // 4 pilar sekrup M3 di ujung rongga (y 59 dan 127), bebas dari kisi dan PCB
+      const screwCoords = [[-29, 59], [29, 59], [-29, 127], [29, 127]];
+      screwCoords.forEach(([px, pz]) => {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, TOTAL_H - 14.0, 24), matChassisBody);
+        post.position.set(px, (14.0 + TOTAL_H) / 2, pz);
+        chassisGroup.add(post);
+
+        const hole = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, TOTAL_H - 13.0, 16), matDarkSlot);
+        hole.position.set(px, (14.0 + TOTAL_H) / 2, pz);
+        chassisGroup.add(hole);
+      });
+
+      // 9. TATAKAN PIRINGAN DEPAN & LOAD CELL (cantilever)
+      const DISC_Z = 3.5, BAR_Z = 8.5, PLATTER_Z = 21.2;
+
+      const baseDisk = new THREE.Mesh(new THREE.CylinderGeometry(50.0, 50.0, 3.0, 64), matAcrylicBase);
+      baseDisk.position.set(0, DISC_Z + 1.5, 0);
+      platterGroup.add(baseDisk);
+
+      // Spacer ujung tetap: hanya ujung utara yang bertumpu, ujung selatan menggantung 2 mm.
+      const spacer = new THREE.Mesh(new THREE.BoxGeometry(12.7, 2.0, 10.0), matNylon);
+      spacer.position.set(0, DISC_Z + 3.0 + 1.0, 30.0);
+      platterGroup.add(spacer);
+
+      const lcBar = new THREE.Mesh(new THREE.BoxGeometry(12.7, 12.7, 80.0), matLoadCell);
+      lcBar.position.set(0, BAR_Z + 6.35, 0);
+      platterGroup.add(lcBar);
+
+      const boltGeo = new THREE.CylinderGeometry(2.5, 2.5, 5.0, 16);
+      const b1 = new THREE.Mesh(boltGeo, matNylon);
+      b1.position.set(0, DISC_Z + 1.5, 30.0);
+      platterGroup.add(b1);
+
+      // Piringan atas duduk di ujung bebas batang; puncaknya 24.2 mm, 1 mm di atas bibir 23.2 mm.
+      const topDisk = new THREE.Mesh(new THREE.CylinderGeometry(50.0, 50.0, 3.0, 64), matAcrylicTop);
+      topDisk.position.set(0, PLATTER_Z + 1.5, 0);
+      topDisk.castShadow = true;
+      platterGroup.add(topDisk);
+
+      const topScrew = new THREE.Mesh(boltGeo, matLoadCell);
+      topScrew.position.set(0, PLATTER_Z + 2.5, -28.0);
+      platterGroup.add(topScrew);
+      calloutTargets.coaster = new THREE.Vector3(0, PLATTER_Z + 4.0, 0);
+
+      // 10. PENUTUP ATAS (63.4 x 77.4 mm, tebal 2.2 mm), menutup y 54..132
+      const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(63.4, 2.2, 77.4), matLidBody);
+      lidMesh.position.set(0, TOTAL_H + 1.1, 93.0);
+      lidMesh.castShadow = true;
+      lidGroup.add(lidMesh);
+
+      screwCoords.forEach(([px, pz]) => {
+        const csk = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 1.6, 2.4, 16), matDarkSlot);
+        csk.position.set(px, TOTAL_H + 1.1, pz);
+        lidGroup.add(csk);
+      });
+
+      // Kisi 3x3 di atas can buzzer (x -16.51, z 69.73), pitch 2.6 mm
+      for (let dx = -2.6; dx <= 2.6; dx += 2.6) {
+        for (let dz = -2.6; dz <= 2.6; dz += 2.6) {
+          const soundHole = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 2.5, 12), matDarkSlot);
+          soundHole.position.set(BZ_X + dx, TOTAL_H + 1.1, BZ_Z + dz);
+          lidGroup.add(soundHole);
+        }
+      }
+
+      // Gabungkan ke Scene Utama
+      scene.add(perfboardGroup);
+      scene.add(headersGroup);
+      scene.add(powerBusGroup);
+      scene.add(gpioTracesGroup);
+      scene.add(modulesGroup);
+      scene.add(flexibleWiresGroup);
+      scene.add(chassisGroup);
+      scene.add(platterGroup);
+      scene.add(lidGroup);
+    }
+
+    function setAssemblyStep(stepIdx) {
+      currentStep = Math.max(0, Math.min(STEP_DATA.length - 1, stepIdx));
+
+      document.querySelectorAll('.step-btn').forEach((btn, idx) => {
+        btn.classList.toggle('active', idx === currentStep);
+      });
+
+      const data = STEP_DATA[currentStep];
+      document.getElementById('panel-title').innerText = data.title;
+      document.getElementById('panel-desc').innerHTML = data.desc;
+      document.getElementById('panel-rule').innerText = data.rule;
+      document.getElementById('panel-badge').innerText = data.badge;
+
+      document.getElementById('btnPrevStep').style.visibility = (currentStep === 0) ? 'hidden' : 'visible';
+      document.getElementById('btnNextStep').innerText = (currentStep === STEP_DATA.length - 1) ? 'Ulangi Panduan ↺' : 'Selanjutnya →';
+
+      applyVisibilityForStep(currentStep);
+
+      if (!isTopDown) {
+        flyCameraTo(data.camPos, data.camLook);
+      }
+    }
+
+    function applyVisibilityForStep(step) {
+      const v = STEP_DATA[step].visibleGroups;
+
+      perfboardGroup.visible = v.includes('perfboard');
+      headersGroup.visible = v.includes('headers_esp32') || v.includes('headers_sensors');
+
+      // Tampilkan deret header sesuai langkah
+      headersGroup.children.forEach(child => {
+        if (child === headersGroup.children[0] || child === headersGroup.children[1]) {
+          child.visible = v.includes('headers_esp32');
+        } else {
+          child.visible = v.includes('headers_sensors');
+        }
+      });
+
+      powerBusGroup.visible = v.includes('power_bus');
+      gpioTracesGroup.visible = v.includes('gpio_traces');
+      modulesGroup.visible = v.includes('esp32_module') || v.includes('modules');
+      flexibleWiresGroup.visible = v.includes('wires');
+      chassisGroup.visible = v.includes('chassis');
+      platterGroup.visible = v.includes('platter');
+      lidGroup.visible = v.includes('lid');
+
+      if (step < 5) {
+        setChassisGhost(true);
+      } else {
+        setChassisGhost(isXRay);
+      }
+    }
+
+    function nextStep() {
+      if (currentStep >= STEP_DATA.length - 1) {
+        setAssemblyStep(0);
+      } else {
+        setAssemblyStep(currentStep + 1);
+      }
+    }
+
+    function prevStep() {
+      if (currentStep > 0) {
+        setAssemblyStep(currentStep - 1);
+      }
+    }
+
+    function focusSensors() {
+      flyCameraTo(new THREE.Vector3(65, 75, 60), new THREE.Vector3(0, 8, 35));
+      document.getElementById('panel-title').innerText = "Tata Letak: Buzzer di Strip Kiri Papan, DHT11 di Wadah Depan";
+      document.getElementById('panel-desc').innerHTML = "Buzzer duduk memanjang di strip kiri papan, di samping ESP32 48.26 mm. Sensor DHT11 pindah ke wadah depan kanan di atas piringan akrilik bawah, terpisah dari panas ESP32 oleh septum dan terbuka ke udara ruangan.";
+    }
+
+    function toggleTopDown() {
+      isTopDown = !isTopDown;
+      const btn = document.getElementById('btnTopDown');
+      btn.classList.toggle('active', isTopDown);
+
+      if (isTopDown) {
+        flyCameraTo(new THREE.Vector3(0, 150, 93.01), new THREE.Vector3(0, 5, 93));
+      } else {
+        flyCameraTo(STEP_DATA[currentStep].camPos, STEP_DATA[currentStep].camLook);
+      }
+    }
+
+    function toggleXRay() {
+      isXRay = !isXRay;
+      document.getElementById('btnXRay').classList.toggle('active', isXRay);
+      setChassisGhost(isXRay || currentStep < 5);
+    }
+
+    function setChassisGhost(ghost) {
+      chassisGroup.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material.transparent = ghost;
+          child.material.opacity = ghost ? 0.22 : 1.0;
+          child.material.needsUpdate = true;
+        }
+      });
+      lidGroup.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material.transparent = ghost;
+          child.material.opacity = ghost ? 0.15 : 1.0;
+          child.material.needsUpdate = true;
+        }
+      });
+    }
+
+    function setExplode(val) {
+      const offset = parseFloat(val);
+      // Part depan + piringan menjauh di z, tutup naik: urutan bongkar dua tahap.
+      frontShellGroup.position.z = -offset * 0.8;
+      platterGroup.position.set(0, offset * 0.7, -offset * 0.8);
+      lidGroup.position.y = offset * 0.9;
+    }
+
+    function filterWires(category, btn) {
+      activeWireFilter = category;
+      document.querySelectorAll('#wiring-filter-bar .filter-chip').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      powerBusGroup.children.forEach(mesh => {
+        const name = mesh.userData.name;
+        if (category === 'all') {
+          mesh.visible = true;
+        } else if (category === 'power5v') {
+          mesh.visible = (name === 'power5v');
+        } else if (category === 'power3v3') {
+          mesh.visible = (name === 'power3v3');
+        } else if (category === 'gnd') {
+          mesh.visible = (name === 'gnd');
+        } else {
+          mesh.visible = false;
+        }
+      });
+
+      gpioTracesGroup.children.forEach(mesh => {
+        const name = mesh.userData.name;
+        if (category === 'all' || category === 'gpio') {
+          mesh.visible = true;
+        } else {
+          mesh.visible = false;
+        }
+      });
+    }
+
+    function inspectPart(name) {
+      const PART_DETAILS = {
+        board: {
+          title: "Perfboard Cokelat 50.8x70 mm",
+          desc: "Papan matriks lubang tunggal 18x24 dengan jarak lubang standar 2.54 mm, margin 3.81 mm ke tepi kiri/kanan dan 5.79 mm ke tepi depan. Diletakkan di atas 4 pilar nilon 1.2 mm agar solderan di bagian bawah tidak bersentuhan dengan lantai sasis."
+        },
+        esp32: {
+          title: "ESP32 DevKit V1 (Separuh Belakang Papan)",
+          desc: "Duduk di atas dua baris female header 15-pin di separuh belakang papan, digeser 5.08 mm ke kanan agar strip kiri 17.78 mm muat modul buzzer 13 mm; baris pinnya jatuh tepat di kolom lubang papan. Port micro-USB berada di z 13.8..17.8, sejajar bukaan sasis z 12.5..20.5."
+        },
+        hx711_hdr: {
+          title: "Modul HX711 (Wadah Tatakan Depan Kiri)",
+          desc: "Terletak di wadah tatakan depan sebelah kiri load cell. Berukuran 34.5 x 21 mm. Header 4-pin menghadap ke luar (x -44.79..-42.25), jadi kabel keluar menjauhi batang; tepi kanan PCB hanya 1.40 mm dari batang. Kabel menuju ESP32 lewat terowongan sekat sasis."
+        },
+        buzzer_mod: {
+          title: "Modul Buzzer (Strip Kiri Papan Perfboard)",
+          desc: "Dipasang memanjang 13 x 32 mm di strip kiri papan; melintang butuh 32 mm di strip depan yang hanya 18 mm. Can Ø12 mm tinggi 10 mm di ujung depan, tepat di bawah 9 lubang kisi suara tutup sasis; puncaknya 19.4 mm, tutup mulai 25.8 mm. VCC wajib 3.3V, pin I/O ke GPIO18 (Active-LOW)."
+        },
+        dht_mod: {
+          title: "Modul DHT11 (Wadah Tatakan Depan Kanan)",
+          desc: "Modul 32 x 14 mm di wadah depan kanan, di atas piringan akrilik bawah. Wadah depan terbuka penuh ke atas dan berjarak 50 mm dari septum, jadi sensor tidak menerima panas dari regulator dan WiFi ESP32."
+        },
+        motor_mod: {
+          title: "Modul Motor Getar 23 x 21 mm (Bawah Tutup)",
+          desc: "PCB modul menempel di bawah tutup pada 24.2 mm; motor koin menghadap ke bawah berhenti di 21.2 mm, yaitu 3.2 mm di atas kaleng RF ESP32. Header male dilepas dan kabel disolder ke pad. Getaran merambat ke bodi, bukan ke load cell."
+        },
+        coaster: {
+          title: "Tatakan Gelas Mengambang Bebas 360°",
+          desc: "Piringan akrilik tatakan duduk di ujung bebas load cell pada 21.2 mm, puncaknya 24.2 mm, yaitu 1.0 mm di atas bibir depan 23.2 mm. Celah radial 3 mm per sisi, jadi piringan tidak menyentuh dinding saat menerima beban."
+        }
+      };
+
+      const detail = PART_DETAILS[name];
+      if (detail) {
+        document.getElementById('panel-title').innerText = detail.title;
+        document.getElementById('panel-desc').innerHTML = detail.desc;
+      }
+    }
+
+    function flyCameraTo(targetCamPos, targetLookAt) {
+      const startPos = camera.position.clone();
+      const startLook = controls.target.clone();
+      let progress = 0;
+
+      function step() {
+        progress += 0.05;
+        if (progress <= 1) {
+          camera.position.lerpVectors(startPos, targetCamPos, easeOutQuad(progress));
+          controls.target.lerpVectors(startLook, targetLookAt, easeOutQuad(progress));
+          controls.update();
+          requestAnimationFrame(step);
+        } else {
+          camera.position.copy(targetCamPos);
+          controls.target.copy(targetLookAt);
+          controls.update();
+        }
+      }
+      step();
+    }
+
+    function easeOutQuad(t) { return t * (2 - t); }
+
+    function resetCurrentCamera() {
+      if (isTopDown) {
+        flyCameraTo(new THREE.Vector3(0, 150, 93.01), new THREE.Vector3(0, 5, 93));
+      } else {
+        flyCameraTo(STEP_DATA[currentStep].camPos, STEP_DATA[currentStep].camLook);
+      }
+    }
+
+    function updateCalloutPositions() {
+      const container = document.getElementById('viewport');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      for (const [key, pos3d] of Object.entries(calloutTargets)) {
+        const el = document.getElementById('tag-' + key);
+        if (!el) continue;
+
+        let isVisibleInCurrentStep = true;
+        if (key === 'coaster' && currentStep < 5) isVisibleInCurrentStep = false;
+        if (key === 'dht_mod' && currentStep < 4) isVisibleInCurrentStep = false;
+        if (key === 'buzzer_mod' && currentStep < 4) isVisibleInCurrentStep = false;
+        if (key === 'motor_mod' && currentStep < 4) isVisibleInCurrentStep = false;
+
+        if (!isVisibleInCurrentStep) {
+          el.style.display = 'none';
+          continue;
+        }
+
+        const worldPos = pos3d.clone();
+        if (key === 'coaster') {
+          worldPos.y += platterGroup.position.y;
+        }
+
+        worldPos.project(camera);
+
+        if (worldPos.z > 1) {
+          el.style.display = 'none';
+          continue;
+        }
+
+        const x = (worldPos.x * 0.5 + 0.5) * width;
+        const y = (-worldPos.y * 0.5 + 0.5) * height;
+
+        el.style.display = 'flex';
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+      }
+    }
+
+    function onWindowResize() {
+      const container = document.getElementById('viewport');
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+      updateCalloutPositions();
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>

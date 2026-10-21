@@ -1,77 +1,68 @@
-# Cara Uji Sistem Secara Nyata (Tanpa Buzzer & Motor)
+# Panduan Pengujian & Operasional Sistem: Smart Hydration Coaster
 
-Buzzer dan motor bisa ditunda: GPIO18/17 hanya diberi OUTPUT kosong, firmware tetap jalan penuh. Sebagai gantinya, LED onboard (GPIO2) berkedip mengikuti pola alert yang sama dengan buzzer. Sisanya: tatakan gelas, HX711 + load cell, DHT11, kabel USB, ESP32 DevKit.
+Dokumen ini memuat panduan merakit, mengkalibrasi, serta mengoperasikan *Smart Hydration Coaster* secara utuh, baik melalui *Serial Monitor* maupun aplikasi *Progressive Web App* (PWA) [`web/index.html`](file:///d:/Kuliah/Sistem%20Kendali/web/index.html).
 
-## 1. Wiring (ESP32 mati dulu)
+## 1. Pengabelan Perangkat Keras (Pastikan ESP32 Mati Saat Merakit)
 
-| Modul | Pin modul | Ke ESP32 |
-|---|---|---|
-| HX711 | VCC | 3V3 |
-| HX711 | GND | GND |
-| HX711 | DOUT | GPIO16 |
-| HX711 | SCK | GPIO4 |
-| DHT11 | VCC / GND / DATA | 3V3 / GND / GPIO19 |
-| Buzzer (S8550 PNP) | VCC / GND / I-O | **3V3** / GND / GPIO18 |
-| Motor getar (S8050 NPN) | VCC / GND / IN | 5V (VIN) / GND / GPIO17 |
+| Modul | Pin Modul | Pin ESP32 | Catatan Teknis |
+| :--- | :--- | :--- | :--- |
+| **HX711** | `VCC` / `GND` | `VIN (5V)` atau `3V3` / `GND` | Eksitasi *load cell* 5 kg |
+| **HX711** | `DOUT` / `SCK` | `GPIO16` / `GPIO4` | Pembacaan ADC 24-bit pada laju 10 Hz |
+| **DHT11** | `VCC` / `GND` / `DATA` | `3V3` / `GND` / `GPIO19` | Pembacaan suhu & kelembaban tiap 2 detik |
+| **Buzzer (PNP S8550)** | `VCC` / `GND` / `I-O` | **`3V3`** / `GND` / `GPIO18` | **Active-LOW** (`LOW` = bunyi). `VCC` **wajib** ke `3V3` agar transistor PNP *cut-off* saat `GPIO18` `HIGH` |
+| **Motor Getar (NPN S8050)** | `VCC` / `GND` / `IN` | `VIN (5V)` / `GND` / `GPIO17` | **Active-HIGH** (`HIGH` = getar) |
+| **LED Onboard** | Internal | `GPIO2` | Indikator visual yang berdenyut serempak dengan aktuator |
 
-Load cell ke HX711 (kabel standar): merah → E+, hitam → E-, hijau → A+, putih → A-.
+Kabel *load cell* 5 kg ke modul HX711: Merah ke `E+`, Hitam ke `E-`, Hijau ke `A+`, Putih ke `A-`.
 
-Catatan DHT11: kalau modul 3 pin, colok langsung. Kalau sensor mentok 4 pin, butuh resistor 10k antara VCC dan DATA.
+## 2. Persiapan Arduino IDE
 
-## 2. Siapkan Arduino IDE
+1. *Board*: **ESP32 Dev Module** (melalui paket *esp32 by Espressif Systems* di *Boards Manager*).
+2. *Library* (*Library Manager*):
+   - **HX711** oleh Bogdan Necula
+   - **DHT sensor library** oleh Adafruit (beserta *Adafruit Unified Sensor*)
+   - `<Preferences.h>`, `<WiFi.h>`, `<HTTPClient.h>`, dan `<WiFiClientSecure.h>` sudah termasuk otomatis di *core* ESP32.
 
-Board: esp32 by Espressif (Boards Manager). Library (Library Manager): **HX711** oleh Bogdan Necula, **DHT sensor library** oleh Adafruit (ikut menarik Adafruit Unified Sensor).
+## 3. Faktor Kalibrasi *Load Cell* 5 kg (`450.7f`)
 
-## 3. Kalibrasi load cell (sekali, wajib)
-
-1. Buka `tools/kalibrasi/kalibrasi.ino`, upload ke ESP32, buka Serial Monitor **115200**.
-2. Tatakan kosong saat boot (skrip tare otomatis).
-3. Taruh benda beratnya diketahui (misal botol 600 ml = ±600 g, atau takaran dapur).
-4. Tekan `+` / `-` di Serial sampai bacaan = berat asli. Faktor berubah per 10.
-5. Tekan `f`, salin nilai yang muncul ke `SmartHydrationCoaster/config.h`:
+Faktor kalibrasi untuk *load cell* 5 kg pada perangkat ini telah diverifikasi menggunakan beban acuan 500 g dan dikunci di [`SmartHydrationCoaster/config.h`](file:///d:/Kuliah/Sistem%20Kendali/SmartHydrationCoaster/config.h):
 
 ```cpp
-#define DEFAULT_CALIBRATION_FACTOR -137.0f  // <- ganti dengan nilaimu
+#define DEFAULT_CALIBRATION_FACTOR 450.7f
 ```
 
-## 4. Upload firmware utama
+Hasil uji derau statis 20 sampel (`run_noise_test` pada [`tools/test_loadcell/test_loadcell.ino`](file:///d:/Kuliah/Sistem%20Kendali/tools/test_loadcell/test_loadcell.ino)):
+- Rata-rata: `500.10 g` (rentang `499.98 g` sampai `500.19 g`, *peak-to-peak jitter* `0.21 g`).
+- Jika kelak mengganti batang *load cell* fisik, jalankan [`tools/kalibrasi/kalibrasi.ino`](file:///d:/Kuliah/Sistem%20Kendali/tools/kalibrasi/kalibrasi.ino) untuk mencari faktor baru.
 
-Buka folder `SmartHydrationCoaster/` di Arduino IDE (yang `.ino`-nya sudah diganti nama, jangan main.ino). Upload, buka Serial Monitor 115200. Muncul: `Smart Hydration Coaster - ESP32 Siap.` beserta daftar perintah.
+## 4. *Upload Firmware* Utama & Daftar Perintah *Serial*
 
-## 5. Perintah Serial
+Buka [`SmartHydrationCoaster/SmartHydrationCoaster.ino`](file:///d:/Kuliah/Sistem%20Kendali/SmartHydrationCoaster/SmartHydrationCoaster.ino) di Arduino IDE, lalu *upload* ke ESP32. Seluruh pengaturan dan progres harian otomatis disimpan secara permanen di memori *non-volatile* (`<Preferences.h>` NVS *Flash*) sehingga **tidak hilang meskipun ESP32 dicabut dari listrik atau di-*restart***.
 
-| Ketik | Fungsi |
-|---|---|
-| `t` | Tare titik nol (tatakan tanpa gelas) |
-| `c` | Simpan berat gelas kosong (dari bacaan saat ini; maks 300 g) |
-| `d` | Toggle mode Demo: 15 detik ↔ 30 menit (default: demo AKTIF) |
-| `m` | Toggle timer adaptif DHT11 ↔ manual |
-| `r` | Reset statistik harian |
+| Perintah | Contoh | Fungsi |
+| :--- | :--- | :--- |
+| `t` | `t` | *Tare* titik nol *load cell* (pastikan tatakan kosong tanpa gelas) |
+| `c` | `c` | Simpan berat gelas kosong langsung dari beban yang sedang berada di atas tatakan (`35` s.d. `300 g`) |
+| `e<gram>` | `e130` | Tetapkan berat gelas kosong secara spesifik dalam gram (tersimpan di NVS) |
+| `i<menit>` | `i25` | Tetapkan interval dasar pengingat minum (`1` s.d. `180` menit) dan aktifkan Mode Normal |
+| `d` | `d` | *Toggle* Mode Demo (`15 detik`) vs Mode Normal (interval dasar *user*) |
+| `m` | `m` | *Toggle* Mode Pewaktuan: **Adaptif Kontinu DHT11 (`AUTO`)** vs **Manual Tetap (`MANUAL`)** |
+| `q` | `q` | *Toggle* **Mode Hening (*Silent Mode*)**: mematikan suara *buzzer* (`MUTE`), mempertahankan getaran motor & LED |
+| `r` | `r` | *Reset* statistik minum harian ke nol |
+| `w<ssid>\|<pass>` | `wKosPutra\|rahasia123` | Simpan kredensial Wi-Fi 2,4 GHz ke NVS dan sambungkan ulang otomatis tanpa *re-flash* |
+| `f<url>` | `fhttps://...` | Simpan URL Firebase Realtime Database ke NVS dan aktifkan sinkronisasi *cloud* Core 0 |
 
-## 6. Alur uji (mode demo, timer 15 s)
+## 5. Cara Menggunakan Aplikasi PWA ([`web/index.html`](file:///d:/Kuliah/Sistem%20Kendali/web/index.html))
 
-1. Tanpa gelas: tekan `t` (tare), lalu taruh gelas kosong dan tekan `c`. Telemetri tiap 0,5 s menampilkan berat, air, state.
-2. Tuang air ke gelas (≥ 200 g lebih berat) → tunggu ~1,5 detik → state masuk `TIMING`, timer jalan.
-3. Tunggu 15 detik → `ALERT_DRINK`, LED kedip 500 ms. Ini pengingat minum.
-4. Angkat gelas, minum beberapa teguk (turun ≥ 20 g), taruh kembali, diamkan 1,5 detik → alarm mati, timer reset, "Diminum" naik. Minum terverifikasi.
-5. Uji anti-cheat: **angkat gelas sampai benar-benar lepas dari tatakan** (berat jatuh di bawah 25 g, state `LIFTED`), lalu taruh kembali tanpa minum sehingga selisih berat terhadap baseline kurang dari 20 g → `ALERT_CHEAT`, LED kedip cepat 150 ms. Yang penting gelas harus terangkat dulu; menyentuh atau menekan gelas tanpa mengangkatnya tidak membawa ke cabang ini.
-6. Kosongkan gelas, taruh → `ALERT_EMPTY_CUP`, LED kedip 750 ms.
-7. Angkat gelas > 10 detik → `ALERT_MISSING_CUP`, alarm bertahan sampai gelas kembali.
-8. Isi ulang → alarm mati, state kembali `TIMING`.
-9. Tekan `r` untuk mengosongkan statistik harian, `d` untuk mencoba interval normal 30 menit (kembalikan ke `d` lagi setelahnya).
+Buka [`web/index.html`](file:///d:/Kuliah/Sistem%20Kendali/web/index.html) menggunakan Google Chrome atau Microsoft Edge (untuk fitur instalasi PWA penuh dan *Service Worker*, jalankan melalui *local server* seperti `python -m http.server 8000` di folder proyek lalu buka `http://localhost:8000/web/`).
 
-Kalau LED kedip tapi ingin memastikan urutan persisnya, bandingkan dengan simulator web: `web/index.html` menjalankan FSM yang sama, tombol skenarionya meniru langkah di atas.
-
-### Membaca baris `[DBG]`
-
-Setiap perpindahan state mencetak satu baris diagnostik:
-
-```
-[DBG] -> LIFTED | w=12.4 | baseline=380.0 | delta=-367.6g | vonis=-
-```
-
-Kolom `vonis` menyatakan apa yang diputuskan FSM saat transisi itu: `MINUM`, `REFILL`, `CHEAT`, atau `-` bila tidak ada yang dicatat. Yang perlu diperiksa saat mengangkat gelas penuh: vonisnya harus `-` sepanjang proses mengangkat, dan `[DBG] -> LIFTED` hanya muncul sekali. Sebelum gerbang stabilitas dipasang, satu pengangkatan mencetak empat sampai enam baris `vonis=MINUM` berurutan dengan baseline ikut merosot, dan cabang `ALERT_CHEAT` tidak pernah tercapai. Baris `[DBG]` ini sengaja ditinggal selama pengujian; hapus blok `[DBG]` di `SmartHydrationCoaster.ino` sebelum dikumpulkan.
-
-## Catatan Polaritas & Catu Daya Aktuator
-
-Polaritas buzzer (`LOW` = bunyi, modul PNP S8550) dan motor (`HIGH` = getar, modul NPN S8050) sudah dikunci di `config.h`. Pastikan `VCC` modul buzzer dihubungkan ke **`3V3`** (bukan `5V`, karena pada `5V` transistor PNP tidak bisa *cut-off* dari sinyal `HIGH` `3,3V` ESP32), sedangkan `VCC` motor getar dihubungkan ke `5V` (`VIN`).
+1. **Mode Simulator:** Menguji seluruh 8 skenario PRD secara interaktif di *browser* dengan percepatan waktu `x1` hingga `x600`.
+2. **Mode USB *Live* (*Web Serial API*):**
+   - Klik *tab* **USB Live**, lalu tekan **Hubungkan Port ESP32** dan pilih *port* COM ESP32 Anda (**pastikan *Serial Monitor* Arduino IDE sudah ditutup** agar *port* COM tidak terkunci).
+   - Data berat, volume air, suhu/kelembaban DHT11, sisa waktu, dan status FSM langsung tampil secara *real-time*.
+   - Anda dapat menekan tombol **Tare Load Cell**, **Simpan Gelas**, **Atur Interval**, **Buzzer: Hening**, maupun mengisi **SSID Wi-Fi & URL Firebase** lalu klik **Kirim Wi-Fi & Cloud ke ESP32** untuk memprogram kredensial jaringan ke NVS ESP32 tanpa menyentuh kode.
+3. **Mode Cloud Firebase:**
+   - Masukkan URL Firebase Realtime Database (`https://...firebaseio.com` atau `https://...firebasedatabase.app`) dan klik **Hubungkan Cloud**.
+   - Aplikasi di ponsel Android maupun laptop akan menyinkronkan telemetri, konfigurasi interval, dan riwayat harian (`/smart_coaster/daily/{YYYY-MM-DD}`) secara *real-time*.
+4. **Ekspor Data Laporan (CSV):**
+   - Klik tombol **Unduh CSV** di atas panel log untuk mengunduh rekaman lengkap pengujian (`timestamp`, `state`, `weight_g`, `water_ml`, `temp_c`, `humidity_pct`, `target_interval_sec`, `total_drank_ml`, `drink_count`, `refill_count`, `cheat_count`) sebagai bahan grafik laporan RSK-352 dan RSK-354.

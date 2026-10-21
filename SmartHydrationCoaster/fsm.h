@@ -35,16 +35,33 @@ public:
           drinkCount(0),
           cheatCount(0),
           refillCount(0),
-          missingCupAlert(false) {}
+          missingCupAlert(false),
+          refillPending(false),
+          preRefillBaseline(0.0f),
+          lastRefillMs(0),
+          calibrationAlign(false),
+          preRefillState(STATE_IDLE),
+          preRefillTimerStartMs(0) {}
 
     void setInterval(uint32_t intervalMs) { monitorIntervalMs = intervalMs; }
 
     void setMaxLiftDuration(uint32_t maxLiftMs) { maxLiftDurationMs = maxLiftMs; }
 
-    void setEmptyCupWeight(float weightG) {
+    bool setEmptyCupWeight(float weightG) {
         if (weightG >= CUP_ON_THRESHOLD && weightG <= MAX_EMPTY_CUP_G) {
             emptyCupWeight = weightG;
+            baselineWeight = weightG;
+            if (currentState != STATE_IDLE) {
+                missingCupAlert = false;
+                // K3: setter memaksa ALERT_REFILL tanpa tahu isi gelas. Tandai
+                // supaya update() menyelaraskan baseline ke berat aktual dulu,
+                // tidak menghitung isi ulang untuk air yang sudah ada di gelas.
+                calibrationAlign = true;
+                currentState = STATE_ALERT_REFILL;
+            }
+            return true;
         }
+        return false;
     }
 
     float getEmptyCupWeight() const { return emptyCupWeight; }
@@ -54,6 +71,13 @@ public:
         drinkCount = 0;
         cheatCount = 0;
         refillCount = 0;
+    }
+
+    void restoreDailyStats(float totalMl, uint16_t drinks, uint16_t refills, uint16_t cheats) {
+        totalDrankGrams = totalMl >= 0.0f ? totalMl : 0.0f;
+        drinkCount = drinks;
+        refillCount = refills;
+        cheatCount = cheats;
     }
 
     void update(float currentWeight, uint32_t nowMs) {
@@ -94,10 +118,10 @@ public:
                     // Isi ulang langsung di atas tatakan (PRD skenario 8).
                     // Fix C4: keputusan baru sah setelah berat BARU stabil. Tanpa ini,
                     // hentakan peletakan dan tekanan jari ikut terbaca sebagai isi ulang.
+                    // K1: dicatat sebagai pending sampai terbukti bertahan
+                    // (lihat registerRefill/refillReversed).
                     if (isStable(currentWeight, nowMs)) {
-                        baselineWeight = currentWeight;
-                        timerStartMs = nowMs;
-                        refillCount++;
+                        registerRefill(baselineWeight, currentWeight, nowMs);
                     }
                     break;
                 }
@@ -108,13 +132,17 @@ public:
                     // per pengangkatan, timer terus ter-reset, baseline rusak, dan
                     // cabang ALERT_CHEAT jadi mustahil tercapai.
                     if (isStable(currentWeight, nowMs)) {
-                        recordDrink(baselineWeight - currentWeight);
-                        baselineWeight = currentWeight;
-                        if (currentWeight <= emptyLimit) {
-                            missingCupAlert = false;
-                            enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
-                        } else {
-                            timerStartMs = nowMs;
+                        // K1: bila ini penurunan kembali setelah isi ulang pending
+                        // (tekan-lepas), recordDrink membatalkan isi ulangnya dan
+                        // minum tidak dicatat.
+                        if (recordDrink(baselineWeight - currentWeight, currentWeight, nowMs)) {
+                            baselineWeight = currentWeight;
+                            if (currentWeight <= emptyLimit) {
+                                missingCupAlert = false;
+                                enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
+                            } else {
+                                timerStartMs = nowMs;
+                            }
                         }
                     }
                     break;
@@ -147,9 +175,7 @@ public:
                 if (currentWeight - baselineWeight >= REFILL_DELTA) {
                     // Fix C4: sama seperti TIMING, tunggu berat baru stabil
                     if (isStable(currentWeight, nowMs)) {
-                        baselineWeight = currentWeight;
-                        timerStartMs = nowMs;
-                        refillCount++;
+                        registerRefill(baselineWeight, currentWeight, nowMs);
                         enterState(STATE_TIMING, currentWeight, nowMs);
                     }
                     break;
@@ -157,14 +183,17 @@ public:
                 if (baselineWeight - currentWeight >= MIN_DRINK_DELTA) {
                     // Fix C4: gerbang stabilitas sebelum mencatat minum
                     if (isStable(currentWeight, nowMs)) {
-                        recordDrink(baselineWeight - currentWeight);
-                        baselineWeight = currentWeight;
-                        if (currentWeight <= emptyLimit) {
-                            missingCupAlert = false;
-                            enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
-                        } else {
-                            timerStartMs = nowMs;
-                            enterState(STATE_TIMING, currentWeight, nowMs);
+                        // K1: false = tekan-lepas terdeteksi, isi ulang pending
+                        // dibatalkan dan minum tidak dicatat.
+                        if (recordDrink(baselineWeight - currentWeight, currentWeight, nowMs)) {
+                            baselineWeight = currentWeight;
+                            if (currentWeight <= emptyLimit) {
+                                missingCupAlert = false;
+                                enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
+                            } else {
+                                timerStartMs = nowMs;
+                                enterState(STATE_TIMING, currentWeight, nowMs);
+                            }
                         }
                     }
                     break;
@@ -172,35 +201,44 @@ public:
                 break;
 
             case STATE_ALERT_REFILL:
-                if (currentWeight < CUP_OFF_THRESHOLD) {
-                    if (!missingCupAlert) {
-                        // gelas kosong diangkat untuk diisi: alarm ikut ke LIFTED,
-                        // dan jika melebihi batas waktu menjadi MISSING_CUP.
-                        liftStartMs = nowMs;
-                        enterState(STATE_LIFTED, currentWeight, nowMs);
+                if (missingCupAlert) {
+                    if (currentWeight >= CUP_ON_THRESHOLD && isStable(currentWeight, nowMs)) {
+                        evaluateReturnedCup(currentWeight, emptyLimit, nowMs);
                     }
-                    // Kasus MISSING_CUP: gelas memang tidak ada; alarm tetap sampai gelas kembali.
                     break;
                 }
-                if (currentWeight > emptyLimit) {
-                    // Fix M4: jalur pemulihan untuk MISSING_CUP. Gelas kembali berisi air
-                    // menyelesaikan baik EMPTY_CUP maupun MISSING_CUP lewat satu pintu ini.
+                if (currentWeight < CUP_OFF_THRESHOLD) {
+                    liftStartMs = nowMs;
+                    enterState(STATE_LIFTED, currentWeight, nowMs);
+                    break;
+                }
+                if (currentWeight <= emptyLimit) {
+                    // K3: gelas kosong teramati di state ini. Kalibrasi dapat
+                    // memaksa state ini dengan gelas berisi (calibrationAlign);
+                    // bila gelas lalu diangkat, flag itu basi dan menekan
+                    // refillCount yang sah. Berat kosong = aman menghitung isi
+                    // ulang lagi.
+                    calibrationAlign = false;
+                    break;
+                }
+                if (calibrationAlign) {
+                    // K3: setEmptyCupWeight memaksa ALERT_REFILL tanpa tahu isi
+                    // gelas. Bila berat aktual jauh di atas batas kosong, air itu
+                    // sudah ada sebelum kalibrasi: selaraskan baseline ke berat
+                    // aktual, jangan hitung isi ulang.
                     if (isStable(currentWeight, nowMs)) {
-                        float decreased = baselineWeight - currentWeight;
-                        if (decreased >= MIN_DRINK_DELTA) {
-                            recordDrink(decreased);
-                        } else {
-                            refillCount++;
+                        calibrationAlign = false;
+                        if (currentWeight > emptyLimit) {
+                            baselineWeight = currentWeight;
+                            timerStartMs = nowMs;
+                            enterState(STATE_TIMING, currentWeight, nowMs);
                         }
-                        baselineWeight = currentWeight;
-                        timerStartMs = nowMs;
-                        missingCupAlert = false;
-                        enterState(STATE_TIMING, currentWeight, nowMs);
                     }
-                } else {
-                    // Gelas kosong ditaruh saat alarm MISSING: alarm tetap aktif,
-                    // hanya berganti alasan menjadi gelas kosong.
-                    missingCupAlert = false;
+                    break;
+                }
+                if (currentWeight > emptyLimit && isStable(currentWeight, nowMs)) {
+                    registerRefill(baselineWeight, currentWeight, nowMs);
+                    enterState(STATE_TIMING, currentWeight, nowMs);
                 }
                 break;
         }
@@ -212,6 +250,7 @@ public:
     uint16_t getDrinkCount() const { return drinkCount; }
     uint16_t getCheatCount() const { return cheatCount; }
     uint16_t getRefillCount() const { return refillCount; }
+    uint32_t getTargetIntervalMs() const { return monitorIntervalMs; }
     bool isMissingCup() const { return missingCupAlert; }
 
     float getWaterVolumeMl(float currentWeight) const {
@@ -264,35 +303,89 @@ private:
         stableStartMs = nowMs;
     }
 
-    void recordDrink(float grams) {
+    // K1: isi ulang langsung di tatakan hanya sah jika berat baru bertahan
+    // melewati REFILL_CONFIRM_MS. Load cell tidak bisa membedakan tuangan dari
+    // jari yang menekan, tapi tuangan tidak pernah kembali ke baseline lama;
+    // tekan-lepas ya. Ini heuristik: menekan lebih lama dari REFILL_CONFIRM_MS
+    // tetap lolos. Batas absolut butuh mengunci isi ulang ke state LIFTED
+    // (menghilangkan PRD skenario 8).
+    bool refillReversed(float currentWeight, uint32_t nowMs) {
+        if (!refillPending || nowMs - lastRefillMs > REFILL_CONFIRM_MS) return false;
+        float diff = currentWeight - preRefillBaseline;
+        return diff <= STABILITY_BAND_G && diff >= -STABILITY_BAND_G;
+    }
+
+    void registerRefill(float oldBaseline, float newWeight, uint32_t nowMs) {
+        // K1: simpan state & timer pra-isi-ulang supaya pembatalan (tekan-lepas)
+        // bisa memulihkannya — lihat cancelPendingRefill.
+        preRefillState = currentState;
+        preRefillTimerStartMs = timerStartMs;
+        baselineWeight = newWeight;
+        timerStartMs = nowMs;
+        refillCount++;
+        refillPending = true;
+        preRefillBaseline = oldBaseline;
+        lastRefillMs = nowMs;
+    }
+
+    void cancelPendingRefill(uint32_t nowMs) {
+        refillCount--;
+        refillPending = false;
+        baselineWeight = preRefillBaseline;
+        // K1: pulihkan state & timer pra-tekanan. Tanpa ini, tekan-lepas
+        // membunuh alarm minum sampai interval penuh berikutnya dan menekan
+        // berulang menunda pengingat tanpa batas. LIFTED/ALERT_REFILL sengaja
+        // tidak dipulihkan: gelas sudah kembali di tatakan, memulihkan LIFTED
+        // mengevaluasi ulang kembalinya gelas (cheat palsu) dan memulihkan
+        // ALERT_REFILL bisa menyangkutkan gelas penuh di alarm kosong.
+        if (preRefillState == STATE_TIMING ||
+            preRefillState == STATE_ALERT_DRINK ||
+            preRefillState == STATE_ALERT_CHEAT) {
+            currentState = preRefillState;
+            timerStartMs = preRefillTimerStartMs;
+        } else {
+            timerStartMs = nowMs;
+        }
+    }
+
+    // Mengembalikan false bila minum dibatalkan karena pola tekan-lepas.
+    bool recordDrink(float grams, float currentWeight, uint32_t nowMs) {
+        if (refillReversed(currentWeight, nowMs)) {
+            cancelPendingRefill(nowMs);
+            return false;
+        }
+        refillPending = false;
         totalDrankGrams += grams;
         drinkCount++;
+        return true;
     }
 
     void evaluateReturnedCup(float currentWeight, float emptyLimit, uint32_t nowMs) {
         float decreased = baselineWeight - currentWeight;
         float increased = currentWeight - baselineWeight;
+        missingCupAlert = false;
 
         if (currentWeight <= emptyLimit) {
             if (decreased >= MIN_DRINK_DELTA) {
-                recordDrink(decreased);
+                // K1: false = tekan-lepas, isi ulang pending sudah dibatalkan
+                recordDrink(decreased, currentWeight, nowMs);
             }
             baselineWeight = currentWeight;
-            missingCupAlert = false;
             enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
             return;
         }
 
         if (increased >= REFILL_DELTA) {
-            baselineWeight = currentWeight;
-            timerStartMs = nowMs;
-            refillCount++;
+            registerRefill(baselineWeight, currentWeight, nowMs);
             enterState(STATE_TIMING, currentWeight, nowMs);
             return;
         }
 
         if (decreased >= MIN_DRINK_DELTA) {
-            recordDrink(decreased);
+            // K1: bila false, ini tekan-lepas: isi ulang pending sudah
+            // dibatalkan di dalam recordDrink, baseline pulih ke berat
+            // pra-tekanan, minum tidak dicatat.
+            recordDrink(decreased, currentWeight, nowMs);
             baselineWeight = currentWeight;
             timerStartMs = nowMs;
             enterState(STATE_TIMING, currentWeight, nowMs);
@@ -317,6 +410,12 @@ private:
     uint16_t cheatCount;
     uint16_t refillCount;
     bool missingCupAlert;
+    bool refillPending;
+    float preRefillBaseline;
+    uint32_t lastRefillMs;
+    bool calibrationAlign;
+    CoasterState preRefillState;
+    uint32_t preRefillTimerStartMs;
 };
 
 #endif

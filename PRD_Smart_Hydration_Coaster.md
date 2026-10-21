@@ -86,22 +86,23 @@ flowchart TD
     FILTER -->|"Feedback PV"| COMP
 ```
 
-### 4.3 Kendali Adaptif Berbasis Aturan (bukan Fuzzy)
+### 4.3 Kendali Adaptif Kontinu Berbasis Aturan & Interval Kustom
 
-Nama resmi: **kontroler adaptif rule-based**. `adaptive_controller.h` (nama baru, sebelumnya `fuzzy_controller.h`) berisi fungsi deterministik berbasis ambang, tanpa fuzzyfikasi/inferensi/defuzzifikasi. Dokumen tidak lagi mengklaim FLC Sugeno.
+`adaptive_controller.h` mengimplementasikan interpolasi linier sepotong-sepotong (*piecewise-linear interpolation*) tanpa lompatan diskrit terhadap interval dasar pilihan *user* ($T_{base}$, *default* 30 menit, dapat dikustomisasi 1 s.d. 180 menit melalui perintah `i<menit>` atau *dashboard*):
 
-$$T_{target} = \max(5 \text{ detik},\ T_{base} \times k_{temp} \times k_{hum})$$
+$$T_{target} = \max\left(5 \text{ detik},\ \text{round}(T_{base} \times k_{temp}(T) \times k_{hum}(RH))\right)$$
 
-| Kondisi | Faktor |
-| :--- | :--- |
-| T < 24 °C | k_temp = 1,20 |
-| 24–28 °C | k_temp = 1,00 |
-| 28–32 °C | k_temp = 0,75 |
-| > 32 °C | k_temp = 0,50 |
-| RH < 40 % | k_hum = 0,85 |
-| RH ≥ 40 % | k_hum = 1,00 |
+| Titik Jangkar | Rentang / Nilai | Faktor |
+| :--- | :--- | :--- |
+| Dingin | $T \le 18\,^\circ\text{C}$ | $k_{temp} = 1{,}20$ |
+| Sejuk s.d. Normal | $18\,^\circ\text{C} < T \le 26\,^\circ\text{C}$ | Interpolasi linier $1{,}20 \to 1{,}00$ (pada $22\,^\circ\text{C}$ bernilai $1{,}10$) |
+| Normal s.d. Panas | $26\,^\circ\text{C} < T < 34\,^\circ\text{C}$ | Interpolasi linier $1{,}00 \to 0{,}50$ (pada $30\,^\circ\text{C}$ bernilai $0{,}75$) |
+| Panas | $T \ge 34\,^\circ\text{C}$ | $k_{temp} = 0{,}50$ |
+| Kering | $RH \le 30\%$ | $k_{hum} = 0{,}85$ |
+| Transisi RH | $30\% < RH < 50\%$ | Interpolasi linier $0{,}85 \to 1{,}00$ (pada $40\%$ bernilai $0{,}925$) |
+| Lembab Normal | $RH \ge 50\%$ | $k_{hum} = 1{,}00$ |
 
-Contoh T_base 30 menit: 33 °C/45 % → 15,00 menit; 22 °C/75 % → 36,00 menit. Rumus ini identik di firmware, `test_simulation.py`, dan web (satu tabel konstanta, lihat §6.4).
+Contoh pada $T_{base} = 30\text{ menit}$: $34\,^\circ\text{C}/55\% \to 15{,}00\text{ menit}$; $30\,^\circ\text{C}/55\% \to 22{,}50\text{ menit}$; $22\,^\circ\text{C}/75\% \to 33{,}00\text{ menit}$; $18\,^\circ\text{C}/75\% \to 36{,}00\text{ menit}$. Rumus ini identik 1:1 di *firmware*, `test_simulation.py`, dan `web/fsm.js`.
 
 ### 4.4 FSM 7-State (stabilitas berbasis waktu)
 
@@ -158,17 +159,17 @@ Notifikasi web dikirim satu kali per perubahan jenis alert (bukan berulang); ban
 ### 5.1 Protokol di sisi ESP32 (jawaban definitif)
 - **Transport:** Wi-Fi mode STA, 2,4 GHz (ESP32 tidak mendukung 5 GHz).
 - **Protokol:** HTTPS REST ke Firebase Realtime Database, port 443, body JSON.
-- **Implementasi firmware:** library **Firebase ESP Client (Mobizt)**, karena menangani token autentikasi dan reconnect secara otomatis. Alternatif tanpa library: `HTTPClient` + `WiFiClientSecure`, tetapi harus menulis alur token sendiri.
+- **Implementasi firmware:** `HTTPClient` + `WiFiClientSecure` (`setInsecure()`) langsung di `cloud_sync.h`, tanpa library eksternal; token tidak diperlukan karena rules RTDB terbuka terkontrol.
 - **Endpoint:**
 
 | Arah | Operasi | Path | Kapan |
 | :--- | :--- | :--- | :--- |
-| ESP32 → cloud | PATCH | `/smart_coaster/telemetry.json` | saat transisi state + heartbeat tiap 10 s |
-| ESP32 → cloud | PATCH | `/smart_coaster/daily/{YYYY-MM-DD}/...` | tiap event minum/refill/cheat |
-| ESP32 ← cloud | GET | `/smart_coaster/config.json` | saat boot + tiap 30 detik |
-| Browser ↔ cloud | SDK `onValue` (WSS) | `/smart_coaster` | realtime |
+| ESP32 → cloud | PATCH | `/smart_coaster/telemetry.json` | saat transisi state + heartbeat tiap 5 s |
+| ESP32 ← cloud | GET | `/smart_coaster/config.json` | saat boot + tiap 15 detik |
+| Browser ↔ cloud | REST polling 2,5 s | `/smart_coaster` | realtime |
 
-- **Kadens dikendalikan:** push tidak dilakukan per iterasi loop; cukup on-change + heartbeat 10 s agar aman terhadap kuota Spark.
+- **Kadens dikendalikan:** push tidak dilakukan per iterasi loop; cukup on-change + heartbeat 5 s agar aman terhadap kuota Spark.
+- **Riwayat harian** tidak ditulis ke cloud; dihitung di web (`localStorage`) per tanggal perangkat.
 - **Auth:** Fase 2 tanpa login (satu perangkat, rules terbuka terkontrol). Anonymous Auth opsional untuk merapikan rules. Email/password hanya jika kelak multi-user.
 
 ### 5.2 Skema Database
@@ -191,14 +192,16 @@ Laporan harian berkunci tanggal sehingga hari baru otomatis membuka node baru; t
 
 ---
 
-## 6. Spesifikasi Web Dashboard (`web/index.html`)
+## 6. Spesifikasi Aplikasi Web & PWA (`web/index.html`)
 
-1. **Kartu telemetri:** berat total, volume air, suhu/RH, countdown berdetak (MM:SS berjalan tiap detik via `setInterval`, bukan angka statis), interval target.
-2. **Banner alert + Web Notification:** notifikasi browser satu kali per peringatan; warna banner per jenis alert.
-3. **Laporan harian:** tabel riwayat event, total ml, persen target harian, Minum Nx / Refill Nx / Cheat Nx, tombol reset statistik. **drinkCount bertambah pada setiap minum sah**, bukan hanya saat gelas kosong.
-4. **Panel konfigurasi:** mode AUTO_DHT/MANUAL, interval basis/manual, berat gelas kosong. Interval adaptif **dihitung ulang otomatis** setiap kali suhu/RH berubah (bukan hanya saat tombol simpan).
-5. **Simulator FSM:** halaman memuat port 1:1 dari `fsm.h` (state, ambang, stabilitas berbasis waktu, semua cabang). Tombol skenario memicu **urutan sampel berat** melalui mesin FSM itu, bukan sekadar mengganti label state. Konstanta diambil dari satu objek `CONFIG` yang isinya sama dengan `config.h`; perbedaan apa pun antara keduanya adalah bug.
-6. **Mode koneksi:** Fase 1 = simulator mandiri. Fase 2 = nilai state diisi dari Firebase SDK; logika FSM dan tampilan tidak berubah.
+1. **Progressive Web App (PWA):** Dilengkapi `web/manifest.json`, `web/sw.js` (*offline cache*), dan `web/icon.svg` sehingga dapat di-*install* sebagai aplikasi mandiri di ponsel Android maupun *desktop*.
+2. **Tiga Mode Koneksi (*Real-Time*):**
+   - **Simulator Mandiri:** Menjalankan mesin `CoasterFSM` 1:1 di *browser* dengan 8 skenario otomatis dan percepatan waktu (`x1` s.d. `x600`).
+   - **USB Live (Web Serial API):** Terhubung langsung ke ESP32 melalui kabel USB (`115200 baud`), membaca telemetri *real-time* sekaligus mengirim perintah dua arah (`t`, `c`, `e<g>`, `i<mnt>`, `d`, `m`, `r`).
+   - **Cloud Firebase RTDB:** Sinkronisasi *real-time* melalui HTTPS REST ke `/smart_coaster` (baik dari *task* Core 0 `cloud_sync.h` pada ESP32 maupun *gateway* otomatis dari *browser* saat USB Live terhubung).
+3. **Kartu Telemetri & Progres Target Harian:** Menampilkan berat aktual, volume air, suhu/RH, *countdown* aktif, serta *progress bar* persentase capaian target minum harian (*default* `2000 ml`, dapat dikustomisasi).
+4. **Banner Alert, Web Notification & Haptik:** Mengirim notifikasi *browser* dan getaran ponsel (`navigator.vibrate`) satu kali setiap pergantian status *alert*.
+5. **Panel Konfigurasi Pewaktuan:** Mendukung toggle mode **Adaptif Kontinu DHT11 (`AUTO_DHT`)** vs **Manual Tetap (`MANUAL`)**, kustomisasi interval dasar `1` s.d. `180` menit, dan kalibrasi berat gelas kosong (`35` s.d. `300 g`).
 
 ---
 
@@ -206,30 +209,37 @@ Laporan harian berkunci tanggal sehingga hari baru otomatis membuka node baru; t
 
 ```
 SmartHydrationCoaster/          <- sketch utama; buka folder ini di Arduino IDE
-    SmartHydrationCoaster.ino   <- firmware utama (bekas main.ino)
-    config.h                    <- pin, ambang, konstanta waktu, polaritas aktuator
-    filter.h                    <- moving average
-    adaptive_controller.h       <- kendali adaptif berbasis aturan (nama baru)
+    SmartHydrationCoaster.ino   <- firmware utama
+    config.h                    <- pin, ambang, titik jangkar adaptif kontinu, faktor kalibrasi
+    filter.h                    <- moving average (jendela 10 sampel)
+    adaptive_controller.h       <- interpolasi kontinu suhu/kelembaban DHT11
     fsm.h                       <- 7-state FSM
+    cloud_sync.h                <- sinkronisasi non-blocking Firebase RTDB pada Core 0 ESP32
 tools/
     kalibrasi/kalibrasi.ino
     test_hardware/test_hardware.ino
     test_loadcell/test_loadcell.ino
-test_simulation.py              <- port 1:1 dari fsm.h; sumber kebenaran uji otomatis
-web/index.html
+    uji_fsm/uji_fsm.cpp         <- harness kompilasi C++ di PC (52 pemeriksaan)
+test_simulation.py              <- port 1:1 dari fsm.h & adaptive_controller.h (21 skenario)
+web/
+    fsm.js                      <- kelas CoasterFSM mirror 1:1 fsm.h (diuji fsm.test.js)
+    fsm.test.js                 <- regresi Node untuk fsm.js
+    index.html                  <- aplikasi PWA (Simulator + USB Web Serial + Cloud Firebase)
+    manifest.json               <- manifest instalasi PWA Android/Desktop
+    sw.js                       <- service worker untuk mode offline
+    icon.svg                    <- ikon aplikasi
 docs/pemodelan_sistem_kendali.md
 PRD_Smart_Hydration_Coaster.md  <- dokumen ini
-AUDIT_Smart_Hydration_Coaster.md
 ```
 
 Aturan sketch Arduino: satu sketch = satu folder, nama file `.ino` wajib sama dengan nama folder. Skrip uji (`kalibrasi`, `test_hardware`, `test_loadcell`) masing-masing berdiri sebagai sketch sendiri di `tools/`.
 
 ---
 
-## 8. Casing PVC Foam Board 5 mm
+## 8. Casing Sasis Kapsul 28 mm
 
-1. **Sandwich tiga lapis:** alas 12x12 cm (load cell dibaut M4, diganjal 2 washer ≈ 2 mm), batang load cell menggantung dengan celah ±2 mm, piringan atas 11x11 cm dengan modul motor getar ditempel double tape foam di permukaan bawahnya.
-2. **DHT11** menghadap keluar pada dinding samping dengan lubang sirkulasi, jauh dari panas regulator ESP32.
+1. **Desain final:** sasis kapsul, bukan PVC foam board — kompartemen belakang 28,0 mm, bibir depan 23,2 mm. Panduan perakitan 3D interaktif di `web/casing_3d.html`; rincian dimensi komponen, grid perfboard, dan bukaan USB di `CLAUDE.md` §5.
+2. **Piringan akrilik** bertumpu pada ujung bebas load cell (puncak 24,2 mm, 1,0 mm di atas bibir depan) sehingga gelas menumpu hanya pada piringan. Modul buzzer, DHT11, dan motor dipasang tanpa solder ke papan: ditempel datar dan disambung jumper female-female ke header male.
 
 ---
 
@@ -237,33 +247,37 @@ Aturan sketch Arduino: satu sketch = satu folder, nama file `.ino` wajib sama de
 
 | # | Skenario | Uji otomatis | Uji manual |
 | :--- | :--- | :--- | :--- |
-| 1 | Timer adaptif DHT11 (33 °C/45 % → 15,00 mnt; 22 °C/75 % → 36,00 mnt) | `test_simulation.py` | bandingkan Serial Monitor vs dashboard |
+| 1 | Timer adaptif kontinu DHT11 & kustomisasi interval (34 °C → 15,0 mnt; 30 °C → 22,5 mnt; 22 °C → 33,0 mnt; 18 °C → 36,0 mnt) | `test_simulation.py` & `uji_fsm.cpp` | bandingkan Serial Monitor vs dashboard |
 | 2 | Taruh gelas → TIMING setelah stabil 1,5 s | idem | taruh gelas 380 g |
-| 3 | Timer habis → ALERT_DRINK (pola 500/500) | idem | dengar/rapu pola bunyi |
+| 3 | Timer habis → ALERT_DRINK (pola 500/500) | idem | dengar/rasakan pola bunyi & getar |
 | 4 | Anti-cheat ΔW < 20 g → ALERT_CHEAT (pola 150/150) | idem | sentuh gelas tanpa minum |
 | 5 | Minum sah → timer reset, total naik, drinkCount +1 | idem | minum ≥ 20 g |
 | 6 | Gelas kosong → ALERT_EMPTY_CUP | idem | taruh gelas kosong |
-| 7 | Gelas diangkat > batas → ALERT_MISSING_CUP; pulih saat gelas kembali | idem | angkat > 3 mnt (10 s demo) |
+| 7 | Gelas diangkat > batas → ALERT_MISSING_CUP; evaluasi anti-cheat/minum saat kembali | idem | angkat > 3 mnt (10 s demo) |
 | 8 | Sedotan (−20 g) & tuang langsung (+30 g) di atas tatakan | idem | uji manual |
 | 9 | Hysteresis CUP_ON/CUP_OFF 35/25 g | idem | angkat-taruh berulang di dekat ambang |
 | 10 | Regresi angkat bertahap (−46 g/sampel): 0 minum palsu, baseline utuh, lanjut ke ALERT_CHEAT | idem | angkat gelas penuh lalu taruh kembali tanpa minum |
+| 11 | Tekan-lepas gelas saat TIMING (+35 g lalu kembali dalam 5 s): refillCount tetap 0, 0 minum palsu, baseline utuh | idem | tekan pelan gelas penuh di tatakan lalu lepaskan |
+| 12 | Kalibrasi berat gelas kosong saat gelas berisi di tatakan: baseline menyesuaikan berat aktual, 0 isi ulang palsu | idem | dengan gelas 380 g di tatakan, tekan "Simpan Gelas" |
 
-Skenario 10 wajib ada karena skenario 2–9 semuanya mengangkat gelas dalam satu langkah, sehingga cacat "keputusan ΔW tanpa gerbang stabilitas" lolos dari seluruh rangkaian uji tersebut. Tanpa gerbang itu, skenario 10 gagal dengan 6 minum palsu dan total 276 g sementara skenario 1–9 tetap hijau.
+Skenario 10 wajib ada karena skenario 2 sampai 9 semuanya mengangkat gelas dalam satu langkah, sehingga cacat "keputusan ΔW tanpa gerbang stabilitas" lolos dari seluruh rangkaian uji tersebut. Tanpa gerbang itu, skenario 10 gagal dengan 6 minum palsu dan total 276 g sementara skenario 1 sampai 9 tetap hijau.
 
-Tiga port harus lulus skenario yang sama: `test_simulation.py` (15 skenario), `tools/uji_fsm/uji_fsm.cpp` (mengompilasi `fsm.h` asli di PC, 21 pemeriksaan), dan `web/index.html` (8 tombol skenario). Prosedur kalibrasi: `tools/kalibrasi` dengan beban dikenal, catat faktor, samakan di semua berkas. **Klaim reduksi derau hanya boleh ditulis setelah `run_noise_test()` menghasilkan data nyata.** Faktor kalibrasi di `config.h` bernilai 290.0f hasil pengukuran `tools/test_loadcell`; nilainya tetap harus diulang ulang bila load cell dipindah atau rangka diganti.
+Tiga port harus lulus skenario yang sama: `test_simulation.py` (21 skenario), `tools/uji_fsm/uji_fsm.cpp` (mengompilasi `fsm.h` dan `adaptive_controller.h` asli di PC, 52 pemeriksaan), dan `web/fsm.js` (diuji `node web/fsm.test.js`; 30 asersi untuk 4 skenario regresi K1/K3, plus 8 tombol skenario di `web/index.html`). Prosedur kalibrasi: `tools/test_loadcell` dengan beban acuan 500 g menghasilkan faktor `450.7f` yang dikunci di `config.h`, serta uji derau statis 20 sampel menghasilkan rata-rata `500.10 g` (rentang `499.98 g` sampai `500.19 g`, *peak-to-peak jitter* `0.21 g`).
 
 ---
 
-## 10. Roadmap & Batasan yang Diketahui
+## 10. Status Implementasi & Ekosistem
 
-- **Phase 1 (sekarang):** firmware standalone + simulator web; perbaikan hasil audit sudah diterapkan (stabilitas berbasis waktu, reset saat transisi, polaritas aktuator, motor di GPIO17, validasi berat, struktur sketch).
-- **Phase 2:** Wi-Fi + Firebase REST + Hosting + notifikasi HTTPS, sesuai §5.
-- **Batasan yang diakui terbuka:** berat gelas kosong tidak persist antar reboot (RAM saja); `demoMode` default AKTIF 15 detik untuk kelas, dimatikan dengan perintah serial `'d'` saat pengujian nyata; derau sensor menunggu pengukuran kalibrasi.
+- **Perangkat Keras & Kalibrasi (Selesai):** ESP32 DevKit V1 + *load cell* 5 kg (`450.7f`, *jitter* statis `0.21 g`) + DHT11 + *active buzzer* PNP S8550 (`GPIO18`, `VCC` ke `3V3`) + motor getar NPN S8050 (`GPIO17`, `VCC` ke `5V`).
+- **Kendali & Pewaktuan (Selesai):** Mesin 7-*state* FSM dengan gerbang stabilitas waktu `1500 ms` + kontroler adaptif kontinu DHT11 (`adaptive_controller.h`) + kustomisasi interval *user* (`1` s.d. `180` menit).
+- **Aplikasi & IoT (Selesai):** PWA `web/index.html` yang dapat di-*install* di Android/Desktop dengan tiga mode operasi (*Simulator*, *USB Web Serial Live*, dan *Cloud Firebase RTDB*) serta modul sinkronisasi *non-blocking* Core 0 (`cloud_sync.h`).
 
 ---
 
 ## 11. Perubahan Keputusan penting dibanding draft (ringkas)
 
-Motor pindah GPIO2 → GPIO17. Interval dasar dikunci 30 menit. Stabilitas berbasis waktu 1,5 s ±3 g (bukan hitung sampel). Polaritas aktuator terdokumentasi (buzzer active-LOW, motor active-HIGH) dengan helper `writeActuator`. Nama `fuzzy_controller.h` → `adaptive_controller.h` dan klaim Fuzzy Sugeno dihapus. Struktur sketch dirapikan agar dapat dikompilasi. Protokol komunikasi ditetapkan: HTTPS REST Firebase RTDB via library Mobizt.
+Motor pindah GPIO2 → GPIO17. Interval dasar dikunci 30 menit. Stabilitas berbasis waktu 1,5 s ±3 g (bukan hitung sampel). Polaritas aktuator terdokumentasi (buzzer active-LOW, motor active-HIGH) dengan helper `writeActuator`. Nama `fuzzy_controller.h` → `adaptive_controller.h` dan klaim Fuzzy Sugeno dihapus. Struktur sketch dirapikan agar dapat dikompilasi. Protokol komunikasi ditetapkan: HTTPS REST Firebase RTDB via `HTTPClient` + `WiFiClientSecure` (`setInsecure`), tanpa library eksternal.
 
 Ditambahkan setelah uji perangkat nyata 2026-10-08: setiap keputusan ΔW (minum, sedotan, isi ulang di tatakan, pemulihan dari ALERT_REFILL) menunggu berat baru stabil lebih dulu. Sebelumnya keputusan diambil pada sampel pertama yang melewati ambang, sehingga mengangkat gelas penuh menghasilkan deretan minum palsu, merusak baseline, dan membuat ALERT_CHEAT tidak pernah bisa tercapai di perangkat. Perubahan ini diterapkan serentak di `fsm.h`, `test_simulation.py`, dan `web/index.html` beserta skenario regresi barunya.
+
+2026-10-21 (eksekusi `AUDIT_SISTEM_DAN_WEB.md`): K1 anti tekan-lepas via `REFILL_CONFIRM_MS` 5 s (isi ulang pending, dibatalkan bila berat kembali ke baseline); K3 flag `calibrationAlign` agar kalibrasi dengan gelas berisi menyelaraskan baseline tanpa isi ulang palsu; kelas JS dipindah dari `web/index.html` ke `web/fsm.js` + `web/fsm.test.js`; urutan Reset Harian di web disimpan-sebelum-reset; kelas log alarm `ev-*` dan urutan tutup port serial (cancel reader → await loop → releaseLock → close) diperbaiki; dokumentasi (CLAUDE.md, HANDOFF_AGENT.md, PRD) diselaraskan dengan kode: DHT11 GPIO19, HTTPClient/WiFiClientSecure, heartbeat 5 s, poll 15 s, tanpa NTP dan tanpa endpoint `/daily/`, casing sasis kapsul 28 mm. K1 juga memulihkan state & timer pra-isi-ulang saat pembatalan (tekan-lepas tak lagi membunuh alarm atau menunda timer); K3 re-arm saat gelas kosong teramati di `ALERT_REFILL` (flag tak lagi basi setelah lift); regresi baru: skenario 20 (timer restore) & 21 (flag basi) di ketiga port (`test_simulation.py`, `tools/uji_fsm/uji_fsm.cpp`, `web/fsm.test.js`).

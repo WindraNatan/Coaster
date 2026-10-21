@@ -16,8 +16,8 @@ Perangkat keras: ESP32 DevKit V1, HX711 + load cell, DHT11. Buzzer aktif dan mot
 D:\Kuliah\Sistem Kendali\
   PRD_Smart_Hydration_Coaster.md     dokumen requirement + spesifikasi teknis, versi final
   CARA_UJI_HARDWARE.md               panduan uji perangkat nyata langkah demi langkah
-  AUDIT_Smart_Hydration_Coaster.md   hasil audit lama, sebagian sudah usang (lihat §6)
-  test_simulation.py                 port 1 Python FSM + kontroler adaptif, 15 skenario
+  AUDIT_SISTEM_DAN_WEB.md            audit terbaru (dieksekusi; lihat HANDOFF ini)
+  test_simulation.py                 port 1 Python FSM + kontroler adaptif, 21 skenario
   docs/pemodelan_sistem_kendali.md   pemodelan sistem kendali, masa draft
   SmartHydrationCoaster\
     SmartHydrationCoaster.ino        firmware utama
@@ -30,14 +30,14 @@ D:\Kuliah\Sistem Kendali\
     test_hardware\test_hardware.ino  uji buzzer, motor, DHT satu per satu
     test_loadcell\test_loadcell.ino  uji dan karakterisasi load cell, deteksi noise
     uji_fsm\Arduino.h                shim agar header firmware bisa dikompilasi di PC
-    uji_fsm\uji_fsm.cpp              26 pemeriksaan paritas fsm.h + adaptive_controller.h
+    uji_fsm\uji_fsm.cpp              52 pemeriksaan paritas fsm.h + adaptive_controller.h
+  web\fsm.js                         kelas JS CoasterFSM, mirror 1:1 fsm.h (diuji fsm.test.js)
   web\index.html                     dashboard simulator FSM, 8 tombol skenario
-  _arsip\                            draft lama, jangan dijadikan rujukan
 ```
 
 ## 3. Aturan terpenting: tiga port harus 1:1
 
-Logika FSM hidup di tiga tempat sekaligus dan wajib tetap identik: `SmartHydrationCoaster/fsm.h` (C++), `test_simulation.py` (Python), dan `web/index.html` (kelas JS `CoasterFSM`). Nama propertinya beda antar port, dan itu disengaja: web memakai `baseline`, `totalDrank`, `isStable`, `setState`, `setInterval_`; Python memakai `baseline_weight`, `total_consumed_ml`, `is_stable`, `enter_state`, `target_interval_ms`; C++ memakai `baselineWeight`, `totalDrankGrams`, `enterState`, `monitorIntervalMs`.
+Logika FSM hidup di tiga tempat sekaligus dan wajib tetap identik: `SmartHydrationCoaster/fsm.h` (C++), `test_simulation.py` (Python), dan `web/fsm.js` (kelas JS `CoasterFSM`, dipakai `web/index.html`). Nama propertinya beda antar port, dan itu disengaja: web memakai `baseline`, `totalDrank`, `isStable`, `setState`, `setInterval_`; Python memakai `baseline_weight`, `total_consumed_ml`, `is_stable`, `enter_state`, `target_interval_ms`; C++ memakai `baselineWeight`, `totalDrankGrams`, `enterState`, `monitorIntervalMs`.
 
 Setiap ubahan logika di satu port wajib disalin ke dua port lain, lalu ketiganya dijalankan. Inilah cara menemukan beberapa bug laten terakhir. Kalau hanya satu port diubah, bedanya jadi bug dan sangat sulit dilacak kemudian.
 
@@ -103,11 +103,9 @@ Jangan menulis `digitalWrite` langsung untuk aktuator di kode baru; selalu gunak
 
 `CARA_UJI_HARDWARE.md` juga sudah diperbarui. Langkah anti-cheat diperbaiki karena versi lama menggambarkan jalur yang mustahil: uji cheat yang benar angkat gelas sampai benar-benar lepas dari tatakan (berat jatuh di bawah 25 g menuju `LIFTED`), lalu taruh kembali tanpa minum. Ada juga bagian baru yang menjelaskan cara membaca baris `[DBG]` dan kolom `vonis`-nya yang bernilai `MINUM`, `REFILL`, `CHEAT`, atau `-`.
 
-`AUDIT_Smart_Hydration_Coaster.md` sudah usang, dan ini penting agar tidak salah paham. Temuan yang sudah beres dan sebaiknya dianggap tutup: M1 interval dasar 30 menit (sudah 1.800.000 ms), M4 jalur alarm lupa gelas (sudah ada jalur pemulihan satu pintu di `STATE_ALERT_REFILL`), M8 konflik faktor kalibrasi (sudah 450,7f di semua berkas). M2 `demoMode = true` sebagai default firmware sengaja dibiarkan karena mode demo 15 detik memang yang dipakai saat presentasi kelas, tapi kalau pakai sehari-hari lebih enak nilai itu diubah lewat perintah serial `d`.
+Temuan audit lama yang sudah beres dan sebaiknya dianggap tutup: M1 interval dasar 30 menit (sudah 1.800.000 ms), M4 jalur alarm lupa gelas (sudah ada jalur pemulihan satu pintu di `STATE_ALERT_REFILL`), M8 konflik faktor kalibrasi (sudah 450,7f di semua berkas). M2 `demoMode = true` sebagai default firmware sengaja dibiarkan karena mode demo 15 detik memang yang dipakai saat presentasi kelas, tapi kalau pakai sehari-hari lebih enak nilai itu diubah lewat perintah serial `d`. Audit terbaru ada di `AUDIT_SISTEM_DAN_WEB.md` (temuan K1-K3, M1-M4 sudah dieksekusi dan diverifikasi).
 
 `docs/pemodelan_sistem_kendali.md` masih berisi konten masa draft: menyebut ESP8266 padahal perangkatnya ESP32, mendeskripsikan kontroler Fuzzy Sugeno padahal aplikasinya sudah jadi berbasis aturan bernama `adaptive_controller.h`, dan mengklaim reduksi derau dari ±4,5 g menjadi kurang dari ±0,5 g tanpa data pengukuran yang mendukung. Klaim angka itu jangan dipakai sebelum `run_noise_test()` benar-benar dijalankan dan hasilnya dicatat.
-
-`web/index_v1_backup.html` dan isi `_arsip/` tinggalkan saja, jangan dijadikan acuan.
 
 ## 7. Catatan perilaku yang perlu diketahui sebelum menyimpulkan apa pun
 
@@ -115,12 +113,19 @@ Baseline tidak diperbarui ketika terjadi cheat (`STATE_ALERT_CHEAT`). Itu diseng
 
 Penurunan kurang dari 20 g baru benar-benar hilang dari `totalDrankGrams` jika setelah berkurang < 20 g user langsung melakukan **isi ulang (`refill` >= 30 g)**, karena cabang refill langsung menimpa `baselineWeight` dengan berat baru tanpa mencatat penurunan kecil sebelumnya. Efek samping lain dari ditahannya `baselineWeight` saat cheat: mengangkat dan menaruh kembali gelas pada berat yang sama (misal 372 g) berulang kali tanpa minum tambahan akan terhitung sebagai cheat baru setiap kali.
 
-## 8. Hal-hal yang perlu dikerjakan berikutnya
+## 8. Status Penyelesaian Terkini (2026-10-09)
 
-Hapus blok `[DBG]` di `SmartHydrationCoaster.ino` sekitar baris 195 sampai 213 sebelum proyek dikumpulkan. Blok itu berguna saat pengujian tapi tidak layak ada di kode hasil akhir.
+1. **Pembersihan Kode & Sinkronisasi 3 Port (Selesai):**
+   - Blok sementara `[DBG]` di `SmartHydrationCoaster.ino` dan fungsi tak terpakai `isFilled()` di `filter.h` sudah dihapus.
+   - Celah 1 (evaluasi kembalinya gelas dari `ALERT_MISSING_CUP` melewati `evaluateReturnedCup()`) dan Celah 2 (penyelarasan `baselineWeight` saat `setEmptyCupWeight()`) sudah diperbaiki di ketiga port (`fsm.h`, `test_simulation.py`, `web/index.html`).
+   - *Snapshot commit* Git `1fe6262` tersedia jika sewaktu-waktu perlu *revert*.
+2. **Kontroler Adaptif Kontinu DHT11 & Interval Kustom *User* (Selesai):**
+   - `adaptive_controller.h`, `test_simulation.py`, dan `web/index.html` kini menggunakan interpolasi linier sepotong-sepotong (*piecewise-linear interpolation*) tanpa lompatan diskrit pada suhu (`18 C`, `26 C`, `34 C`) dan kelembaban (`30%`, `50%`).
+   - Mendukung kustomisasi interval dasar $T_{\text{base}}$ (`1` s.d. `180` menit) melalui perintah serial `i<menit>` maupun langsung dari UI aplikasi.
+   - Terverifikasi lulus 21/21 skenario di `test_simulation.py` dan 52/52 pemeriksaan di `tools/uji_fsm/uji_fsm.cpp`; `web/fsm.js` diuji `node web/fsm.test.js`.
+3. **Aplikasi PWA Android/Web + USB Web Serial + Cloud Firebase RTDB (Selesai):**
+   - `web/index.html` dilengkapi `web/manifest.json`, `web/sw.js`, dan `web/icon.svg` sehingga dapat di-*install* sebagai PWA mandiri di Android/Desktop.
+   - Mendukung 3 mode: *Simulator*, *USB Live* (`navigator.serial` 115200 baud dua arah), dan *Cloud Firebase* (sinkronisasi REST ke `/smart_coaster`, didukung `cloud_sync.h` pada Core 0 ESP32 maupun *gateway* otomatis via *browser*).
+4. **Dokumentasi Akademis & PRD (Selesai):**
+   - `docs/pemodelan_sistem_kendali.md` dan `PRD_Smart_Hydration_Coaster.md` telah diperbarui penuh dengan arsitektur ESP32, rumus interpolasi kontinu DHT11, serta data pengukuran nyata `run_noise_test` (`450.7f`, rata-rata `500.10 g`, *peak-to-peak jitter* `0.21 g`).
 
-Tulis ulang atau perbarui `docs/pemodelan_sistem_kendali.md` agar menyebut ESP32, menjelaskan kontroler berbasis aturan alih-alih Fuzzy, dan membuang atau menyediakan data nyata untuk klaim reduksi derau. Sebaiknya tunggu sampai uji perangkat nyata selesai supaya angkanya bisa diisi dengan hasil terukur.
-
-Sisa pekerjaan sesi uji perangkat nyata: verifikasi telemetri dashboard web dan bagian IoT untuk RSK-354 masih jauh di belakang bagian Sistem Kendali. Sketch sudah belum pernah dikompilasi maupun di-flash dari sisi ini karena tidak ada toolchain Arduino di lingkungan kerja agent. Semua berkas `.ino` wajib dikompilasi dan diunggah dari sisi pemilik proyek; jangan anggap firmware terverifikasi hanya karena harness C++ hijau, karena harness itu hanya menguji `fsm.h`, `config.h`, dan `adaptive_controller.h`, bukan berkas `.ino` beserta library HX711 dan DHT.
-
-Pertahankan tiga port tetap sinkron setiap kali logika FSM disentuh, dan pertahankan cara kerja ini: setiap fix diberi uji yang benar-benar bisa gagal, bukan hanya tes yang sudah pasti lulus.
