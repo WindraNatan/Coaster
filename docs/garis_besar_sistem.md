@@ -26,7 +26,7 @@ flowchart LR
     MA --> GATE["Gerbang stabilitas<br/>1,5 s, band 3 g"]
     DHT["DHT11<br/>suhu dan RH"] --> SP["Penghitung interval target"]
     CFG["Setelan user<br/>interval dan berat gelas kosong"] --> SP
-    GATE --> FSM["FSM 7 state"]
+    GATE --> FSM["FSM 7 state<br/>9 string di kabel"]
     SP --> FSM
     FSM --> ACT["Buzzer GPIO18<br/>motor getar GPIO17<br/>LED GPIO2"]
     FSM --> SNAP["Snapshot telemetry"]
@@ -54,19 +54,21 @@ Satu jebakan listrik yang sempat kena: kalau VCC modul buzzer disambung ke 5V, t
 
 Semua aktuator lewat helper `writeActuator()`, tidak ada `digitalWrite()` langsung di logika utama. Polaritas aktif LOW dan aktif HIGH jadi terpusat di satu tempat.
 
-## 4. Logika inti, 7 state
+## 4. Logika inti, 7 state dan 9 string
 
-| State | Arti |
-| :--- | :--- |
-| `IDLE` | Tatakan kosong, gelas tidak terdeteksi |
-| `STABLE` | Gelas ada, berat sudah stabil |
-| `TIMING` | Hitung mundur interval minum berjalan |
-| `LIFTED` | Gelas diangkat, batas 3 menit (mode demo 10 detik) |
-| `ALERT_DRINK` | Alarm waktunya minum, aktuator toggle tiap 500 ms |
-| `ALERT_CHEAT` | Curang terdeteksi, toggle tiap 150 ms |
-| `ALERT_REFILL` | Isi ulang atau kalibrasi, toggle tiap 750 ms |
+| Enum internal | String yang dikirim | Arti |
+| :--- | :--- | :--- |
+| `STATE_IDLE` | `IDLE` | Tatakan kosong, gelas tidak terdeteksi |
+| `STATE_STABLE` | `STABLE` | Gelas ada, berat sudah stabil |
+| `STATE_TIMING` | `TIMING` | Hitung mundur interval minum berjalan |
+| `STATE_LIFTED` | `LIFTED` | Gelas diangkat, batas 3 menit (mode demo 10 detik) |
+| `STATE_ALERT_DRINK` | `ALERT_DRINK` | Alarm waktunya minum, aktuator toggle tiap 500 ms |
+| `STATE_ALERT_CHEAT` | `ALERT_CHEAT` | Curang terdeteksi, toggle tiap 150 ms |
+| `STATE_ALERT_REFILL` | `ALERT_EMPTY_CUP` atau `ALERT_MISSING_CUP` | Isi ulang atau kalibrasi, toggle tiap 750 ms |
 
-Ada satu flag tambahan, `missingCupAlert`. String `ALERT_EMPTY_CUP` dan `ALERT_MISSING_CUP` hanya turunan flag itu, bukan state tersendiri.
+Ada satu flag tambahan, `missingCupAlert`. Flag itulah yang memilih antara dua string terakhir, jadi enum punya 7 nilai tapi kabel melihat 9 string. Keduanya tetap satu state, bukan dua.
+
+Web menangani pemisahan ini secara eksplisit: `ALERT_MISSING_CUP` dipulihkan jadi `state = ALERT_REFILL` dengan `missing = true`, `ALERT_EMPTY_CUP` dengan `missing = false` (`web/index.html:723` dan `:849`). Tanpa pemetaan itu, state yang diterima dashboard tidak akan cocok dengan nama yang dipakai kelas `CoasterFSM`.
 
 Aturan yang membuat angkanya jujur:
 
@@ -76,7 +78,7 @@ Baseline tidak diperbarui selama `ALERT_CHEAT`. Kalau pemakai curang lalu benar-
 
 Baseline hanya ditimpa saat isi ulang sah, yaitu kenaikan 30 g ke atas. Isi ulang yang baru dituang dicatat sebagai pending dulu; kalau berat kembali ke baseline pra-isi-ulang dalam 5 detik, isi ulang dibatalkan. Load cell tidak bisa membedakan tuangan dari tekan-lepas gelas, tapi tuangan tidak akan pernah kembali ke berat lama, jadi pembedaannya dilakukan lewat perilaku waktu.
 
-Kalibrasi saat state aktif memaksa `ALERT_REFILL` dan menyelaraskan baseline ke berat aktual lebih dulu, supaya air yang sudah ada di gelas tidak terhitung sebagai isi ulang.
+Kalibrasi saat state aktif memaksa `STATE_ALERT_REFILL` dan menyelaraskan baseline ke berat aktual lebih dulu, supaya air yang sudah ada di gelas tidak terhitung sebagai isi ulang.
 
 Buzzer yang diheningkan tidak mematikan motor dan LED. Ketiganya memakai pola toggle yang sama, hanya buzzer yang dipaksa mati.
 
