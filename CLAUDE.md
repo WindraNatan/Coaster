@@ -67,6 +67,7 @@ g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fs
   * Endpoint: PATCH `/smart_coaster/telemetry.json` (on-change + heartbeat 5 s), GET `/smart_coaster/config.json` (poll 15 s).
   * Tanpa NTP: firmware tidak menyinkronkan waktu; riwayat harian dihitung di web (`localStorage`) per tanggal perangkat.
 * **Web App**: PWA (`web/manifest.json`, `web/sw.js`) mendukung mode Simulator, USB Live (`navigator.serial` 115200 baud), dan Firebase Cloud (poll REST 2,5 s).
+* **Aplikasi Android (Flutter)**: `app/` (Dart, package `smart_coaster`) — mode Cloud saja: URL RTDB dimasukkan runtime (SharedPreferences `shc_fb_url`, setara `localStorage` PWA), polling `GET <url>/smart_coaster.json` 2,5 s, kontrol `PATCH <url>/smart_coaster/config.json` (`timer_mode`, `manual_interval_min`, `muted`). Identitas visual mengikuti web PWA (palet dark-teal/cyan, Space Grotesk + JetBrains Mono tabular, badge state berwarna); `ALERT_EMPTY_CUP`/`ALERT_MISSING_CUP` tetap dipetakan ke `ALERT_REFILL`. Kalibrasi `c`/tare `t` tetap USB-only. Verifikasi: `flutter pub get && flutter analyze && flutter test` (18 uji kontrak & alur cloud). Toolchain di luar repo: `D:/flutter`, `D:/jdk/jdk-17.0.20.1+1`, `D:/android-sdk`.
 
 ---
 
@@ -76,13 +77,13 @@ Objek: `cad/coaster_casing.scad` & `web/casing_3d.html` (sasis 28 mm). Dimensi k
 berasal dari lembar spesifikasi penjual di `Foto spesifikasi sensor dan aktuator/`.
 
 * **Load cell**: 12.7 x 12.7 x 80 mm, cantilever, ujung belakang di spacer.
-* **ESP32**: PCB 25.4 mm, baris pin 22.86 mm, di x -7.62..17.78 dan y 77.76..126.02.
-* **Buzzer**: modul 32 x 13 x 10 mm memanjang di strip kiri papan, can di (x -16.51, y 69.73). VCC wajib `3V3`.
-* **DHT11**: modul 32 x 14 mm diputar (14 mm sejajar x) di wadah depan kanan, x 17..31, y -10..22, pin menghadap septum.
-* **HX711**: PCB 34.5 x 21 mm di wadah depan kiri, header 4-pin menghadap keluar di x -44.79..-42.25.
+* **ESP32**: PCB 25.4 mm, baris pin 22.86 mm, di x -17.78..7.62 dan y 77.76..126.02.
+* **Buzzer**: modul 32 x 13 x 10 mm memanjang di strip kanan papan, can di (x 16.51, y 69.73). VCC wajib `3V3`.
+* **DHT11**: modul 32 x 14 mm diputar (14 mm sejajar x) di wadah depan kiri, x -31..-17, y -10..22, pin menghadap septum.
+* **HX711**: PCB 34.5 x 21 mm di wadah depan kanan, header 4-pin menghadap keluar di x 42.25..44.79.
 * **Motor getar**: modul 23 x 21 mm menempel di bawah tutup, motor koin turun ke z 21.2. Header male dilepas, kabel disolder ke pad.
-* **Pemasangan modul**: pin buzzer, DHT11, dan motor keluar mendatar, jadi tidak ada yang disolder ke papan. Modul ditempel datar (tape 0.5 mm) dan disambung jumper female-female ke header male di papan: buzzer (-16.51, 104.43), DHT11 (3.81, 63.79), HX711 (-2.54, 71.41).
-* **Bukaan USB**: 15 mm di x -2.42..12.58, mengikuti pusat ESP32 x 5.08 supaya selubung port 7.5 mm (x 1.33..8.83) tidak tertutup dinding. Potongan menembus sampai y 145.4 karena permukaan luar kapsul ada di y 138.
+* **Pemasangan modul**: pin buzzer, DHT11, dan motor keluar mendatar, jadi tidak ada yang disolder ke papan. Modul ditempel datar (tape 0.5 mm) dan disambung jumper female-female ke header male di papan: buzzer (16.51, 104.43), DHT11 (-3.81, 63.79), HX711 (2.54, 71.41).
+* **Bukaan USB**: 15 mm di x -12.58..2.42, mengikuti pusat ESP32 x -5.08 supaya selubung port 7.5 mm (x -8.83..-1.33) tidak tertutup dinding. Potongan menembus sampai y 145.4 karena permukaan luar kapsul ada di y 138.
 
 **Grid perfboard** (dipakai SCAD dan HTML): kolom `x = -21.59 + 2.54k` (18 kolom), baris
 `y = 63.79 + 2.54k` (24 baris). Semua pin modul wajib jatuh di grid ini.
