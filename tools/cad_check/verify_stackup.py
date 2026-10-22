@@ -138,8 +138,6 @@ _hx_hdr_w, _hx_hdr_l = c("hx_hdr_w"), c("hx_hdr_l")
 _hx_y, _hx_l = c("hx_y"), c("hx_l")
 _hx_hdr_x0 = _hx_x + _hx_w / 2
 _bar_x1 = c("bar_w") / 2
-check("header HX711 di luar papan", _hx_hdr_x0 >= _hx_x + _hx_w / 2 - 1e-9,
-      f"header x {_hx_hdr_x0:.2f}..{_hx_hdr_x0 + _hx_hdr_w:.2f}, tepi papan {_hx_x + _hx_w / 2:.2f}")
 check("HX711 tidak menyentuh batang", _hx_x - _hx_w / 2 > _bar_x1,
       f"tepi PCB {_hx_x - _hx_w / 2:.2f} > batang {_bar_x1:.2f} (celah {(_hx_x - _hx_w / 2) - _bar_x1:.2f} mm)")
 _well_r = coaster_dia / 2
