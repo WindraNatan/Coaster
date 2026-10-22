@@ -7,6 +7,11 @@
 
 $fn = 64; // Resolusi kurva lingkaran halus
 
+// FRAME: Z-up — +X = kanan dari depan (sisi kaca), +Y = ke belakang, +Z = atas.
+// Viewer web/casing_3d.html Y-up memetakan (x,y,z)_html = (-X, Z, Y)_scad, jadi angka
+// x di HTML berlawanan tanda dengan x di file ini. Posisi modul di bawah sudah
+// dicerminkan agar model ini sama dengan rakitan build (patokan HTML).
+
 // --- PARAMETER DIMENSI PRESISI (mm) ---
 floor_th       = 2.5;   // Tebal lantai dasar sasis
 wall_th        = 2.4;   // Tebal dinding luar sasis
@@ -76,7 +81,7 @@ lid_th         = 2.2;   // Tebal penutup atas
 usb_z          = floor_th + 10.0; // 12.5
 usb_h          = 8.0;
 usb_w          = 15.0;
-usb_x          = 5.08;            // = posisi pusat ESP32
+usb_x          = -5.08;           // = posisi pusat ESP32
 // Potongan harus menembus dinding luar. Badan kapsul berakhir di y = 138 (sudut belakang
 // r 8 di y 130); potongan lama berhenti di 137.4 dan menyisakan kulit 0.6 mm, jadi
 // lubangnya buta dari luar.
@@ -90,24 +95,24 @@ assert(part_to_render == "front" || part_to_render == "rear" ||
        "part_to_render harus front, rear, lid, atau all");
 
 // --- POSISI ESP32 & BUZZER ---
-// Buzzer modul 13 x 32 mm (spek: 3.2 x 1.3 x 1 cm) dipasang memanjang di strip kiri.
+// Buzzer modul 13 x 32 mm (spek: 3.2 x 1.3 x 1 cm) dipasang memanjang di strip kanan.
 // Melintang butuh 32 mm di strip depan yang hanya 18 mm, jadi harus diputar.
 // Kolom lubang papan: x = -21.59 + 2.54k (18 kolom, margin 3.81 ke tepi).
 // Baris lubang papan: y = 63.79 + 2.54k (24 baris, margin 5.79 dari tepi depan).
 // Papan 58..128; rongga 56..130.
 esp_pcb_w     = 25.4;                   // DevKit V1: lebar PCB 25.4, baris pin 22.86 (9 pitch)
 esp_pcb_l     = 48.26;                  // 15 pin per sisi, pangkal pin 6.35 di luar baris tepi
-esp_pcb_x     = 5.08;                   // pusat; baris pin -6.35 dan 16.51 = kolom grid
-esp_pcb_x0    = esp_pcb_x - esp_pcb_w / 2;  // -7.62
+esp_pcb_x     = -5.08;                  // pusat; baris pin -16.51 dan 6.35 = kolom grid
+esp_pcb_x0    = esp_pcb_x - esp_pcb_w / 2;  // -17.78
 // 15 pin span 35.56; pusat dipilih supaya semua pin jatuh di baris grid (84.11..119.67),
 // sekaligus menaruh papan sedekat mungkin ke dinding belakang (tepi 126.02).
 esp_pcb_y     = 101.89;
 buzzer_pcb_w  = 13.0;
 buzzer_pcb_l  = 32.0;                   // spek 3.2 cm, diukur dari ujung bodi ke baris pin
-// 3 pin di pitch 2.54. Pin tengah di kolom grid -16.51, jadi bodi -23.01..-10.01:
+// 3 pin di pitch 2.54. Pin tengah di kolom grid 16.51, jadi bodi 10.01..23.01:
 // 2.39 mm ke tepi papan dan 2.39 mm ke tepi PCB ESP32.
-buzzer_x      = -16.51;
-buzzer_pcb_x0 = buzzer_x - buzzer_pcb_w / 2;  // -23.01
+buzzer_x      = 16.51;
+buzzer_pcb_x0 = buzzer_x - buzzer_pcb_w / 2;  // 10.01
 // Pin belakang modul di baris grid 91.73, jadi seluruh bodi masih di papan.
 buzzer_pin_y  = 91.73;
 buzzer_pcb_y0 = buzzer_pin_y - buzzer_pcb_l;  // 59.73
@@ -124,31 +129,31 @@ hdr_h           = 2.5;                  // header male di atas papan
 buzzer_pcb_z    = floor_th + 1.2 + 1.6 + buzzer_lift;  // 5.8
 // Header pendarat jumper. Pin modul buzzer berakhir di y 98.73; baris 104.43 (k=16)
 // menyisakan 1.70 mm supaya rumah jumper tidak menumpuk header.
-buzzer_hdr_x    = -16.51;               // 3 pin x -19.05..-13.97
+buzzer_hdr_x    = 16.51;               // 3 pin x 13.97..19.05
 buzzer_hdr_y    = 104.43;
-mtr_hdr_x       = -21.59;               // kolom grid k=0 (lubang paling kiri)
+mtr_hdr_x       = 21.59;                // kolom grid k=17 (lubang paling kanan)
 mtr_hdr_y       = 96.81;
 
-// --- POSISI DHT11 (wadah depan kanan) ---
+// --- POSISI DHT11 (wadah depan kiri) ---
 // Modul 32 x 14 mm (spek), diputar: pin 3 keluar dari tepi pendek (foto), jadi tepi 14 mm
 // menghadap septum dan jumper 3-pin bisa naik lurus lewat terowongan.
 // Wadah depan terbuka penuh ke atas, jadi tidak perlu kisi ventilasi di dinding.
 dht_front_w = 14.0;  // lebar PCB (x)
 dht_front_l = 32.0;  // panjang PCB (y), pin di tepi +y
 dht_front_h = 7.1;   // PCB 1.6 + bodi DHT 5.5
-dht_front_x = 24.0;  // pusat; x 17..31
+dht_front_x = -24.0; // pusat; x -31..-17
 dht_front_y = 6.0;   // pusat; y -10..22, sudut terjauh r 37.9 < 50
 dht_pcb_z   = disc_z + acr_th;        // 6.5, duduk di akrilik seperti HX711
-dht_hdr_x   = 3.81;  // kolom grid k=10; 3 pin x 1.27..6.35 di mulut terowongan
+dht_hdr_x   = -3.81; // kolom grid k=7; 3 pin x -6.35..-1.27 di mulut terowongan
 dht_hdr_y   = 63.79; // baris grid k=0
 
-// --- POSISI HX711 (wadah depan kiri) ---
+// --- POSISI HX711 (wadah depan kanan) ---
 // Papan modul duduk di atas piringan akrilik bawah, di luar jalur defleksi batang.
-// Pin 4 keluar mendatar dari tepi LUAR (-x): jumper keluar menjauhi batang, lalu menyusur
-// dinding kiri ke terowongan septum. Kalau pin menghadap ke dalam, jumper harus lewat
+// Pin 4 keluar mendatar dari tepi LUAR (+x): jumper keluar menjauhi batang, lalu menyusur
+// dinding kanan ke terowongan septum. Kalau pin menghadap ke dalam, jumper harus lewat
 // celah sempit antara PCB dan batang load cell.
 // Ukuran dari foto kit: PCB ±34.5 x 21 mm saat dikalibrasi ke disc akrilik Ø100.
-hx_x      = -25.0;  // pusat modul; tepi kanan x = -7.75, batang mulai x = -6.35
+hx_x      = 25.0;   // pusat modul; tepi kiri x = 7.75, batang berakhir x = 6.35
 hx_y      = 6.0;    // modul memanjang sejajar sumbu x, bukan tegak
 hx_w      = 34.5;
 hx_l      = 21.0;
@@ -157,8 +162,8 @@ hx_hdr_l  = 10.16;  // header 4-pin, pitch 2.54
 hx_hdr_w  = 2.54;
 hx_hdr_h  = 8.5;    // header female 1x4, tegak di tepi luar (foto kit)
 // Header pendarat jumper HX711 di papan. Empat pin ganjil-genap, jadi pusatnya harus
-// di tengah antar-kolom: pin di x -6.35, -3.81, -1.27, 1.27.
-hx_land_x = -2.54;
+// di tengah antar-kolom: pin di x -1.27, 1.27, 3.81, 6.35.
+hx_land_x = 2.54;
 hx_land_y = 71.41;  // baris grid k=3
 
 // --- POSISI MOTOR GETAR (menggantung di bawah tutup) ---
@@ -167,7 +172,7 @@ hx_land_y = 71.41;  // baris grid k=3
 // jadi getaran merambat ke bodi, bukan ke load cell.
 // Header male 1x3 dilepas; kabel disolder langsung ke pad. Kalau header tetap, pin 11.5 mm
 // menembus shield RF (atas shield 15.5, bawah PCB modul 24.2, pin sampai 12.7).
-mtr_x     = 5.08;                          // sejajar pusat ESP32
+mtr_x     = -5.08;                         // sejajar pusat ESP32
 mtr_y     = 100.0;                         // di atas badan ESP32 (y 77.76..126.02)
 mtr_th    = 1.6;                           // tebal PCB modul
 mtr_can_h = 3.0;                           // tebal motor koin
@@ -342,13 +347,13 @@ if (part_to_render == "front") {
     // Piringan atas — duduk di ujung bebas batang
     color("Peru", 0.6) translate([0, 0, platter_z]) cylinder(h = platter_th, d = 100);
 
-    // Modul HX711 (wadah depan kiri), 34.5 x 21 mm. Header 4-pin di tepi luar supaya
-    // kabel keluar menjauh dari batang load cell: tepi kanan PCB 1.4 mm dari batang.
+    // Modul HX711 (wadah depan kanan), 34.5 x 21 mm. Header 4-pin di tepi luar supaya
+    // kabel keluar menjauh dari batang load cell: tepi kiri PCB 1.4 mm dari batang.
     color("ForestGreen")
         translate([hx_x - hx_w / 2, hx_y - hx_l / 2, disc_z + acr_th])
             cube([hx_w, hx_l, hx_th]);
     color("Black")
-        translate([hx_x - hx_w / 2 - hx_hdr_w, hx_y - hx_hdr_l / 2, disc_z + acr_th + hx_th])
+        translate([hx_x + hx_w / 2, hx_y - hx_hdr_l / 2, disc_z + acr_th + hx_th])
             cube([hx_hdr_w, hx_hdr_l, hx_hdr_h]);
 
     // Modul DHT11 diputar: pin 3 keluar mendatar ke +y, jumper naik lurus lewat
@@ -366,12 +371,12 @@ if (part_to_render == "front") {
         translate([-pcb_w / 2, rear_front_y + 2, floor_th + 1.2])
             cube([pcb_w, pcb_l, 1.6]);
 
-    // Modul ESP32 DevKit V1, digeser 2 pitch ke kanan dari pusat papan.
+    // Modul ESP32 DevKit V1, digeser 2 pitch ke kiri dari pusat papan.
     color("DimGray")
         translate([esp_pcb_x0, esp_pcb_y - esp_pcb_l / 2, floor_th + 1.2 + 1.6 + 8.5])
             cube([esp_pcb_w, esp_pcb_l, 1.6]);
 
-    // Modul buzzer 13 x 32 mm duduk datar di strip kiri papan dengan tape 0.5 mm.
+    // Modul buzzer 13 x 32 mm duduk datar di strip kanan papan dengan tape 0.5 mm.
     // Pin keluar mendatar dari tepi belakang PCB (foto MH-FMD), jadi modul tidak bisa
     // disolder ke papan; jumper 3-pin female-female turun ke header male di papan.
     color("SteelBlue")
@@ -387,7 +392,7 @@ if (part_to_render == "front") {
     color("DimGray")
         translate([buzzer_hdr_x - 3.81, buzzer_hdr_y - 1.27, floor_th + 1.2 + 1.6])
             cube([7.62, 2.54, hdr_h]);
-    // Header motor 3-pin, deret sejajar y di kolom grid -21.59. Deret y-nya mulai 93.00,
+    // Header motor 3-pin, deret sejajar y di kolom grid 21.59. Deret y-nya mulai 93.00,
     // di belakang tepi PCB buzzer (91.73), jadi tidak menumpuk modul buzzer.
     color("DimGray")
         translate([mtr_hdr_x - 1.27, mtr_hdr_y - 3.81, floor_th + 1.2 + 1.6])

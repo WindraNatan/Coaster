@@ -131,27 +131,27 @@ def hull_x_at(y):
 check("DHT11 di wadah depan", c("dht_front_y") < rear_front_y,
       f"dht_front_y={c('dht_front_y')} < septum {rear_front_y}")
 
-# HX711 header faces outward (-x). Verify the whole module, header included, clears the
+# HX711 header faces outward (+x). Verify the whole module, header included, clears the
 # load-cell bar and stays inside the front well, or the printed wall cuts it.
 _hx_x, _hx_w = c("hx_x"), c("hx_w")
 _hx_hdr_w, _hx_hdr_l = c("hx_hdr_w"), c("hx_hdr_l")
 _hx_y, _hx_l = c("hx_y"), c("hx_l")
-_hx_hdr_x0 = _hx_x - _hx_w / 2 - _hx_hdr_w
-_bar_x0 = -c("bar_w") / 2
-check("HX711 tidak menyentuh batang", _hx_x + _hx_w / 2 < _bar_x0,
-      f"tepi PCB {_hx_x + _hx_w / 2:.2f} < batang {_bar_x0:.2f} (celah {_bar_x0 - (_hx_x + _hx_w / 2):.2f} mm)")
+_hx_hdr_x0 = _hx_x + _hx_w / 2
+_bar_x1 = c("bar_w") / 2
+check("HX711 tidak menyentuh batang", _hx_x - _hx_w / 2 > _bar_x1,
+      f"tepi PCB {_hx_x - _hx_w / 2:.2f} > batang {_bar_x1:.2f} (celah {(_hx_x - _hx_w / 2) - _bar_x1:.2f} mm)")
 _well_r = coaster_dia / 2
-_hx_far = max(abs(_hx_hdr_x0), abs(_hx_x - _hx_w / 2),
+_hx_far = max(abs(_hx_hdr_x0), abs(_hx_x + _hx_w / 2),
               *[math.hypot(abs(_hx_hdr_x0), _hx_y + sy * (_hx_l + _hx_hdr_l) / 2) for sy in (-1, 1)])
 check("HX711 di dalam wadah depan", _hx_far < _well_r,
       f"radius terjauh {_hx_far:.1f} < rongga {_well_r:.1f}")
 _hx_top = c("disc_z") + acr_th + c("hx_th") + c("hx_hdr_h")
 check("header HX711 di bawah piringan", _hx_top < platter_z,
       f"atas header {_hx_top:.1f} < piringan {platter_z:.1f}")
-check("DHT11 muat lebar wadah", c("dht_front_x") + c("dht_front_w") / 2 < coaster_dia / 2 - wall_th,
-      f"tepi x={c('dht_front_x') + c('dht_front_w') / 2:.1f} < dinding {coaster_dia / 2 - wall_th:.1f}")
+check("DHT11 muat lebar wadah", abs(c("dht_front_x")) + c("dht_front_w") / 2 < coaster_dia / 2 - wall_th,
+      f"tepi x={abs(c('dht_front_x')) + c('dht_front_w') / 2:.1f} < dinding {coaster_dia / 2 - wall_th:.1f}")
 
-# ESP32 and buzzer share the 50.8 x 70 mm board: the buzzer runs lengthwise along the left
+# ESP32 and buzzer share the 50.8 x 70 mm board: the buzzer runs lengthwise along the right
 # strip because 32 mm crosswise does not fit the 18 mm in front of the ESP32.
 _esp_x0, _esp_w = c("esp_pcb_x0"), c("esp_pcb_w")
 _bz_x0, _bz_y0 = c("buzzer_pcb_x0"), c("buzzer_pcb_y0")
@@ -160,7 +160,7 @@ _bz_x, _bz_y = c("buzzer_x"), c("buzzer_y")
 _board_x0, _board_y0 = -pcb_w / 2, rear_front_y + 2
 _board_x1, _board_y1 = pcb_w / 2, _board_y0 + pcb_l
 _esp_x1 = _esp_x0 + _esp_w
-_esp_hdr_x0 = _esp_x0 + _esp_w / 2 - 12.7 - 1.27  # left pin row minus half header width
+_esp_hdr_x1 = _esp_x0 + _esp_w / 2 + 12.7 + 1.27  # right pin row plus half header width
 
 check("buzzer di dalam papan (x)", _board_x0 <= _bz_x0 and _bz_x0 + _bz_w <= _board_x1,
       f"buzzer {_bz_x0:.1f}..{_bz_x0 + _bz_w:.1f} dalam papan {_board_x0:.1f}..{_board_x1:.1f}")
@@ -168,12 +168,12 @@ check("buzzer di dalam papan (y)", _board_y0 <= _bz_y0 and _bz_y0 + _bz_l <= _bo
       f"buzzer {_bz_y0:.1f}..{_bz_y0 + _bz_l:.1f} dalam papan {_board_y0:.1f}..{_board_y1:.1f}")
 check("ESP32 di dalam papan", _board_x0 <= _esp_x0 and _esp_x1 <= _board_x1,
       f"ESP32 {_esp_x0:.1f}..{_esp_x1:.1f} dalam papan {_board_x0:.1f}..{_board_x1:.1f}")
-check("buzzer tidak menabrak header ESP32", _bz_x0 + _bz_w <= _esp_hdr_x0,
-      f"tepi buzzer {_bz_x0 + _bz_w:.2f} <= header {_esp_hdr_x0:.2f} "
-      f"(celah {_esp_hdr_x0 - (_bz_x0 + _bz_w):.2f} mm)")
-# The screw post at x -29 has r 1.4 mm, so its inner edge is -27.6.
-check("buzzer tidak menabrak pilar sekrup", _bz_x0 >= -29.0 + 1.4,
-      f"tepi buzzer {_bz_x0:.1f} vs pilar {-29.0 + 1.4:.1f}")
+check("buzzer tidak menabrak header ESP32", _bz_x0 >= _esp_hdr_x1,
+      f"tepi buzzer {_bz_x0:.2f} >= header {_esp_hdr_x1:.2f} "
+      f"(celah {_bz_x0 - _esp_hdr_x1:.2f} mm)")
+# The screw post at x 29 has r 1.4 mm, so its inner edge is 27.6.
+check("buzzer tidak menabrak pilar sekrup", _bz_x0 + _bz_w <= 29.0 - 1.4,
+      f"tepi buzzer {_bz_x0 + _bz_w:.1f} vs pilar {29.0 - 1.4:.1f}")
 # Grille is 3x3 at +/-2.6 mm with 1.0 mm holes: it must sit inside the 12 mm can.
 check("kisi suara di dalam can", 2.6 + 1.0 <= c("buzzer_can_d") / 2,
       f"kisi {2.6 + 1.0:.1f} <= radius can {c('buzzer_can_d') / 2:.1f}")
@@ -236,7 +236,7 @@ check("buzzer datar di atas papan", c("buzzer_pcb_z") >= _board_top,
 # DHT11 is rotated 180 mm2: 14 mm across x, 32 mm along y, pins leaving toward the septum.
 check("DHT11 diputar sejajar x", c("dht_front_w") < c("dht_front_l"),
       f"{c('dht_front_w')} x {c('dht_front_l')} mm")
-_dht_far = math.hypot(c("dht_front_x") + c("dht_front_w") / 2,
+_dht_far = math.hypot(abs(c("dht_front_x")) + c("dht_front_w") / 2,
                       c("dht_front_y") + c("dht_front_l") / 2)
 check("DHT11 di dalam akrilik", _dht_far < ACRYLIC_DIA / 2,
       f"sudut terjauh r {_dht_far:.1f} < {ACRYLIC_DIA / 2:.1f}")
