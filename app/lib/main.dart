@@ -491,7 +491,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final v = int.tryParse(text);
     if (v == null || v < kMinManualIntervalMin || v > kMaxManualIntervalMin) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Interval harus 1–180 menit.')));
+          content: Text('Interval harus 1 sampai 180 menit.')));
       return;
     }
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(manualIntervalMin: v));
