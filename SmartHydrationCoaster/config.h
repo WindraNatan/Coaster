@@ -69,14 +69,29 @@
 #define K_HUM_NORMAL  1.00f  // RH >= 50 %
 #define ADAPT_FLOOR_MS 5000UL
 
-// Konfigurasi opsional Wi-Fi & Firebase RTDB (kosongkan untuk mode standalone/USB)
-#define WIFI_SSID       ""
-#define WIFI_PASSWORD   ""
-#define FIREBASE_DB_URL ""
-// API key proyek Firebase (Console -> Project settings -> Web API Key). Dipakai untuk
-// menukar email+password jadi ID token, karena RTDB menolak request tanpa auth.
-#define FIREBASE_API_KEY ""
-#define FIREBASE_USER_EMAIL ""
+// Kredensial perangkat berasal dari SmartHydrationCoaster/secrets.h, yang TIDAK
+// di-commit karena repo ini publik. Salin secrets.h.example lalu isi. Tanpa file itu
+// build tetap jalan dan cloud dimatikan, jadi mode USB dan simulator tidak terganggu.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
+#ifndef WIFI_SSID
+#define WIFI_SSID              ""
+#endif
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD          ""
+#endif
+#ifndef FIREBASE_DB_URL
+#define FIREBASE_DB_URL        ""
+#endif
+#ifndef FIREBASE_API_KEY
+#define FIREBASE_API_KEY       ""
+#endif
+#ifndef FIREBASE_USER_EMAIL
+#define FIREBASE_USER_EMAIL    ""
+#endif
+#ifndef FIREBASE_USER_PASSWORD
 #define FIREBASE_USER_PASSWORD ""
+#endif
 
 #endif

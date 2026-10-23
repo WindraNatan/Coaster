@@ -7,3 +7,16 @@ __pycache__/
 
 # aset lama yang disimpan lokal, tidak untuk repo
 /_aset_arsip/
+
+# Flutter (app/)
+/app/build/
+/app/.dart_tool/
+/app/.idea/
+/app/android/.gradle/
+/app/android/local.properties
+/app/.flutter-plugins
+/app/.flutter-plugins-dependencies
+/app/.packages
+
+# Kredensial perangkat (jangan pernah di-commit)
+SmartHydrationCoaster/secrets.h
