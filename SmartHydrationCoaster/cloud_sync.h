@@ -42,6 +42,7 @@ static String activeUserEmail = FIREBASE_USER_EMAIL;
 static String activeUserPassword = FIREBASE_USER_PASSWORD;
 static String idToken = "";
 static String activeUid = "";
+static String refreshToken = "";
 static uint32_t tokenExpiryMs = 0;
 
 // Toko token di NVS supaya boot ulang tidak perlu login lagi. Token Firebase berlaku
@@ -81,13 +82,57 @@ static bool firebaseLogin() {
     if (ue < 0) return false;
     activeUid = res.substring(uk, ue);
     tokenExpiryMs = millis() + TOKEN_TTL_MS;
+    int rk = res.indexOf("\"refreshToken\":\"");
+    if (rk >= 0) {
+        rk += 16;
+        int re = res.indexOf('"', rk);
+        if (re > rk) refreshToken = res.substring(rk, re);
+    }
     Preferences prefs;
     prefs.begin("shc", false);
     prefs.putString("idToken", idToken);
     prefs.putString("uid", activeUid);
-    prefs.putULong("idTokenExp", millis() + TOKEN_TTL_MS - TOKEN_MARGIN_MS);
+    prefs.putString("refreshToken", refreshToken);
+    prefs.putULong("idTokenExp", TOKEN_TTL_MS - TOKEN_MARGIN_MS);
     prefs.end();
     Serial.printf("[CLOUD] Login OK, token %u karakter.\n", idToken.length());
+    return true;
+}
+
+// Token Firebase berlaku satu jam. Tukar refreshToken (disimpan saat login) jadi token
+// baru, supaya alat yang menyala berhari-hari tidak bergantung pada satu login awal.
+static bool firebaseRefresh() {
+    if (refreshToken.length() == 0 || activeApiKey.length() == 0) return false;
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    String url = "https://securetoken.googleapis.com/v1/token?key=" + activeApiKey;
+    if (!http.begin(client, url)) return false;
+    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    String body = "grant_type=refresh_token&refresh_token=" + refreshToken;
+    int code = http.POST(body);
+    if (code != 200) { http.end(); return false; }
+    String res = http.getString();
+    http.end();
+    int k = res.indexOf("\"id_token\":\"");
+    if (k < 0) return false;
+    k += 12;
+    int e = res.indexOf('"', k);
+    if (e < 0) return false;
+    idToken = res.substring(k, e);
+    tokenExpiryMs = millis() + TOKEN_TTL_MS;
+    int rk = res.indexOf("\"refresh_token\":\"");
+    if (rk >= 0) {
+        rk += 17;
+        int re = res.indexOf('"', rk);
+        if (re > rk) refreshToken = res.substring(rk, re);
+    }
+    Preferences prefs;
+    prefs.begin("shc", false);
+    prefs.putString("idToken", idToken);
+    prefs.putString("refreshToken", refreshToken);
+    prefs.putULong("idTokenExp", TOKEN_TTL_MS - TOKEN_MARGIN_MS);
+    prefs.end();
     return true;
 }
 
@@ -96,7 +141,7 @@ static bool ensureToken() {
         (int32_t)(tokenExpiryMs - millis()) > (int32_t)TOKEN_MARGIN_MS) {
         return true;
     }
-    return firebaseLogin();
+    return firebaseRefresh() || firebaseLogin();
 }
 
 // Node milik akun ini. Rules menolak akses ke /users/<uid> milik orang lain, jadi UID
@@ -234,7 +279,10 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     prefs.begin("shc", true);
     idToken = prefs.getString("idToken", "");
     activeUid = prefs.getString("uid", "");
-    tokenExpiryMs = prefs.getULong("idTokenExp", 0);
+    refreshToken = prefs.getString("refreshToken", "");
+    // millis() ulang dari nol setiap boot, jadi cap kedaluwarsa dari boot sebelumnya
+    // tidak bisa dipercaya. Set 0 supaya ensureToken() memaksa perpanjangan/login awal.
+    tokenExpiryMs = 0;
     prefs.end();
     startCloudIfNeeded();
 }

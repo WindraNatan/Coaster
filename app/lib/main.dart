@@ -99,7 +99,10 @@ class _RootPageState extends State<RootPage> {
   Future<void> _boot() async {
     final p = await SharedPreferences.getInstance();
     final saved = p.getString('shc_fb_url');
-    final session = await loadSession();
+    var session = await loadSession();
+    if (session != null && !session.valid && session.refreshToken.isNotEmpty) {
+      session = await refreshSession(session);
+    }
     if (!mounted) return;
     setState(() {
       _savedUrl = saved;
@@ -185,7 +188,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
     setState(() { _busy = true; _authError = null; _error = null; });
     try {
       await saveApiKey(_key.text);
-      final existing = await loadSession();
+      var existing = await loadSession();
+      if (existing != null && !existing.valid && existing.refreshToken.isNotEmpty) {
+        existing = await refreshSession(existing);
+      }
       final session = (existing != null && existing.valid)
           ? existing
           : await signIn(
@@ -365,6 +371,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
+  late AuthSession _session = widget.session;
   Telemetry? _t;
   CloudConfig? _cfg;
   String? _error;
@@ -403,7 +410,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _polling = true;
     try {
       final res = await _client
-          .get(Uri.parse('${widget.session.coasterUrl(_base)}.json${widget.session.suffix}'))
+          .get(Uri.parse('${_session.coasterUrl(_base)}.json${_session.suffix}'))
           .timeout(const Duration(seconds: 8));
       if (res.statusCode != 200) {
         throw Exception('HTTP ${res.statusCode}');
@@ -435,11 +442,18 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
     } catch (e) {
+      // Token satu jam bisa habis saat aplikasi dibiarkan terbuka. Coba perpanjang
+      // sekali; kalau berhasil, poll berikutnya lanjut normal tanpa ganggu pengguna.
+      final renewed = await refreshSession(_session);
       if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (renewed == null) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      } else {
+        setState(() => _session = renewed);
+      }
     } finally {
       _polling = false;
     }
@@ -449,7 +463,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     try {
       final res = await _client
           .patch(
-            Uri.parse('${widget.session.coasterUrl(_base)}/config.json${widget.session.suffix}'),
+            Uri.parse('${_session.coasterUrl(_base)}/config.json${_session.suffix}'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(patch),
           )

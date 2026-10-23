@@ -12,7 +12,42 @@ const _kToken = 'shc_id_token';
 const _kExp = 'shc_id_token_exp';
 const _kEmail = 'shc_auth_email';
 const _kUid = 'shc_uid';
+const _kRefresh = 'shc_refresh_token';
 const _kApiKey = 'shc_api_key';
+
+/// Perpanjang ID token memakai refresh token, tanpa minta password lagi.
+Future<AuthSession?> refreshSession(AuthSession s, {http.Client? client}) async {
+  final key = await loadApiKey();
+  if (key.isEmpty || s.refreshToken.isEmpty) return null;
+  final c = client ?? http.Client();
+  try {
+    final res = await c
+        .post(
+          Uri.parse(
+              'https://securetoken.googleapis.com/v1/token?key=${Uri.encodeComponent(key)}'),
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'grant_type=refresh_token&refresh_token=${Uri.encodeComponent(s.refreshToken)}',
+        )
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode != 200) return null;
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final token = data['id_token']?.toString() ?? '';
+    if (token.isEmpty) return null;
+    final expiresIn = int.tryParse(data['expires_in']?.toString() ?? '3600') ?? 3600;
+    final session = AuthSession(
+        token,
+        s.email,
+        s.uid,
+        DateTime.now().millisecondsSinceEpoch + expiresIn * 1000,
+        data['refresh_token']?.toString() ?? s.refreshToken);
+    await saveSession(session);
+    return session;
+  } catch (_) {
+    return null;
+  } finally {
+    if (client == null) c.close();
+  }
+}
 
 const authErrorText = <String, String>{
   'EMAIL_EXISTS': 'Email ini sudah terdaftar. Pakai tombol Masuk.',
@@ -32,7 +67,9 @@ class AuthSession {
   final String email;
   final String uid;
   final int expiresAtMs;
-  const AuthSession(this.token, this.email, this.uid, this.expiresAtMs);
+  final String refreshToken;
+  const AuthSession(this.token, this.email, this.uid, this.expiresAtMs,
+      [this.refreshToken = '']);
 
   bool get valid =>
       token.isNotEmpty &&
@@ -54,12 +91,14 @@ Future<void> saveSession(AuthSession? s) async {
     await p.remove(_kExp);
     await p.remove(_kEmail);
     await p.remove(_kUid);
+    await p.remove(_kRefresh);
     return;
   }
   await p.setString(_kToken, s.token);
   await p.setInt(_kExp, s.expiresAtMs);
   await p.setString(_kEmail, s.email);
   await p.setString(_kUid, s.uid);
+  if (s.refreshToken.isNotEmpty) await p.setString(_kRefresh, s.refreshToken);
 }
 
 Future<AuthSession?> loadSession() async {
@@ -67,7 +106,8 @@ Future<AuthSession?> loadSession() async {
   final token = p.getString(_kToken) ?? '';
   if (token.isEmpty) return null;
   return AuthSession(token, p.getString(_kEmail) ?? '',
-      p.getString(_kUid) ?? '', p.getInt(_kExp) ?? 0);
+      p.getString(_kUid) ?? '', p.getInt(_kExp) ?? 0,
+      p.getString(_kRefresh) ?? '');
 }
 
 Future<String> loadApiKey() async {
@@ -115,7 +155,8 @@ Future<AuthSession> signIn({
         token,
         data['email']?.toString() ?? email.trim(),
         uid,
-        DateTime.now().millisecondsSinceEpoch + expiresIn * 1000);
+        DateTime.now().millisecondsSinceEpoch + expiresIn * 1000,
+        data['refreshToken']?.toString() ?? '');
     await saveSession(session);
     return session;
   } finally {

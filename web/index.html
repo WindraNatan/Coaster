@@ -778,7 +778,7 @@ let cloudTimer = null, lastCloudPushMs = 0;
 
 function renderAuthState(){
   const email = localStorage.getItem(SHC_EMAIL_KEY) || '';
-  const ok = !!shcToken();
+  const ok = !!shcToken() || !!localStorage.getItem(SHC_REFRESH_KEY);
   $('authDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
   $('authStatus').textContent = ok ? ('Masuk sebagai ' + email) : 'Belum masuk. Data cloud butuh akun.';
   $('bAuthLogin').hidden = ok;
@@ -829,7 +829,7 @@ function getCleanFbUrl(){
 }
 async function pushCloudTelemetry(){
   const url = shcCoasterUrl(getCleanFbUrl());
-  if (!url || !shcToken()) return;
+  if (!url || !await shcEnsureToken()) return;
   const now = Date.now();
   if (now - lastCloudPushMs < 3000) return;
   lastCloudPushMs = now;
@@ -865,7 +865,7 @@ async function pushCloudTelemetry(){
 }
 async function pushCloudConfig(){
   const url = shcCoasterUrl(getCleanFbUrl());
-  if (!url || !shcToken()) return;
+  if (!url || !await shcEnsureToken()) return;
   try {
     await fetch(url + '/config.json' + shcAuthSuffix(), {
       method: 'PATCH',
@@ -887,7 +887,7 @@ async function pollCloudOnce(){
     $('cloudStatus').textContent = 'URL wajib diawali https://';
     return;
   }
-  if (!shcToken()){
+  if (!url || !await shcEnsureToken()){
     $('cloudDot').className = 'status-dot err';
     $('cloudStatus').textContent = 'Masuk dulu untuk membaca data cloud.';
     return;

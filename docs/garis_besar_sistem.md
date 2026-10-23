@@ -219,7 +219,9 @@ Aturan RTDB membandingkan UID di path dengan `auth.uid`:
 
 Artinya akun lain tidak bisa membaca maupun menulis ke node ini meski tahu UID pemiliknya. Tanpa aturan itu, siapa pun yang membuka halaman bisa menimpa data coaster orang lain, termasuk mematikan alarm.
 
-Firmware memakai akun yang sama. Email dan password ditulis di `config.h`, lalu ditukar jadi token saat boot dan setiap token mendekati kedaluwarsa (masa berlaku satu jam, diperbarui lima menit sebelum habis). Token dan UID disimpan di NVS supaya board tidak perlu login ulang setiap reboot. Kalau kredensial salah, firmware mencetak pesan gagal login ke serial dan berhenti mengirim data, bukan diam-diam menulis tanpa izin.
+Firmware memakai akun yang sama. Email dan password ditulis di `config.h`, lalu ditukar jadi token saat boot. Masa berlaku token satu jam, jadi firmware menyimpan refresh token di NVS dan memperpanjangnya sendiri tanpa perlu password lagi, dipicu lima menit sebelum kedaluwarsa.
+
+Cap kedaluwarsa sengaja di-reset ke nol setiap boot. `millis()` kembali ke nol saat board menyala ulang, jadi cap yang disimpan dari boot sebelumnya tidak bisa dipercaya; tanpa reset itu firmware akan mengira token lama masih sah sampai sekitar 55 menit. Kalau refresh maupun login gagal, firmware mencetak alasannya ke serial dan berhenti mengirim data, bukan diam-diam menulis tanpa izin.
 
 Firmware tetap memakai `client.setInsecure()`, jadi sertifikat TLS tidak divalidasi. Untuk tugas kuliah ini cukup, tapi untuk perangkat yang benar-benar dipasang di rumah orang lain, ganti dengan root CA yang dipasang eksplisit.
 

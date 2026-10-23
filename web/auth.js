@@ -6,6 +6,7 @@
 const SHC_AUTH_KEY = 'shc_id_token';
 const SHC_EMAIL_KEY = 'shc_auth_email';
 const SHC_UID_KEY = 'shc_uid';
+const SHC_REFRESH_KEY = 'shc_refresh_token';
 
 const SHC_AUTH_ERRORS = {
   EMAIL_NOT_FOUND: 'Email belum terdaftar.',
@@ -26,7 +27,7 @@ function shcToken(){
   try {
     const o = JSON.parse(raw);
     if (!o.token) return '';
-    if (o.exp && Date.now() > o.exp - 300000) return '';
+    if (!o.exp || Date.now() > o.exp - 300000) return '';
     return o.token;
   } catch(_){ return ''; }
 }
@@ -72,14 +73,39 @@ async function shcAuth(mode, email, password){
   }));
   localStorage.setItem(SHC_EMAIL_KEY, data.email || email.trim());
   localStorage.setItem(SHC_UID_KEY, data.localId);
+  if (data.refreshToken) localStorage.setItem(SHC_REFRESH_KEY, data.refreshToken);
   return { email: data.email || email.trim(), uid: data.localId };
 }
 
 function shcLogin(email, password){ return shcAuth('signIn', email, password); }
 function shcRegister(email, password){ return shcAuth('signUp', email, password); }
 
+// ID token berlaku satu jam. Daripada minta password lagi, tukar refreshToken yang
+// disimpan saat login. Return true kalau sekarang ada token yang masih berlaku.
+async function shcEnsureToken(){
+  if (shcToken()) return true;
+  const rt = localStorage.getItem(SHC_REFRESH_KEY) || '';
+  const key = shcApiKey();
+  if (!rt || !key) return false;
+  try {
+    const res = await fetch(
+      'https://securetoken.googleapis.com/v1/token?key=' + encodeURIComponent(key),
+      { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(rt) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.id_token) return false;
+    localStorage.setItem(SHC_AUTH_KEY, JSON.stringify({
+      token: data.id_token,
+      exp: Date.now() + (parseInt(data.expires_in, 10) || 3600) * 1000
+    }));
+    if (data.refresh_token) localStorage.setItem(SHC_REFRESH_KEY, data.refresh_token);
+    return true;
+  } catch(_){ return false; }
+}
+
 function shcLogout(){
   localStorage.removeItem(SHC_AUTH_KEY);
   localStorage.removeItem(SHC_EMAIL_KEY);
   localStorage.removeItem(SHC_UID_KEY);
+  localStorage.removeItem(SHC_REFRESH_KEY);
 }
