@@ -11,6 +11,11 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 
+// ponytail: satu transport cloud saja (HTTPS REST ke Firebase RTDB). MQTT sengaja
+// dilewat: RTDB sudah push realtime + last-known state, dan konsumen tambahan
+// (app mobile nanti) cukup pakai node yang sama lewat skema JSON di bawah.
+// Upgrade: publish PubSubClient paralel (~30 baris, additive) hanya jika perlu
+// mode LAN/demo tanpa internet.
 struct CloudSnapshot {
     float weightG;
     float waterMl;
@@ -32,6 +37,77 @@ static portMUX_TYPE snapMux = portMUX_INITIALIZER_UNLOCKED;
 static String activeWifiSsid = WIFI_SSID;
 static String activeWifiPass = WIFI_PASSWORD;
 static String activeFirebaseUrl = FIREBASE_DB_URL;
+static String activeApiKey = FIREBASE_API_KEY;
+static String activeUserEmail = FIREBASE_USER_EMAIL;
+static String activeUserPassword = FIREBASE_USER_PASSWORD;
+static String idToken = "";
+static String activeUid = "";
+static uint32_t tokenExpiryMs = 0;
+
+// Toko token di NVS supaya boot ulang tidak perlu login lagi. Token Firebase berlaku
+// 1 jam; kalau sisa waktunya di bawah 5 menit, ambil yang baru.
+static const uint32_t TOKEN_MARGIN_MS = 300000UL;
+static const uint32_t TOKEN_TTL_MS = 3600000UL;
+
+static bool firebaseLogin() {
+    if (activeApiKey.length() == 0 || activeUserEmail.length() == 0) return false;
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    String url = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + activeApiKey;
+    if (!http.begin(client, url)) return false;
+    http.addHeader("Content-Type", "application/json");
+    String body = "{\"email\":\"" + activeUserEmail + "\",\"password\":\"" + activeUserPassword +
+                  "\",\"returnSecureToken\":true}";
+    int code = http.POST(body);
+    if (code != 200) {
+        Serial.printf("[CLOUD] Login gagal (HTTP %d). Cek API key, email, dan password.\n", code);
+        http.end();
+        return false;
+    }
+    String res = http.getString();
+    http.end();
+    // Tidak ada parser JSON penuh di firmware; token selalu field pertama setelah idToken.
+    int k = res.indexOf("\"idToken\":\"");
+    if (k < 0) return false;
+    k += 11;
+    int e = res.indexOf('"', k);
+    if (e < 0) return false;
+    idToken = res.substring(k, e);
+    int uk = res.indexOf("\"localId\":\"");
+    if (uk < 0) return false;
+    uk += 11;
+    int ue = res.indexOf('"', uk);
+    if (ue < 0) return false;
+    activeUid = res.substring(uk, ue);
+    tokenExpiryMs = millis() + TOKEN_TTL_MS;
+    Preferences prefs;
+    prefs.begin("shc", false);
+    prefs.putString("idToken", idToken);
+    prefs.putString("uid", activeUid);
+    prefs.putULong("idTokenExp", millis() + TOKEN_TTL_MS - TOKEN_MARGIN_MS);
+    prefs.end();
+    Serial.printf("[CLOUD] Login OK, token %u karakter.\n", idToken.length());
+    return true;
+}
+
+static bool ensureToken() {
+    if (idToken.length() > 0 && activeUid.length() > 0 &&
+        (int32_t)(tokenExpiryMs - millis()) > (int32_t)TOKEN_MARGIN_MS) {
+        return true;
+    }
+    return firebaseLogin();
+}
+
+// Node milik akun ini. Rules menolak akses ke /users/<uid> milik orang lain, jadi UID
+// wajib ikut di path, bukan hanya di token.
+static String userNode() {
+    return activeFirebaseUrl + "/users/" + activeUid + "/smart_coaster";
+}
+
+static String authSuffix() {
+    return idToken.length() > 0 ? "?auth=" + idToken : String("");
+}
 
 extern bool demoMode;
 extern bool autoDhtTimerMode;
@@ -59,6 +135,10 @@ static void cloudTask(void*) {
             vTaskDelay(pdMS_TO_TICKS(2000));
             continue;
         }
+        if (!ensureToken()) {
+            vTaskDelay(pdMS_TO_TICKS(30000));
+            continue;
+        }
 
         uint32_t now = millis();
         CloudSnapshot local;
@@ -74,7 +154,7 @@ static void cloudTask(void*) {
             WiFiClientSecure client;
             client.setInsecure();
             HTTPClient http;
-            String url = activeFirebaseUrl + "/smart_coaster/telemetry.json";
+            String url = userNode() + "/telemetry.json" + authSuffix();
             if (http.begin(client, url)) {
                 http.addHeader("Content-Type", "application/json");
                 char body[360];
@@ -96,7 +176,7 @@ static void cloudTask(void*) {
             WiFiClientSecure client;
             client.setInsecure();
             HTTPClient http;
-            String url = activeFirebaseUrl + "/smart_coaster/config.json";
+            String url = userNode() + "/config.json" + authSuffix();
             if (http.begin(client, url) && http.GET() == 200) {
                 String cfg = http.getString();
                 bool changed = false;
@@ -150,6 +230,12 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     if (nvsUrl.length() > 0) {
         activeFirebaseUrl = nvsUrl;
     }
+    Preferences prefs;
+    prefs.begin("shc", true);
+    idToken = prefs.getString("idToken", "");
+    activeUid = prefs.getString("uid", "");
+    tokenExpiryMs = prefs.getULong("idTokenExp", 0);
+    prefs.end();
     startCloudIfNeeded();
 }
 

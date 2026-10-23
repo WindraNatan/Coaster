@@ -73,5 +73,10 @@
 #define WIFI_SSID       ""
 #define WIFI_PASSWORD   ""
 #define FIREBASE_DB_URL ""
+// API key proyek Firebase (Console -> Project settings -> Web API Key). Dipakai untuk
+// menukar email+password jadi ID token, karena RTDB menolak request tanpa auth.
+#define FIREBASE_API_KEY ""
+#define FIREBASE_USER_EMAIL ""
+#define FIREBASE_USER_PASSWORD ""
 
 #endif

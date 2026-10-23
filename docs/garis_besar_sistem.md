@@ -30,7 +30,7 @@ flowchart LR
     SP --> FSM
     FSM --> ACT["Buzzer GPIO18<br/>motor getar GPIO17<br/>LED GPIO2"]
     FSM --> SNAP["Snapshot telemetry"]
-    SNAP -->|"PATCH tiap 5 s<br/>atau saat state berubah"| FB[("Firebase RTDB<br/>/smart_coaster")]
+    SNAP -->|"PATCH tiap 5 s<br/>atau saat state berubah"| FB[("Firebase RTDB<br/>/users/&lt;uid&gt;/smart_coaster")]
     FB -->|"GET config<br/>tiap 15 s"| FSM
     FB -->|"poll 2,5 s"| UI["Web PWA dan<br/>aplikasi Android"]
     ACT -->|"bunyi dan getar"| USER(["User"])
@@ -138,14 +138,16 @@ Wi-Fi dan URL Firebase disimpan di NVS, jadi tidak hilang saat board reboot. Per
 
 ### 6.2 Struktur Firebase RTDB
 
-Node yang dipakai cuma satu, `/smart_coaster`, dengan tiga anak:
+Node disimpan per akun, `/users/<uid>/smart_coaster`, dengan tiga anak:
 
 ```
-/smart_coaster
-  telemetry.json      firmware menulis, web dan app membaca
-  config.json         web dan app menulis, firmware membaca
+/users/<uid>/smart_coaster
+  telemetry.json        firmware menulis, web dan app membaca
+  config.json           web dan app menulis, firmware membaca
   daily/<tanggal>.json  web menulis sebagai arsip harian
 ```
+
+UID diambil dari respons login Firebase dan ikut di path, bukan hanya di token. Aturan RTDB membandingkan `auth.uid` dengan `$uid`, jadi akun lain tidak bisa membaca maupun menulis ke node ini meski tahu UID-nya.
 
 Bedanya PATCH dan PUT penting di sini. PATCH melakukan merge per field pada node tujuan, sedangkan PUT menimpa node itu seluruhnya. Semua penulisan di proyek ini memakai PATCH, jadi menulis `config.json` tidak menghapus `telemetry.json` dan sebaliknya. Kalau salah satu sisi memakai PUT, isi node lain ikut lenyap.
 
@@ -196,11 +198,32 @@ Ada dua penulis di node telemetry, firmware dan PWA dalam mode USB Live. Itu dis
 
 Riwayat harian hanya ditulis web, tidak ada yang membacanya kembali dari RTDB. Daftar "hari ini" di dashboard diambil dari `localStorage` browser, dan aplikasi Android menampilkan penghitung hari ini langsung dari node telemetry. Aplikasi hanya menyimpan URL RTDB di `SharedPreferences`.
 
-### 6.4 Waktu dan keamanan
+### 6.4 Akun, keamanan, dan waktu
+
+Akses RTDB butuh akun. Tiap pengguna mendaftar dengan email dan password lewat Firebase Authentication, lalu browser atau aplikasi menukar kredensial itu jadi ID token. Token ditempel ke setiap request sebagai `?auth=...`, dan UID dari respons login ikut masuk ke path `/users/<uid>/...`.
+
+Aturan RTDB membandingkan UID di path dengan `auth.uid`:
+
+```json
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}
+```
+
+Artinya akun lain tidak bisa membaca maupun menulis ke node ini meski tahu UID pemiliknya. Tanpa aturan itu, siapa pun yang membuka halaman bisa menimpa data coaster orang lain, termasuk mematikan alarm.
+
+Firmware memakai akun yang sama. Email dan password ditulis di `config.h`, lalu ditukar jadi token saat boot dan setiap token mendekati kedaluwarsa (masa berlaku satu jam, diperbarui lima menit sebelum habis). Token dan UID disimpan di NVS supaya board tidak perlu login ulang setiap reboot. Kalau kredensial salah, firmware mencetak pesan gagal login ke serial dan berhenti mengirim data, bukan diam-diam menulis tanpa izin.
+
+Firmware tetap memakai `client.setInsecure()`, jadi sertifikat TLS tidak divalidasi. Untuk tugas kuliah ini cukup, tapi untuk perangkat yang benar-benar dipasang di rumah orang lain, ganti dengan root CA yang dipasang eksplisit.
 
 Firmware tidak melakukan sinkronisasi waktu; tidak ada NTP di sana. Akibatnya `remaining_sec` selalu relatif terhadap timer yang sedang jalan, bukan jam dinding. Kunci tanggal untuk `daily/<tanggal>.json` diambil dari jam perangkat yang menjalankan browser.
-
-Tidak ada autentikasi di jalur mana pun. Firmware, PWA, dan aplikasi memanggil RTDB tanpa token, jadi aturan keamanan RTDB harus membuka akses baca tulis untuk node itu. Firmware juga memakai `client.setInsecure()`, artinya sertifikat TLS tidak divalidasi. Untuk tugas kuliah di jaringan sendiri ini cukup, tapi jangan dipakai untuk perangkat yang terpasang di rumah orang lain tanpa aturan akses dan sertifikat yang benar.
 
 Aplikasi Android hanya mendukung mode cloud. Perintah `c` dan `t` tetap jalur USB saja, karena keduanya butuh berat aktual yang hanya terlihat dari serial.
 

@@ -173,9 +173,19 @@ h2{font-size:12px;font-weight:600;color:var(--dim);letter-spacing:.3px;margin:22
 </div>
 
 <div class="conn-drawer" id="cloudDrawer">
-  <span><i class="status-dot" id="cloudDot"></i><span id="cloudStatus">Masukkan URL Firebase RTDB</span></span>
-  <input type="url" id="fbUrlIn" placeholder="https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app" aria-label="URL Firebase Realtime Database">
+  <span><i class="status-dot" id="cloudDot"></i><span id="cloudStatus">Masukkan URL dasar RTDB. Node ditentukan akun yang masuk.</span></span>
+  <input type="url" id="fbUrlIn" placeholder="https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app" aria-label="URL dasar Firebase Realtime Database">
   <button class="act" id="bCloudSave">Hubungkan Cloud</button>
+</div>
+
+<div class="conn-drawer" id="authDrawer">
+  <span><i class="status-dot" id="authDot"></i><span id="authStatus">Belum masuk. Data cloud butuh akun.</span></span>
+  <input type="email" id="authEmailIn" placeholder="Email akun Firebase" aria-label="Email akun Firebase" autocomplete="username">
+  <input type="password" id="authPassIn" placeholder="Password" aria-label="Password akun Firebase" autocomplete="current-password">
+  <input type="text" id="authKeyIn" placeholder="Web API Key proyek Firebase" aria-label="Firebase Web API Key" autocomplete="off">
+  <button class="act" id="bAuthLogin">Masuk</button>
+  <button class="act" id="bAuthRegister">Daftar</button>
+  <button class="act" id="bAuthLogout">Keluar</button>
 </div>
 
 <main>
@@ -301,6 +311,7 @@ h2{font-size:12px;font-weight:600;color:var(--dim);letter-spacing:.3px;margin:22
     <div class="log" id="log" aria-live="polite"></div>
   </aside>
 </main>
+<script src="auth.js"></script>
 <script src="fsm.js"></script>
 <script>
 'use strict';
@@ -321,6 +332,9 @@ $('goalIn').value = dailyGoalMl;
 $('emptyIn').value = fsm.emptyCup;
 $('fbUrlIn').value = localStorage.getItem('shc_fb_url') || '';
 $('espSsidIn').value = localStorage.getItem('shc_wifi_ssid') || '';
+$('authEmailIn').value = localStorage.getItem('shc_auth_email') || '';
+$('authKeyIn').value = localStorage.getItem('shc_api_key') || '';
+renderAuthState();
 
 function todayKey(){
   const d = new Date();
@@ -761,13 +775,61 @@ function handleSerialLine(line){
 }
 
 let cloudTimer = null, lastCloudPushMs = 0;
+
+function renderAuthState(){
+  const email = localStorage.getItem(SHC_EMAIL_KEY) || '';
+  const ok = !!shcToken();
+  $('authDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
+  $('authStatus').textContent = ok ? ('Masuk sebagai ' + email) : 'Belum masuk. Data cloud butuh akun.';
+  $('bAuthLogin').hidden = ok;
+  $('bAuthRegister').hidden = ok;
+  $('bAuthLogout').hidden = !ok;
+  $('authEmailIn').disabled = ok;
+  $('authPassIn').disabled = ok;
+  $('authKeyIn').disabled = ok;
+}
+
+async function doAuth(kind){
+  const email = ($('authEmailIn').value || '').trim();
+  const pass = $('authPassIn').value || '';
+  const key = ($('authKeyIn').value || '').trim();
+  if (!email || !pass) { $('authStatus').textContent = 'Email dan password wajib diisi.'; return; }
+  if (!key) { $('authStatus').textContent = 'Web API Key wajib diisi.'; return; }
+  localStorage.setItem('shc_api_key', key);
+  $('bAuthLogin').disabled = true;
+  $('bAuthRegister').disabled = true;
+  $('authStatus').textContent = 'Menghubungi Firebase...';
+  try {
+    await (kind === 'register' ? shcRegister(email, pass) : shcLogin(email, pass));
+    $('authPassIn').value = '';
+    renderAuthState();
+    pollCloudOnce();
+  } catch (e) {
+    $('authStatus').textContent = (kind === 'register' ? 'Gagal daftar: ' : 'Gagal masuk: ') + (e.message || e);
+    $('authDot').className = 'status-dot err';
+  } finally {
+    $('bAuthLogin').disabled = false;
+    $('bAuthRegister').disabled = false;
+  }
+}
+
+$('bAuthLogin').addEventListener('click', () => doAuth('login'));
+$('bAuthRegister').addEventListener('click', () => doAuth('register'));
+
+$('bAuthLogout').addEventListener('click', () => {
+  shcLogout();
+  renderAuthState();
+  $('cloudDot').className = 'status-dot';
+  $('cloudStatus').textContent = 'Sudah keluar. Data cloud tidak bisa dibaca.';
+});
+
 function getCleanFbUrl(){
   const raw = ($('fbUrlIn').value || '').trim().replace(/\/+$/, '');
   return raw.startsWith('https://') ? raw : '';
 }
 async function pushCloudTelemetry(){
-  const url = getCleanFbUrl();
-  if (!url) return;
+  const url = shcCoasterUrl(getCleanFbUrl());
+  if (!url || !shcToken()) return;
   const now = Date.now();
   if (now - lastCloudPushMs < 3000) return;
   lastCloudPushMs = now;
@@ -789,12 +851,12 @@ async function pushCloudTelemetry(){
     muted: buzzerMuted
   }, dailyObj);
   try {
-    await fetch(url + '/smart_coaster/telemetry.json', {
+    await fetch(url + '/telemetry.json' + shcAuthSuffix(), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    await fetch(url + '/smart_coaster/daily/' + todayKey() + '.json', {
+    await fetch(url + '/daily/' + todayKey() + '.json' + shcAuthSuffix(), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dailyObj)
@@ -802,10 +864,10 @@ async function pushCloudTelemetry(){
   } catch(_){}
 }
 async function pushCloudConfig(){
-  const url = getCleanFbUrl();
-  if (!url) return;
+  const url = shcCoasterUrl(getCleanFbUrl());
+  if (!url || !shcToken()) return;
   try {
-    await fetch(url + '/smart_coaster/config.json', {
+    await fetch(url + '/config.json' + shcAuthSuffix(), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -818,14 +880,20 @@ async function pushCloudConfig(){
   } catch(_){}
 }
 async function pollCloudOnce(){
-  const url = getCleanFbUrl();
-  if (!url){
+  const base = getCleanFbUrl();
+  const url = shcCoasterUrl(base);
+  if (!base){
     $('cloudDot').className = 'status-dot err';
     $('cloudStatus').textContent = 'URL wajib diawali https://';
     return;
   }
+  if (!shcToken()){
+    $('cloudDot').className = 'status-dot err';
+    $('cloudStatus').textContent = 'Masuk dulu untuk membaca data cloud.';
+    return;
+  }
   try {
-    const res = await fetch(url + '/smart_coaster.json');
+    const res = await fetch(url + '.json' + shcAuthSuffix());
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     $('cloudDot').className = 'status-dot ok';
@@ -879,6 +947,7 @@ function setConnMode(mode){
     b.classList.toggle('on', b.dataset.mode === mode));
   $('usbDrawer').classList.toggle('show', mode === 'usb');
   $('cloudDrawer').classList.toggle('show', mode === 'cloud');
+  $('authDrawer').classList.toggle('show', mode === 'cloud');
   $('simControls').style.display = mode === 'sim' ? 'block' : 'none';
   $('warpBox').style.display = mode === 'sim' ? 'flex' : 'none';
   $('sTemp').disabled = (mode !== 'sim');
