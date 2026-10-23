@@ -41,12 +41,50 @@ function shcUid(){
   return localStorage.getItem(SHC_UID_KEY) || '';
 }
 
-// Basis node milik user yang sedang masuk. Kosong berarti belum login atau UID hilang,
-// dan pemanggil wajib berhenti: menulis ke path kosong akan ditolak rules.
+// Perangkat yang sedang dipakai akun ini. Kosong berarti belum ada tautan; pemanggil
+// wajib berhenti daripada menulis ke node milik orang lain.
+function shcDeviceUid(){
+  return localStorage.getItem('shc_device_uid') || '';
+}
+
 function shcCoasterUrl(base){
-  const uid = shcUid();
+  const uid = shcDeviceUid();
   if (!uid) return '';
   return base + '/users/' + encodeURIComponent(uid) + '/smart_coaster';
+}
+
+// Klaim kode alat: baca /claims/<kode>, lalu tulis tautan milik sendiri. Rules menolak
+// tautan kalau kode tidak menunjuk ke perangkat yang dimaksud.
+async function shcClaimDevice(base, code){
+  if (!shcToken()) throw new Error('Masuk dulu sebelum mengklaim alat.');
+  const clean = (code || '').trim().toUpperCase();
+  if (clean.length !== 8) throw new Error('Kode alat harus 8 karakter.');
+  const res = await fetch(base + '/claims/' + encodeURIComponent(clean) + '.json' + shcAuthSuffix());
+  if (!res.ok) throw new Error('Gagal membaca kode (HTTP ' + res.status + ').');
+  const deviceUid = await res.json();
+  if (!deviceUid || typeof deviceUid !== 'string') throw new Error('Kode tidak dikenali. Cek lagi di layar alat.');
+  const put = await fetch(base + '/links/' + encodeURIComponent(shcUid()) + '/' +
+      encodeURIComponent(deviceUid) + '.json' + shcAuthSuffix(), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: clean, at: Date.now() })
+  });
+  if (!put.ok) throw new Error('Gagal menautkan alat (HTTP ' + put.status + ').');
+  localStorage.setItem('shc_device_uid', deviceUid);
+  return deviceUid;
+}
+
+// Sesi bergiliran: menulis siapa yang sedang memakai. Perangkat membaca node ini dan
+// me-reset statistiknya saat nilainya berubah.
+async function shcSetSession(base, ownerUid){
+  const url = shcCoasterUrl(base);
+  if (!url || !shcToken()) return false;
+  const res = await fetch(url + '/session.json' + shcAuthSuffix(), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner: ownerUid || '', at: Date.now() })
+  });
+  return res.ok;
 }
 
 function shcApiKey(){
@@ -108,4 +146,5 @@ function shcLogout(){
   localStorage.removeItem(SHC_EMAIL_KEY);
   localStorage.removeItem(SHC_UID_KEY);
   localStorage.removeItem(SHC_REFRESH_KEY);
+  localStorage.removeItem('shc_device_uid');
 }

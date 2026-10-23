@@ -183,9 +183,16 @@ h2{font-size:12px;font-weight:600;color:var(--dim);letter-spacing:.3px;margin:22
   <input type="email" id="authEmailIn" placeholder="Email akun Firebase" aria-label="Email akun Firebase" autocomplete="username">
   <input type="password" id="authPassIn" placeholder="Password" aria-label="Password akun Firebase" autocomplete="current-password">
   <input type="text" id="authKeyIn" placeholder="Web API Key proyek Firebase" aria-label="Firebase Web API Key" autocomplete="off">
+  <input type="text" id="deviceCodeIn" placeholder="Kode alat (8 karakter)" aria-label="Kode alat" maxlength="8" autocomplete="off" style="text-transform:uppercase">
+  <button class="act" id="bClaim">Klaim Alat</button>
   <button class="act" id="bAuthLogin">Masuk</button>
   <button class="act" id="bAuthRegister">Daftar</button>
   <button class="act" id="bAuthLogout">Keluar</button>
+  <span id="sessionBox" hidden>
+    <span id="sessionLab">Sesi: belum dimulai</span>
+    <button class="act" id="bStartSession">Mulai Sesi</button>
+    <button class="act" id="bEndSession">Akhiri Sesi</button>
+  </span>
 </div>
 
 <main>
@@ -819,9 +826,61 @@ $('bAuthRegister').addEventListener('click', () => doAuth('register'));
 $('bAuthLogout').addEventListener('click', () => {
   shcLogout();
   renderAuthState();
+  $('deviceCodeIn').value = '';
   $('cloudDot').className = 'status-dot';
   $('cloudStatus').textContent = 'Sudah keluar. Data cloud tidak bisa dibaca.';
 });
+
+// Klaim alat: satu kali per perangkat. Setelah tertaut, UID perangkat disimpan lokal
+// dan semua request memakai node itu, bukan node akun sendiri.
+$('bClaim').addEventListener('click', async () => {
+  const base = getCleanFbUrl();
+  if (!base) { $('authStatus').textContent = 'Isi URL database dulu.'; return; }
+  if (!shcToken()) { $('authStatus').textContent = 'Masuk dulu sebelum mengklaim alat.'; return; }
+  $('bClaim').disabled = true;
+  $('authStatus').textContent = 'Mencari kode alat...';
+  try {
+    const uid = await shcClaimDevice(base, $('deviceCodeIn').value);
+    $('authStatus').textContent = 'Alat tertaut. Node: ' + uid.slice(0, 8) + '...';
+    $('deviceCodeIn').value = '';
+    renderSessionState();
+    pollCloudOnce();
+  } catch (e) {
+    $('authStatus').textContent = 'Gagal klaim: ' + (e.message || e);
+  } finally {
+    $('bClaim').disabled = false;
+  }
+});
+
+// Sesi bergiliran. Perangkat me-reset statistiknya saat nilai owner berubah, jadi
+// mulai dan akhiri sesi cukup menulis satu field.
+async function startSession(){
+  const base = getCleanFbUrl();
+  if (!base || !shcDeviceUid()) return;
+  const ok = await shcSetSession(base, shcUid());
+  if (ok) {
+    fsm.resetStats();
+    saveTodayStatsToHistory();
+    $('sessionLab').textContent = 'Sesi: ' + (localStorage.getItem('shc_auth_email') || 'kamu');
+    render();
+  }
+}
+async function endSession(){
+  const base = getCleanFbUrl();
+  if (!base || !shcDeviceUid()) return;
+  await shcSetSession(base, '');
+  $('sessionLab').textContent = 'Sesi: belum dimulai';
+}
+
+function renderSessionState(){
+  const has = !!shcDeviceUid();
+  $('sessionBox').hidden = !has;
+  $('bClaim').hidden = has;
+  $('deviceCodeIn').hidden = has;
+  if (has) $('sessionLab').textContent = 'Sesi: belum dimulai';
+}
+$('bStartSession').addEventListener('click', startSession);
+$('bEndSession').addEventListener('click', endSession);
 
 function getCleanFbUrl(){
   const raw = ($('fbUrlIn').value || '').trim().replace(/\/+$/, '');
@@ -893,13 +952,20 @@ async function pollCloudOnce(){
     return;
   }
   try {
-    const res = await fetch(url + '.json' + shcAuthSuffix());
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    // Hanya dua node kecil. Sebelumnya seluruh /smart_coaster ditarik tiap 2,5 detik,
+    // termasuk daily/<tanggal> yang tumbuh tanpa batas: kuota RTDB gratis 10 GB/bulan
+    // bisa habis hanya dari satu tab yang dibiarkan terbuka.
+    const [resT, resC] = await Promise.all([
+      fetch(url + '/telemetry.json' + shcAuthSuffix()),
+      fetch(url + '/config.json' + shcAuthSuffix())
+    ]);
+    if (!resT.ok) throw new Error('HTTP ' + resT.status);
+    const t = await resT.json();
+    const cfgRemote = resC.ok ? await resC.json() : null;
     $('cloudDot').className = 'status-dot ok';
     $('cloudStatus').textContent = 'Cloud sinkron (' + new Date().toLocaleTimeString('id-ID') + ')';
-    if (data && data.telemetry){
-      const t = data.telemetry;
+    if (cfgRemote && typeof cfgRemote.muted === 'boolean') buzzerMuted = cfgRemote.muted;
+    if (t){
       const prevSt = fsm.stateString;
       weight = +(t.weight_g || 0);
       liveWaterMl = +(t.water_ml || 0);

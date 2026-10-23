@@ -1,9 +1,40 @@
 {
   "rules": {
+    "claims": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists() && newData.isString() && newData.val() === auth.uid",
+        ".validate": "newData.isString() && newData.val().length < 64"
+      }
+    },
+    "links": {
+      "$ownerUid": {
+        "$deviceUid": {
+          ".read": "auth != null && auth.uid === $ownerUid",
+          ".write": "auth != null && auth.uid === $ownerUid && root.child('claims/'+newData.child('code').val()).val() === $deviceUid",
+          ".validate": "newData.hasChildren(['code'])"
+        }
+      }
+    },
     "users": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        "smart_coaster": {
+          ".read": "auth != null && (auth.uid === $uid || root.child('links/'+auth.uid+'/'+$uid).exists())",
+          "telemetry": {
+            ".write": "auth != null && (auth.uid === $uid || root.child('links/'+auth.uid+'/'+$uid).exists())"
+          },
+          "config": {
+            ".write": "auth != null && (auth.uid === $uid || root.child('links/'+auth.uid+'/'+$uid).exists())"
+          },
+          "daily": {
+            "$date": {
+              ".write": "auth != null && (auth.uid === $uid || root.child('links/'+auth.uid+'/'+$uid).exists())"
+            }
+          },
+          "session": {
+            ".write": "auth != null && (auth.uid === $uid || (root.child('links/'+auth.uid+'/'+$uid).exists() && newData.child('owner').val() === auth.uid))"
+          }
+        }
       }
     }
   }

@@ -43,6 +43,9 @@ static String activeUserPassword = FIREBASE_USER_PASSWORD;
 static String idToken = "";
 static String activeUid = "";
 static String refreshToken = "";
+static String claimCode = "";
+static bool claimPublished = false;
+static char sessionOwner[40] = "";
 static uint32_t tokenExpiryMs = 0;
 
 // Toko token di NVS supaya boot ulang tidak perlu login lagi. Token Firebase berlaku
@@ -170,6 +173,42 @@ static float extractJsonFloat(const String& s, const char* key, float fallback) 
     return s.substring(colon + 1).toFloat();
 }
 
+
+// Kode klaim: 8 karakter dari alfabet tanpa huruf mirip (0/O, 1/I/L). Dibuat sekali,
+// disimpan di NVS, lalu ditulis ke /claims/<kode> supaya pemilik bisa menautkan alat
+// ini ke akunnya. Kode TIDAK boleh sama dengan UID: UID bukan rahasia.
+static String makeClaimCode() {
+    static const char AB[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    String out;
+    out.reserve(8);
+    for (int i = 0; i < 8; i++) out += AB[esp_random() % 31];
+    return out;
+}
+
+// Tulis /claims/<kode> = UID perangkat. Rules hanya mengizinkan penulisan sekali dan
+// hanya kalau nilainya UID si penulis, jadi kode tidak bisa dipalsukan orang lain.
+static bool publishClaimCode() {
+    if (claimCode.length() == 0 || activeUid.length() == 0) return false;
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    String url = activeFirebaseUrl + "/claims/" + claimCode + ".json" + authSuffix();
+    if (!http.begin(client, url)) return false;
+    http.addHeader("Content-Type", "application/json");
+    int code = http.PUT("\"" + activeUid + "\"");
+    http.end();
+    if (code == 200) {
+        Serial.printf("[CLOUD] Kode klaim: %s\n", claimCode.c_str());
+        Preferences prefs;
+        prefs.begin("shc", false);
+        prefs.putBool("claimDone", true);
+        prefs.end();
+        return true;
+    }
+    Serial.printf("[CLOUD] Gagal publikasi kode klaim (HTTP %d).\n", code);
+    return false;
+}
+
 static void cloudTask(void*) {
     char lastState[20] = "";
     uint32_t lastPushMs = 0;
@@ -190,6 +229,10 @@ static void cloudTask(void*) {
         portENTER_CRITICAL(&snapMux);
         local = snap;
         portEXIT_CRITICAL(&snapMux);
+
+        if (!claimPublished) {
+            claimPublished = publishClaimCode();
+        }
 
         bool stateChanged = strncmp(local.stateStr, lastState, sizeof(lastState)) != 0;
         if (stateChanged || (now - lastPushMs >= 5000UL)) {
@@ -251,6 +294,33 @@ static void cloudTask(void*) {
                 }
             }
             http.end();
+
+            // Sesi bergiliran: web menulis session.owner. Begitu nilainya berbeda dari
+            // pemilik terakhir, statistik di-reset supaya orang berikutnya tidak mewarisi
+            // angka orang sebelumnya.
+            WiFiClientSecure sessClient;
+            sessClient.setInsecure();
+            HTTPClient sessHttp;
+            String sessUrl = userNode() + "/session.json" + authSuffix();
+            if (sessHttp.begin(sessClient, sessUrl) && sessHttp.GET() == 200) {
+                String sess = sessHttp.getString();
+                int oi = sess.indexOf("\"owner\":\"");
+                if (oi >= 0) {
+                    oi += 9;
+                    int oe = sess.indexOf('"', oi);
+                    if (oe > oi) {
+                        String owner = sess.substring(oi, oe);
+                        if (owner.length() > 0 && strncmp(owner.c_str(), sessionOwner, sizeof(sessionOwner)) != 0) {
+                            strncpy(sessionOwner, owner.c_str(), sizeof(sessionOwner) - 1);
+                            sessionOwner[sizeof(sessionOwner) - 1] = '\0';
+                            fsm.resetDailyStats();
+                            saveStatsToNvs();
+                            Serial.printf("[CLOUD] Sesi baru untuk %.8s..., statistik di-reset.\n", owner.c_str());
+                        }
+                    }
+                }
+            }
+            sessHttp.end();
         }
 
         vTaskDelay(pdMS_TO_TICKS(250));
@@ -280,10 +350,20 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     idToken = prefs.getString("idToken", "");
     activeUid = prefs.getString("uid", "");
     refreshToken = prefs.getString("refreshToken", "");
+    claimCode = prefs.getString("claimCode", "");
+    claimPublished = false;
+    if (claimCode.length() == 0) {
+        claimCode = makeClaimCode();
+        Preferences w;
+        w.begin("shc", false);
+        w.putString("claimCode", claimCode);
+        w.end();
+    }
     // millis() ulang dari nol setiap boot, jadi cap kedaluwarsa dari boot sebelumnya
     // tidak bisa dipercaya. Set 0 supaya ensureToken() memaksa perpanjangan/login awal.
     tokenExpiryMs = 0;
     prefs.end();
+    Serial.printf("[CLOUD] Kode klaim alat: %s\n", claimCode.c_str());
     startCloudIfNeeded();
 }
 

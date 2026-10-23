@@ -69,7 +69,10 @@ void loadFromNvs(String& outSsid, String& outPass, String& outUrl) {
     prefs.begin("shc", true);
     float emptyCup = prefs.getFloat("emptyCup", DEFAULT_EMPTY_CUP_G);
     customBaseIntervalMs = prefs.getULong("baseMs", BASE_INTERVAL_MS);
-    demoMode = prefs.getBool("demo", true);
+    // Default false: alat baru harus memakai interval normal 30 menit. Mode demo 15 detik
+    // hanya dipakai saat presentasi, dan dulu default-nya true sehingga alat yang baru
+    // di-flash langsung berperilaku seperti demo.
+    demoMode = prefs.getBool("demo", false);
     autoDhtTimerMode = prefs.getBool("autoDht", true);
     buzzerMuted = prefs.getBool("muted", false);
 
