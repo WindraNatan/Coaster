@@ -45,6 +45,7 @@ static String activeUid = "";
 static String refreshToken = "";
 static String claimCode = "";
 static bool claimPublished = false;
+static uint32_t claimRetryAfterMs = 0;
 static char sessionOwner[40] = "";
 static uint32_t tokenExpiryMs = 0;
 
@@ -52,6 +53,28 @@ static uint32_t tokenExpiryMs = 0;
 // 1 jam; kalau sisa waktunya di bawah 5 menit, ambil yang baru.
 static const uint32_t TOKEN_MARGIN_MS = 300000UL;
 static const uint32_t TOKEN_TTL_MS = 3600000UL;
+
+// Password boleh berisi kutip ganda, backslash, atau karakter kontrol (tempelan dari
+// password manager). Tanpa escape, body JSON rusak dan login gagal dengan HTTP 400.
+// ponytail: hanya 4 karakter ini yang di-escape. Nama pengguna/password adalah input
+// operator lewat serial, bukan data pengguna lain. Kalau kelak ada jalur input lain
+// (mis. halaman konfigurasi), ganti dengan encoder JSON penuh.
+static String jsonEscape(const String& s) {
+    String out;
+    out.reserve(s.length() + 8);
+    for (size_t i = 0; i < s.length(); i++) {
+        char c = s[i];
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:   out += c;
+        }
+    }
+    return out;
+}
 
 static bool firebaseLogin() {
     if (activeApiKey.length() == 0 || activeUserEmail.length() == 0) return false;
@@ -61,8 +84,8 @@ static bool firebaseLogin() {
     String url = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + activeApiKey;
     if (!http.begin(client, url)) return false;
     http.addHeader("Content-Type", "application/json");
-    String body = "{\"email\":\"" + activeUserEmail + "\",\"password\":\"" + activeUserPassword +
-                  "\",\"returnSecureToken\":true}";
+    String body = "{\"email\":\"" + jsonEscape(activeUserEmail) + "\",\"password\":\"" +
+                  jsonEscape(activeUserPassword) + "\",\"returnSecureToken\":true}";
     int code = http.POST(body);
     if (code != 200) {
         Serial.printf("[CLOUD] Login gagal (HTTP %d). Cek API key, email, dan password.\n", code);
@@ -96,7 +119,6 @@ static bool firebaseLogin() {
     prefs.putString("idToken", idToken);
     prefs.putString("uid", activeUid);
     prefs.putString("refreshToken", refreshToken);
-    prefs.putULong("idTokenExp", TOKEN_TTL_MS - TOKEN_MARGIN_MS);
     prefs.end();
     Serial.printf("[CLOUD] Login OK, token %u karakter.\n", idToken.length());
     return true;
@@ -134,7 +156,6 @@ static bool firebaseRefresh() {
     prefs.begin("shc", false);
     prefs.putString("idToken", idToken);
     prefs.putString("refreshToken", refreshToken);
-    prefs.putULong("idTokenExp", TOKEN_TTL_MS - TOKEN_MARGIN_MS);
     prefs.end();
     return true;
 }
@@ -164,6 +185,7 @@ extern uint32_t customBaseIntervalMs;
 extern CoasterFSM fsm;
 extern void updateAdaptiveInterval();
 extern void saveConfigToNvs();
+extern void saveStatsToNvs();
 
 static float extractJsonFloat(const String& s, const char* key, float fallback) {
     int idx = s.indexOf(key);
@@ -230,8 +252,11 @@ static void cloudTask(void*) {
         local = snap;
         portEXIT_CRITICAL(&snapMux);
 
-        if (!claimPublished) {
+        if (!claimPublished && (int32_t)(now - claimRetryAfterMs) >= 0) {
+            // Aturan RTDB menolak PUT kedua selamanya. Gagal sekali = jangan
+            // coba lagi tiap 250 ms; mundur satu jam.
             claimPublished = publishClaimCode();
+            if (!claimPublished) claimRetryAfterMs = now + 3600000UL;
         }
 
         bool stateChanged = strncmp(local.stateStr, lastState, sizeof(lastState)) != 0;
@@ -313,6 +338,10 @@ static void cloudTask(void*) {
                         if (owner.length() > 0 && strncmp(owner.c_str(), sessionOwner, sizeof(sessionOwner)) != 0) {
                             strncpy(sessionOwner, owner.c_str(), sizeof(sessionOwner) - 1);
                             sessionOwner[sizeof(sessionOwner) - 1] = '\0';
+                            Preferences sp;
+                            sp.begin("shc", false);
+                            sp.putString("sessionOwner", sessionOwner);
+                            sp.end();
                             fsm.resetDailyStats();
                             saveStatsToNvs();
                             Serial.printf("[CLOUD] Sesi baru untuk %.8s..., statistik di-reset.\n", owner.c_str());
@@ -351,7 +380,14 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     activeUid = prefs.getString("uid", "");
     refreshToken = prefs.getString("refreshToken", "");
     claimCode = prefs.getString("claimCode", "");
-    claimPublished = false;
+    // NVS: tanpa ini sessionOwner kembali kosong tiap boot, RTDB masih menyimpan
+    // pemilik lama, dan resetDailyStats() jalan setiap reboot (data harian hilang).
+    String savedOwner = prefs.getString("sessionOwner", "");
+    strncpy(sessionOwner, savedOwner.c_str(), sizeof(sessionOwner) - 1);
+    sessionOwner[sizeof(sessionOwner) - 1] = '\0';
+    // Aturan RTDB menolak penulisan kode klaim kedua; setelah berhasil sekali,
+    // jangan PUT lagi (dulu retry 250 ms terus dan membakar kuota).
+    claimPublished = prefs.getBool("claimDone", false);
     if (claimCode.length() == 0) {
         claimCode = makeClaimCode();
         Preferences w;
