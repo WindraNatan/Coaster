@@ -20,10 +20,14 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--disp);min-height:100dvh;overflow-x:hidden}
 button,input{font:inherit;touch-action:manipulation}
-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-  padding:16px 24px;border-bottom:1px solid var(--line)}
-h1{font-size:18px;font-weight:700;letter-spacing:.2px;margin-right:auto}
-h1 span{color:var(--water)}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 24px;border-bottom:1px solid var(--line)}
+/* Di bawah 920 px header jadi satu baris: judul boleh terpotong, kontrol tidak. */
+h1{font-size:16px;font-weight:700;letter-spacing:.2px;margin-right:auto;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.slider-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between}
+.slider-row .slider-cap{flex:1 1 200px;min-width:0}
+.sim-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .conn-bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .conn-pill{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;
   border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;min-height:36px}
@@ -42,28 +46,31 @@ h1 span{color:var(--water)}
 .conn-drawer.show{display:flex}
 .conn-drawer input{flex:1 1 180px;background:var(--bg);border:1px solid var(--line);color:var(--ink);
   font-family:var(--mono);font-size:12px;padding:7px 10px;border-radius:6px;min-height:36px}
+.auth-form{display:contents}
+/* Kontrol nonaktif harus terbaca nonaktif, bukan sekadar tak bisa digeser. */
+input:disabled,.conn-drawer input:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
+.adaptive-note{display:none;font-size:11px;color:var(--dim);margin-top:8px;line-height:1.5}
+.adaptive-note.show{display:block}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
 .status-dot.ok{background:var(--ok)}
 .status-dot.err{background:var(--alarm)}
 
+/* Status, stage, dan kontrol. Di desktop status+kontrol menumpuk di kolom kanan;
+   di layar sempit status tampil lebih dulu karena DOM-nya memang di depan. */
 main{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,450px);gap:0;
+  grid-template-areas:"stage status" "stage tele";grid-template-rows:auto 1fr;
   max-width:1160px;margin:0 auto;min-height:calc(100dvh - 69px)}
-.stage{padding:24px 28px;border-right:1px solid var(--line);min-width:0}
-.tele{padding:24px 28px;background:var(--panel2);min-width:0}
+.status{grid-area:status;padding:24px 28px 0;background:var(--panel2);min-width:0}
+.stage{grid-area:stage;padding:24px 28px;border-right:1px solid var(--line);min-width:0}
+.tele{grid-area:tele;padding:0 28px 24px;background:var(--panel2);min-width:0}
 @media(max-width:920px){
-  main{grid-template-columns:1fr}
+  main{grid-template-columns:1fr;grid-template-areas:"status" "stage" "tele";grid-template-rows:auto}
   .stage{border-right:none;border-bottom:1px solid var(--line);padding:20px 18px}
-  .tele{padding:20px 18px}
-  header{padding:14px 18px}
+  .status{padding:18px 18px 0}
+  .tele{padding:0 18px 20px}
+  header{padding:12px 18px}
+  .h1-sub{display:none}
 }
-@media(pointer:coarse){
-  button.act,.conn-pill,.warp button,.cfg-row input,
-  .fold summary,.foot a{min-height:44px}
-  .fold summary{display:flex;align-items:center}
-  .foot a{display:inline-flex;align-items:center;padding-block:8px}
-  input[type=range]{height:44px;padding-block:8px}
-}
-
 .stage-top{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;min-width:0}
 .glass-box{flex:0 0 130px}
 .gram{font-size:38px;font-weight:700;font-family:var(--mono);line-height:1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -156,24 +163,26 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 .foot a{color:var(--water);text-decoration:underline;text-underline-offset:2px;
   display:inline-block;padding-block:4px}
 @media (prefers-reduced-motion: reduce){.badge.alert{animation:none}}
+
+/* Target sentuh wajib menang atas aturan dasar di atasnya, jadi blok ini paling akhir. */
+@media(pointer:coarse){
+  button.act,.conn-pill,.warp button,.cfg-row input,
+  .fold summary,.foot a{min-height:44px}
+  .fold summary{display:flex;align-items:center}
+  .foot a{display:inline-flex;align-items:center;padding-block:8px}
+  input[type=range]{height:44px;padding-block:8px}
+}
 </style>
 </head>
 <body>
 <header>
-  <h1>Smart Hydration Coaster <span>·</span> Kendali &amp; IoT</h1>
+  <h1>Smart Hydration Coaster<span class="h1-sub"> · Kendali &amp; IoT</span></h1>
   <div class="conn-bar" role="group" aria-label="Mode koneksi perangkat">
     <button class="conn-pill on" data-mode="sim" id="mSim">Simulator</button>
     <button class="conn-pill" data-mode="usb" id="mUsb">USB Live</button>
     <button class="conn-pill" data-mode="cloud" id="mCloud">Cloud Firebase</button>
     <button class="act" id="bNotif" title="Aktifkan notifikasi browser dan getar">Notifikasi: OFF</button>
     <button class="act" id="bInstall" style="display:none">Install App</button>
-  </div>
-  <div class="clock">T+<b id="simClock">00:00</b></div>
-  <div class="warp" id="warpBox" role="group" aria-label="Percepatan waktu simulasi">
-    <button data-warp="1" class="on">x1</button>
-    <button data-warp="10">x10</button>
-    <button data-warp="60">x60</button>
-    <button data-warp="600">x600</button>
   </div>
 </header>
 
@@ -195,13 +204,15 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 
 <div class="conn-drawer" id="authDrawer">
   <span><i class="status-dot" id="authDot"></i><span id="authStatus">Belum masuk. Data cloud butuh akun.</span></span>
-  <input type="email" id="authEmailIn" placeholder="Email akun Firebase" aria-label="Email akun Firebase" autocomplete="username">
-  <input type="password" id="authPassIn" placeholder="Password" aria-label="Password akun Firebase" autocomplete="current-password">
-  <input type="text" id="authKeyIn" placeholder="Web API Key proyek Firebase" aria-label="Firebase Web API Key" autocomplete="off">
-  <input type="text" id="deviceCodeIn" placeholder="Kode alat (8 karakter)" aria-label="Kode alat" maxlength="8" autocomplete="off" style="text-transform:uppercase">
-  <button class="act" id="bClaim">Klaim Alat</button>
-  <button class="act" id="bAuthLogin">Masuk</button>
-  <button class="act" id="bAuthRegister">Daftar</button>
+  <form class="auth-form" id="authForm" novalidate>
+    <input type="email" id="authEmailIn" placeholder="Email akun Firebase" aria-label="Email akun Firebase" autocomplete="username">
+    <input type="password" id="authPassIn" placeholder="Password" aria-label="Password akun Firebase" autocomplete="current-password">
+    <input type="text" id="authKeyIn" placeholder="Web API Key proyek Firebase" aria-label="Firebase Web API Key" autocomplete="off">
+    <input type="text" id="deviceCodeIn" placeholder="Kode alat (8 karakter)" aria-label="Kode alat" maxlength="8" autocomplete="off" style="text-transform:uppercase">
+    <button class="act" id="bClaim" type="button">Klaim Alat</button>
+    <button class="act" id="bAuthLogin" type="submit">Masuk</button>
+    <button class="act" id="bAuthRegister" type="button">Daftar</button>
+  </form>
   <button class="act" id="bAuthLogout">Keluar</button>
   <span id="sessionBox" hidden>
     <span id="sessionLab">Sesi: belum dimulai</span>
@@ -211,6 +222,29 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 </div>
 
 <main>
+  <section class="status" aria-label="Status alat">
+    <div class="badge st-IDLE" id="badge" role="status" aria-live="polite" aria-atomic="true">
+      <div class="nm" id="stName">IDLE</div>
+      <div class="why" id="stWhy"></div>
+      <div class="count">sisa waktu <b id="cd">--:--</b></div>
+    </div>
+
+    <div class="goal-box">
+      <div class="goal-head">
+        <span>Progres target harian</span>
+        <b><span id="goalPct">0</span>% (<span id="goalCur">0</span> / <span id="goalMax">2000</span> ml)</b>
+      </div>
+      <div class="goal-bar" aria-hidden="true"><i id="goalFill"></i></div>
+    </div>
+
+    <div class="counts">
+      <div><b id="cDrink">0</b><span>minum (x)</span></div>
+      <div><b id="cCheat">0</b><span>curang</span></div>
+      <div><b id="cRefill">0</b><span>isi ulang</span></div>
+      <div><b id="cTotal">0</b><span>total ml</span></div>
+    </div>
+  </section>
+
   <section class="stage">
     <div class="stage-top">
       <div class="glass-box">
@@ -238,7 +272,18 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
     <div id="simControls">
       <input type="range" id="wSlider" min="0" max="500" step="1" value="0"
              aria-label="Berat di tatakan (gram)">
-      <div class="slider-cap"><span>0 g (diangkat)</span><span>berat aktual di tatakan</span><span>500 g</span></div>
+      <div class="slider-row">
+        <div class="slider-cap"><span>0 g (diangkat)</span><span>berat aktual di tatakan</span><span>500 g</span></div>
+        <div class="sim-tools">
+          <span class="clock">T+<b id="simClock">00:00</b></span>
+          <div class="warp" id="warpBox" role="group" aria-label="Percepatan waktu simulasi">
+            <button data-warp="1" class="on">x1</button>
+            <button data-warp="10">x10</button>
+            <button data-warp="60">x60</button>
+            <button data-warp="600">x600</button>
+          </div>
+        </div>
+      </div>
       <div class="actions">
         <button class="act" id="bLift">Angkat gelas</button>
         <button class="act" id="bPlace">Taruh kembali</button>
@@ -274,27 +319,6 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
   </section>
 
   <aside class="tele">
-    <div class="badge st-IDLE" id="badge">
-      <div class="nm" id="stName">IDLE</div>
-      <div class="why" id="stWhy"></div>
-      <div class="count">sisa waktu <b id="cd">--:--</b></div>
-    </div>
-
-    <div class="goal-box">
-      <div class="goal-head">
-        <span>Progres target harian</span>
-        <b><span id="goalPct">0</span>% (<span id="goalCur">0</span> / <span id="goalMax">2000</span> ml)</b>
-      </div>
-      <div class="goal-bar" aria-hidden="true"><i id="goalFill"></i></div>
-    </div>
-
-    <div class="counts">
-      <div><b id="cDrink">0</b><span>minum (x)</span></div>
-      <div><b id="cCheat">0</b><span>curang</span></div>
-      <div><b id="cRefill">0</b><span>isi ulang</span></div>
-      <div><b id="cTotal">0</b><span>total ml</span></div>
-    </div>
-
     <div class="adaptive">
       <div>Target interval: <b id="interval">--</b></div>
       <div id="intervalWhy" style="margin-top:2px"></div>
@@ -302,6 +326,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
       <input type="range" id="sTemp" min="18" max="40" step="0.5" value="27">
       <label for="sHum"><span>Kelembapan relatif (RH)</span><span id="tHum">60 %</span></label>
       <input type="range" id="sHum" min="20" max="95" step="1" value="60">
+      <p class="adaptive-note" id="adaptiveNote">Suhu dan kelembapan dibaca dari DHT11 alat; penggeser ini hanya untuk simulasi.</p>
     </div>
 
     <div class="cfg-grid">
@@ -382,6 +407,10 @@ function saveTodayStatsToHistory(){
     refill_count: fsm.refillCount,
     cheat_count: fsm.cheatCount
   };
+  // localStorage dibatasi ~5 MB; satu kunci per hari tanpa batas atas akan
+  // menumpuk selamanya. Yang ditampilkan hanya 5 hari terakhir.
+  const keys = Object.keys(hist).sort().reverse();
+  if (keys.length > 30) keys.slice(30).forEach(old => { delete hist[old]; });
   localStorage.setItem('shc_daily_history', JSON.stringify(hist));
   renderHistoryList(hist);
 }
@@ -846,7 +875,9 @@ async function doAuth(kind){
   }
 }
 
-$('bAuthLogin').addEventListener('click', () => doAuth('login'));
+// Enter di field mana pun mengirim form ini sebagai "Masuk"; tombol Daftar
+// punya type="button" supaya tidak ikut terkirim.
+$('authForm').addEventListener('submit', e => { e.preventDefault(); doAuth('login'); });
 $('bAuthRegister').addEventListener('click', () => doAuth('register'));
 
 $('bAuthLogout').addEventListener('click', () => {
@@ -885,8 +916,10 @@ async function startSession(){
   if (!base || !shcDeviceUid()) return;
   const ok = await shcSetSession(base, shcUid());
   if (ok) {
-    fsm.resetStats();
+    // Sama seperti bReset: simpan dulu ke riwayat, baru reset. Urutan sebaliknya
+    // menulis nol ke entri hari ini dan menghapus catatan pagi sampai siang.
     saveTodayStatsToHistory();
+    fsm.resetStats();
     $('sessionLab').textContent = 'Sesi: ' + (localStorage.getItem('shc_auth_email') || 'kamu');
     render();
   }
@@ -913,6 +946,9 @@ function getCleanFbUrl(){
   return raw.startsWith('https://') ? raw : '';
 }
 async function pushCloudTelemetry(){
+  // Simulator tidak boleh menulis ke alat nyata: dulu klik tombol panel di mode
+  // Simulator mengirim PATCH telemetry berisi nol ke node perangkat.
+  if (connMode === 'sim') return;
   const url = shcCoasterUrl(getCleanFbUrl());
   if (!url || !await shcEnsureToken()) return;
   const now = Date.now();
@@ -949,6 +985,8 @@ async function pushCloudTelemetry(){
   } catch(_){}
 }
 async function pushCloudConfig(){
+  // Sama seperti pushCloudTelemetry: mode Simulator tidak mengubah config alat nyata.
+  if (connMode === 'sim') return;
   const url = shcCoasterUrl(getCleanFbUrl());
   if (!url || !await shcEnsureToken()) return;
   try {
@@ -1041,9 +1079,9 @@ function setConnMode(mode){
   $('cloudDrawer').classList.toggle('show', mode === 'cloud');
   $('authDrawer').classList.toggle('show', mode === 'cloud');
   $('simControls').style.display = mode === 'sim' ? 'block' : 'none';
-  $('warpBox').style.display = mode === 'sim' ? 'flex' : 'none';
   $('sTemp').disabled = (mode !== 'sim');
   $('sHum').disabled = (mode !== 'sim');
+  $('adaptiveNote').classList.toggle('show', mode !== 'sim');
   if (cloudTimer){ clearInterval(cloudTimer); cloudTimer = null; }
   if (mode === 'cloud'){
     if (getCleanFbUrl()) pollCloudOnce();
@@ -1067,7 +1105,11 @@ function render(){
   const w = weight, st = fsm.stateString;
   const badge = $('badge');
   badge.className = 'badge st-' + fsm.state + (fsm.alertActive ? ' alert' : '');
-  $('stName').textContent = st.replace('ALERT_', 'ALERT ');
+  // ALERT_EMPTY_CUP / ALERT_MISSING_CUP hanya turunan flag dari ALERT_REFILL
+  // (CLAUDE.md §3); pembedanya sudah ada di #stWhy.
+  $('stName').textContent = st === 'ALERT_EMPTY_CUP' || st === 'ALERT_MISSING_CUP'
+    ? 'ALERT REFILL'
+    : st.replace('ALERT_', 'ALERT ');
   $('stWhy').textContent = {
     IDLE: 'taruh gelas untuk mulai',
     STABLE: 'menunggu berat stabil 1,5 s',

@@ -11,7 +11,7 @@ const CFG = {
   // sekian lama. Kembali ke baseline pra-isi-ulang dalam batas ini = pola
   // tekan-lepas gelas (load cell tak bisa membedakannya dari tuangan).
   CONFIRM_MS:5000,
-  DEMO_INTERVAL:15000, BASE_INTERVAL:1800000,
+  DEMO_INTERVAL:15000,
   DEMO_MAX_LIFT:10000, MAX_LIFT:180000,
   TEMP_COLD:18.0, TEMP_NORM:26.0, TEMP_HOT:34.0,
   K_COLD:1.20, K_NORM:1.00, K_HOT:0.50,

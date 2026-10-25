@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shc-pwa-v6';
+const CACHE_NAME = 'shc-pwa-v7';
 const ASSETS = ['./', './index.html', './auth.js', './fsm.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
