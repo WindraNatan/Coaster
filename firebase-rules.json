@@ -11,8 +11,8 @@
       "$ownerUid": {
         "$deviceUid": {
           ".read": "auth != null && auth.uid === $ownerUid",
-          ".write": "auth != null && auth.uid === $ownerUid && root.child('claims/'+newData.child('code').val()).val() === $deviceUid",
-          ".validate": "newData.hasChildren(['code'])"
+          ".write": "auth != null && auth.uid === $ownerUid && (newData.child('code').val() === null || root.child('claims/'+newData.child('code').val()).val() === $deviceUid)",
+          ".validate": "newData.hasChildren(['code']) || !newData.exists()"
         }
       }
     },
@@ -32,7 +32,7 @@
             }
           },
           "session": {
-            ".write": "auth != null && (auth.uid === $uid || (root.child('links/'+auth.uid+'/'+$uid).exists() && newData.child('owner').val() === auth.uid))"
+            ".write": "auth != null && (auth.uid === $uid || (root.child('links/'+auth.uid+'/'+$uid).exists() && (newData.child('owner').val() === auth.uid || !newData.child('owner').exists() || newData.child('owner').val() === '')))"
           }
         }
       }

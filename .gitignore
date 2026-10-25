@@ -13,6 +13,7 @@ __pycache__/
 /app/.dart_tool/
 /app/.idea/
 /app/android/.gradle/
+/app/android/.kotlin/
 /app/android/local.properties
 /app/.flutter-plugins
 /app/.flutter-plugins-dependencies
