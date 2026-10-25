@@ -78,7 +78,7 @@ class AuthSession {
 
   String get suffix => token.isEmpty ? '' : '?auth=${Uri.encodeComponent(token)}';
 
-  /// Node milik akun ini. Rules menolak akses ke /users/<uid> milik orang lain.
+  /// Node milik akun ini. Rules menolak akses ke `/users/<uid>` milik orang lain.
   String coasterUrl(String base) =>
       '$base/users/${Uri.encodeComponent(uid)}/smart_coaster';
 }

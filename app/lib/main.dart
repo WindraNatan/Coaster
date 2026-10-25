@@ -442,17 +442,19 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
       }
     } catch (e) {
-      // Token satu jam bisa habis saat aplikasi dibiarkan terbuka. Coba perpanjang
-      // sekali; kalau berhasil, poll berikutnya lanjut normal tanpa ganggu pengguna.
-      final renewed = await refreshSession(_session);
       if (!mounted) return;
-      if (renewed == null) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
-      } else {
-        setState(() => _session = renewed);
+      // Error asli tampil dulu. Perpanjangan token hanya upaya lanjutan: kalau
+      // gagal (jaringan putus, atau plugin prefs tidak ada di test), pengguna
+      // tetap melihat penyebab sebenarnya, bukan dashboard basi tanpa pesan.
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+      try {
+        final renewed = await refreshSession(_session, client: _client);
+        if (renewed != null && mounted) setState(() => _session = renewed);
+      } catch (_) {
+        // perpanjangan gagal; error asli sudah ditampilkan dan timer poll mencoba lagi
       }
     } finally {
       _polling = false;
@@ -837,7 +839,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('TOTAL HARI INI', style: _monoStyle(10)),
+                // Firmware tidak punya jam (CLAUDE.md §4: tanpa NTP), jadi angkanya
+                // kumulatif sejak reset manual, bukan per hari kalender.
+                Text('TOTAL SEJAK RESET', style: _monoStyle(10)),
                 const Spacer(),
                 Text('${t.totalMl} ml',
                     style: _monoStyle(20, color: _water, weight: FontWeight.w600)),
