@@ -415,7 +415,9 @@ if (part_to_render == "front") {
     color("Silver")
         translate([mtr_x - 4.5, mtr_y - 4.5, mtr_z - mtr_can_h])
             cylinder(h = mtr_can_h, d = 9);
+    // Pin 3 keluar mendatar ke +x, ke arah header pendarat di x 21.59. Kalau dibalik
+    // ke -x, kabel harus menyeberang papan 41 mm; posisi ini hanya 11.7 mm dari header.
     color("Silver")
-        translate([mtr_x - 11.5 - mod_pin_l, mtr_y - mod_pin_span / 2, mtr_z + 0.5])
+        translate([mtr_x + 11.5, mtr_y - mod_pin_span / 2, mtr_z + 0.5])
             cube([mod_pin_l, mod_pin_span, 0.6]);
 }
