@@ -332,7 +332,7 @@ settle(f, 380, 3000)          # refill=1, tanpa isi ulang</code></pre>
   <li><code>python test_simulation.py</code>: 21 skenario lulus.</li>
   <li>Harness C++: kompilasi bersih dengan peringatan penuh, 52 pemeriksaan lulus.</li>
   <li>Regresi JS di <code>web/fsm.test.js</code>: 30 asersi lulus (4 skenario K1/K3, bernomor 18-21).</li>
-  <li><code>verify_stackup.py</code>: 59 pemeriksaan geometri lulus.</li>
+  <li><code>verify_stackup.py</code>: 59 pemeriksaan geometri lulus saat audit ditulis. Per 2026-10-25 menjadi <strong>60</strong>, setelah satu pemeriksaan arah pin motor ditambahkan.</li>
   <li>Kedua halaman: tag seimbang, JavaScript lolos pemeriksaan sintaks, tanpa error konsol selain CORS manifest saat <code>file://</code>.</li>
   <li><code>index.html</code> pada 390 px: tanpa overflow dan tanpa teks terpotong.</li>
   <li>Tidak ada cabang mati atau state tak terpakai di FSM, filter, maupun kontroler adaptif.</li>
@@ -356,6 +356,6 @@ settle(f, 380, 3000)          # refill=1, tanpa isi ulang</code></pre>
 <footer>
   <span>Smart Hydration Coaster</span>
   <span>Audit 2026-10-21</span>
-  <span>21/21 Python, 52/52 C++, 30 asersi JS, 59/59 CAD</span>
+  <span>21/21 Python, 52/52 C++, 30 asersi JS, 59/59 CAD (60/60 per 2026-10-25)</span>
 </footer>
 </div>
