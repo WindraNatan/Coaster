@@ -403,22 +403,22 @@
 
     <div class="stepper-nav">
       <button id="stepBtn0" class="step-btn active" onclick="setAssemblyStep(0)">
-        <span class="step-num">1</span> Perfboard &amp; ESP32
+        <span class="step-num">1</span> Soket ESP32
       </button>
       <button id="stepBtn1" class="step-btn" onclick="setAssemblyStep(1)">
-        <span class="step-num">2</span> 4 Header Sensor
+        <span class="step-num">2</span> Titik Solder
       </button>
       <button id="stepBtn2" class="step-btn" onclick="setAssemblyStep(2)">
-        <span class="step-num">3</span> Bus Daya &amp; GND
+        <span class="step-num">3</span> Bus Daya
       </button>
       <button id="stepBtn3" class="step-btn" onclick="setAssemblyStep(3)">
-        <span class="step-num">4</span> Jalur GPIO
+        <span class="step-num">4</span> Sinyal GPIO
       </button>
       <button id="stepBtn4" class="step-btn" onclick="setAssemblyStep(4)">
-        <span class="step-num">5</span> Pasang Buzzer &amp; DHT11
+        <span class="step-num">5</span> Modul &amp; Timbangan
       </button>
       <button id="stepBtn5" class="step-btn" onclick="setAssemblyStep(5)">
-        <span class="step-num">6</span> Sasis 28mm Selesai
+        <span class="step-num">6</span> Uji Sebelum Tutup
       </button>
     </div>
 
@@ -472,24 +472,25 @@
     </div>
 
     <div id="pin-legend-panel">
-      <strong style="color:var(--cyan); margin-bottom:2px;">Petunjuk Solder Jalur Kawat:</strong>
-      <div class="legend-row"><div class="legend-color-box" style="background:#00E5FF;"></div><span>Common GND Bus (ESP32 Pin 14)</span></div>
-      <div class="legend-row"><div class="legend-color-box" style="background:#FF4444;"></div><span>5V VIN ke Motor Getar (Pin 15 Kiri)</span></div>
-      <div class="legend-row"><div class="legend-color-box" style="background:#FFA020;"></div><span>3.3V ke DHT11, Buzzer, HX711 (Pin 15 Kanan)</span></div>
-      <div class="legend-row"><div class="legend-color-box" style="background:var(--green);"></div><span>GPIO16 ke HX711 DOUT</span></div>
-      <div class="legend-row"><div class="legend-color-box" style="background:var(--yellow);"></div><span>GPIO4 ke HX711 SCK</span></div>
-      <div class="legend-row"><div class="legend-color-box" style="background:var(--blue);"></div><span>GPIO19 ke DHT11 Data</span></div>
-      <div class="legend-row"><div class="legend-color-box" style="background:var(--purple);"></div><span>GPIO18 ke Buzzer I/O (Active-LOW)</span></div>
-      <div class="legend-row"><div class="legend-color-box" style="background:var(--orange);"></div><span>GPIO17 ke Motor IN (Active-HIGH)</span></div>
+      <strong style="color:var(--cyan); margin-bottom:2px;">Kabel: kawat kaku 0,5 mm (isi kabel UTP) untuk jalur papan, kabel lentur untuk motor</strong>
+      <div class="legend-row" style="opacity:.85;"><span style="font-weight:600; color:var(--text);">Ujung papan disolder, ujung modul pakai konektor female (bisa dicabut). Kabel timbangan tanpa konektor.</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:#00E5FF;"></div><span>Tanah (GND) — dipakai semua modul</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:#FF4444;"></div><span>5 volt — hanya untuk motor getar</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:#FFA020;"></div><span>3,3 volt — sensor dan buzzer</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--green);"></div><span>Data berat (DT) ke HX711</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--yellow);"></div><span>Detak data (SCK) ke HX711</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--blue);"></div><span>Data suhu ke DHT11</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--purple);"></div><span>Bunyi buzzer</span></div>
+      <div class="legend-row"><div class="legend-color-box" style="background:var(--orange);"></div><span>Getar motor</span></div>
     </div>
 
     <div id="info-panel">
-      <h3 id="panel-title">Langkah 1: Perfboard &amp; Soket Female Header ESP32</h3>
+      <h3 id="panel-title">Langkah 1: Perfboard 50.8x70 &amp; Soket Female ESP32</h3>
       <p id="panel-desc">
-        Siapkan papan <em>perfboard</em> cokelat 50.8x70 mm (18 kolom x 24 baris lubang). Pasang 2 baris <em>female header</em> 15-pin berjarak 22.86 mm di <strong>separuh belakang papan</strong>, mulai baris ke-9 dari depan. Port USB menghadap lurus ke lubang sasis. Modul buzzer 13 x 32 mm tidak muat melintang di sisa 18 mm depan papan, jadi dipasang memanjang di strip kiri.
+        Pakai papan bolong <strong>50,8 x 70 mm utuh, jangan dipotong</strong>. Solder dua deret soket female 15 lubang, jarak 9 lubang, di separuh belakang. ESP tidak disolder langsung supaya bisa dicabut kalau rusak. Ujung kabel disolder ke papan, ujung lain pakai konektor supaya sensor bisa dicabut.
       </p>
       <div class="info-meta">
-        <span id="panel-rule">ESP32 48.26 mm di Belakang | Buzzer 13 x 32 mm di Strip Kiri</span>
+        <span id="panel-rule">Papan 50.8x70 utuh | Soket 2x15, jarak 9 lubang | ESP tetap bisa dicabut</span>
         <span id="panel-badge" class="info-badge">Langkah 1 / 6</span>
       </div>
       <div class="step-controls">
@@ -523,54 +524,54 @@
 
     const STEP_DATA = [
       {
-        title: "Langkah 1: Perfboard & Soket Female Header ESP32",
-        desc: "Siapkan papan <em>perfboard</em> cokelat 50.8x70 mm (18 kolom x 24 baris, pitch 2.54). Pasang 2 deret <em>female header</em> 15-pin berjarak 22.86 mm (9 lubang) di separuh belakang papan. ESP32 48.26 mm menempati 19 baris; sisa 18 mm di depan tidak cukup untuk modul buzzer 32 mm, jadi modul dipasang memanjang di strip kiri.",
-        rule: "ESP32 48.26 mm di Belakang | Buzzer 13 x 32 mm di Strip Kiri",
+        title: "Langkah 1: Perfboard 50.8x70 & Soket Female ESP32",
+        desc: "Pakai papan bolong <strong>50,8 x 70 mm utuh, jangan dipotong</strong>. Ada 18 kolom dan 24 baris lubang. Solder <strong>dua deret soket, masing-masing 15 lubang</strong>, dengan <strong>jarak 9 lubang</strong> antara deret kiri dan kanan, di separuh belakang papan. Solder 4 sudut dulu, masukkan ESP, pastikan tegak, baru solder sisanya.<br><br><strong>ESP jangan disolder langsung.</strong> Kalau suatu saat rusak, harus bisa dicabut.<br><br><em>Kabel:</em> tidak ada di langkah ini.",
+        rule: "Papan 50.8x70 utuh | Soket 2x15, jarak 9 lubang | ESP tetap bisa dicabut",
         badge: "Langkah 1 / 6",
         camPos: new THREE.Vector3(0, 120, 100),
         camLook: new THREE.Vector3(0, 4, 93),
         visibleGroups: ['perfboard', 'headers_esp32']
       },
       {
-        title: "Langkah 2: Solder Header Modul Buzzer & Header Wadah Depan",
-        desc: "Solder header male pendarat jumper pada papan <em>perfboard</em>. Semua modul punya pin mendatar, jadi tidak ada modul yang disolder langsung ke papan:<br>• <strong>Header 3-Pin Buzzer</strong> di baris grid z 104.43, kolom x -16.51.<br>• <strong>Header 4-Pin HX711</strong> di baris z 71.41, x -6.35..1.27.<br>• <strong>Header 3-Pin DHT11</strong> di baris z 63.79, x 1.27..6.35 (pusat 3.81).<br>• <strong>Header 3-Pin Motor</strong> di kolom x -21.59, z 94.27..99.35.",
-        rule: "Sensor DHT11 & HX711 tinggal di wadah depan, TIDAK menjejali papan!",
+        title: "Langkah 2: Titik Solder di Papan, Konektor di Modul",
+        desc: "<strong>Hybrid:</strong> ujung kabel di <strong>papan disolder permanen</strong>, ujung di <strong>modul tetap pakai konektor female</strong> supaya sensor masih bisa dicabut.<br><br>Paparmu <strong>PY-5CM*7CM</strong>: 24 baris dan 18 kolom, dengan cetakan di tepinya. Letakkan papan seperti di foto: <strong>baris angka 01-18 di sisi dekat kamu, huruf A-X naik di sisi kanan</strong>. Maka A = baris terdekat, X = terjauh (sisi lubang USB), 01 = kolom paling kanan, 18 = paling kiri.<br><br>• <strong>DHT11</strong> — <strong>A10, A11, A12</strong><br>• <strong>HX711</strong> — <strong>D07, D08, D09, D10</strong><br>• <strong>Motor</strong> — <strong>M01, N01, O01</strong> (kolom paling kanan)<br>• <strong>Buzzer</strong> — <strong>Q02, Q03, Q04</strong><br><br>Baca persilangan huruf dan angka langsung di papan; tidak perlu menghitung lubang.<br><br>Jadi tiap jalur = satu kawat, disolder ke papan di satu ujung, dipasangi konektor female di ujung lain. Sensor tetap bisa dicabut-pasang, sambungan ke papan tidak goyang.<br><br><em>Kabel:</em> kawat kaku 0,5 mm, ambil dari kabel jaringan (UTP) bekas. Kaku itu penting: bisa dilipat tajam tanpa balik lagi.",
+        rule: "Papan: solder permanen | Modul: konektor female, bisa dicabut | Kawat kaku 0,5 mm",
         badge: "Langkah 2 / 6",
         camPos: new THREE.Vector3(0, 100, 70),
         camLook: new THREE.Vector3(0, 4, 62),
         visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors']
       },
       {
-        title: "Langkah 3: Jalur Bus Daya (5V, 3.3V) & Common GND",
-        desc: "Tarik jalur kawat di balik papan:<br>• <strong>Kawat Merah (5V VIN)</strong>: Dari pin 15 kiri ESP32 ke pin VCC motor getar.<br>• <strong>Kawat Oranye (3.3V)</strong>: Dari pin 15 kanan ESP32 dibagikan ke pin 1 modul buzzer dan header sensor wadah depan (HX711 & DHT11).<br>• <strong>Kawat Biru Muda (GND Bus)</strong>: Hubungkan pin GND ESP32 ke seluruh pin GND sensor.",
-        rule: "VCC Buzzer WAJIB 3.3V (mencegah transistor PNP bocor). Motor mengambil 5V dari VIN.",
+        title: "Langkah 3: Bus Daya 5V, 3.3V, GND (sisi bawah papan)",
+        desc: "Solder <strong>tiga jalur timah menerus</strong> di sisi bawah papan. Jangan putus di tengah: satu jalur melayani semua modul.<br><br><strong>Tabel sambungan:</strong><br>• 5V VIN -&gt; motor VCC &nbsp;<em>(hanya motor)</em><br>• 3.3V -&gt; HX711 VCC, DHT11 VCC, <strong>buzzer VCC</strong><br>• GND -&gt; HX711, DHT11, buzzer, motor<br><br><strong>VCC buzzer WAJIB 3.3V.</strong> Kalau 5V, transistor PNP S8550 tidak cut-off dan buzzer menyala terus. Motor justru butuh 5V karena emitornya ke GND.<br><br><em>Kabel:</em> kawat kaku 0,5 mm dari kabel UTP. Satu kabel UTP berisi 4 pasang, cukup untuk ketiga jalur daya.",
+        rule: "Buzzer 3.3V | Motor 5V VIN | GND satu jalur menerus",
         badge: "Langkah 3 / 6",
         camPos: new THREE.Vector3(0, 100, 70),
         camLook: new THREE.Vector3(0, 4, 62),
         visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors', 'power_bus']
       },
       {
-        title: "Langkah 4: Solder Jalur Sinyal GPIO ESP32",
-        desc: "Solder kawat sinyal dari soket ESP32 ke header pendarat jumper masing-masing:<br>• <strong>Ungu (GPIO18)</strong>: Ke pin 1 header buzzer di baris z 104.43.<br>• <strong>Biru (GPIO19)</strong>: Ke header DHT11 di baris depan z 63.79.<br>• <strong>Hijau (GPIO16) & Kuning (GPIO4)</strong>: Ke header HX711 DOUT dan SCK di baris z 71.41.<br>• <strong>Oranye (GPIO17)</strong>: Ke header Motor di kolom x -21.59.",
-        rule: "Seluruh pin sinyal GPIO 16, 4, 19, 18 berada di deret kanan ESP32 sehingga kabel solder sangat pendek dan rapi.",
+        title: "Langkah 4: Jalur Sinyal GPIO",
+        desc: "Lima jalur sinyal, semuanya dari <strong>sisi bawah papan</strong>. Potong pas panjangnya, lipat rapat sejajar papan, rekatkan lem tembak tiap 20 mm supaya tidak menggantung.<br><br><strong>Tabel GPIO:</strong><br>• GPIO16 -&gt; HX711 DT<br>• GPIO4 -&gt; HX711 SCK<br>• GPIO19 -&gt; DHT11 DATA<br>• GPIO18 -&gt; buzzer IN <em>(active-LOW)</em><br>• GPIO17 -&gt; motor IN <em>(active-HIGH)</em><br><br><em>Kabel:</em> kawat kaku 0,5 mm. Beri label selotip kertas di tiap ujung sebelum solder - setelah terpasang, warna saja tidak cukup untuk membedakan.",
+        rule: "5 jalur sinyal | Semua dari bawah papan | Lem tembak tiap 20 mm",
         badge: "Langkah 4 / 6",
         camPos: new THREE.Vector3(0, 100, 70),
         camLook: new THREE.Vector3(0, 4, 62),
         visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors', 'power_bus', 'gpio_traces']
       },
       {
-        title: "Langkah 5: Tata Letak (Buzzer di Strip Kiri Papan, DHT11 & HX711 di Wadah Depan)",
-        desc: "<strong>Tata letak yang muat secara mekanis:</strong><br>• <strong>Modul Buzzer</strong>: Memanjang 13 x 32 mm di strip kiri papan (x -23.0..-10.0, z 59.73..91.73). Can Ø12 mm di ujung depan, tepat di bawah kisi 3x3 tutup di x -16.51, z 69.73. Pin 3 keluar mendatar ke belakang; jumper ke header 104.43.<br>• <strong>Modul DHT11</strong>: 32 x 14 mm di wadah depan kanan atas piringan akrilik bawah, diputar sehingga pin 3 menghadap septum. Jumper naik lewat terowongan x -8..8, z 52..56 ke header z 63.79.<br>• <strong>Modul HX711</strong>: 34.5 x 21 mm di wadah depan kiri, header 4-pin menghadap ke luar di x -44.79..-42.25 supaya kabel keluar menjauhi batang. Tepi kanan PCB berjarak 1.40 mm dari batang. Kabel masuk terowongan septum z 52..56.<br>• <strong>Motor getar</strong>: 23 x 21 mm digantung di bawah tutup di atas kaleng RF ESP32. Header male dilepas, kabel disolder langsung ke pad lalu turun ke header papan di x -21.59.",
-        rule: "Papan 50.8x70 mm memuat ESP32 48.26 mm di separuh belakang + buzzer memanjang di strip kiri. DHT11 dan HX711 di wadah depan.",
+        title: "Langkah 5: Modul ke Tempatnya & Kabel Timbangan",
+        desc: "<strong>Buzzer</strong> memanjang di strip kanan papan, tabung bulat 12 mm tepat di bawah lubang suara tutup.<br><strong>DHT11</strong> di wadah depan kiri, di luar papan, dengan pin menghadap ke arah papan melalui terowongan kecil.<br><strong>HX711</strong> di wadah depan kanan, di luar papan. Pin 4-nya menghadap keluar, menjauhi batang.<br><strong>Motor</strong> di bawah tutup, dengan konektor female di sisi modul seperti yang lain. Header male 11.5 mm tetap dilepas, karena akan menembus shield RF; kabel disolder langsung ke pad modul, dan konektor female dipasang di ujung kabel itu.<br><br><strong>Kabel timbangan ke HX711:</strong> jangan pernah pakai konektor. Pilin berpasangan (merah dengan hijau, hitam dengan putih), lalu solder. Konektor yang bergesek mengubah hambatan dan membuat angka berat melayang-layang sendiri.<br><br><em>Kabel:</em> kabel bawaan timbangan (4 jalur, tanpa konektor, disolder langsung ke HX711) dan kabel lentur untuk motor, karena motor bergetar terus.",
+        rule: "DHT11 dan HX711 di wadah depan | Load cell dipilin lalu disolder | Motor pakai kabel lentur",
         badge: "Langkah 5 / 6",
         camPos: new THREE.Vector3(70, 80, 70),
         camLook: new THREE.Vector3(0, 8, 40),
         visibleGroups: ['perfboard', 'headers_esp32', 'headers_sensors', 'power_bus', 'gpio_traces', 'esp32_module', 'modules', 'wires', 'chassis', 'platter']
       },
       {
-        title: "Langkah 6: Perakitan Dua Part & Penutup",
-        desc: "Sasis dicetak dua part dan disatukan di seam y=56: kerah 3.5 mm part depan membungkus hidung part belakang dengan clearance 0.3 mm, lalu dikunci <strong>2 baut M3x8 horizontal</strong> di x ±47, y 58.5. Setelah itu tutup atas dipasang dengan 4 baut M3 di bahu luar tanpa menyentuh area PCB. Kompartemen belakang 28.0 mm dengan interior 23.3 mm, bibir depan 23.2 mm. Piringan akrilik atas bertumpu pada ujung bebas load cell di ketinggian 21.2 mm, puncaknya 24.2 mm atau 1.0 mm di atas bibir depan, sehingga gelas menumpu hanya pada piringan.",
-        rule: "Belakang 28.0 mm | Bibir Depan 23.2 mm | Puncak Piringan 24.2 mm",
+        title: "Langkah 6: Uji Sebelum Tutup",
+        desc: "Jangan tutup dulu sebelum empat uji ini lulus.<br><br><strong>1. Kontinuitas</strong> - multimeter: 3.3V ke GND <em>tidak</em> nyambung, 5V ke GND <em>tidak</em> nyambung. Kalau nyambung, lepas dan cari titiknya.<br><strong>2. USB Live</strong> - colok USB, buka dashboard web mode USB Live, 115200 baud.<br><strong>3. Kalibrasi</strong> - perintah <code>t</code> untuk tare, lalu <code>c</code> untuk gelas kosong.<br><strong>4. Delapan skenario</strong> - jalankan tombol skenario 1-8, semua harus hijau.<br><br>Baru setelah itu tutup dipasang dengan 4 baut M3.<br><br><em>Kabel:</em> tidak ada tambahan.",
+        rule: "Kontinuitas, USB Live, kalibrasi, 8 skenario, baru tutup",
         badge: "Langkah 6 / 6 (Selesai)",
         camPos: new THREE.Vector3(130, 140, 175),
         camLook: new THREE.Vector3(0, 11, 55),
@@ -682,6 +683,11 @@
       calloutTargets.board = new THREE.Vector3(0, 6, 93);
 
       // 2. SOKET FEMALE HEADER ESP32 DI SEPARUH BELAKANG PAPAN
+      // Konvensi scene: HANYA sumbu X dicerminkan dari coaster_casing.scad, jadi
+      // x_html = -x_scad. Y dan Z tetap sama. Contoh: buzzer scad +16.51 -> html -16.51;
+      // HX711 scad +2.54 -> html -2.54; ESP scad -5.08 -> html +5.08
+      // (di sini ESP_X = 5.08, positif). Jangan membalik tanda X tanpa membalik semua
+      // objek lain. Teks panduan memakai frame fisik (scad), bukan scene ini.
       // ESP32 berada di separuh belakang papan, Z 77.76..126.02. Baris pin 22.86 mm
       // (0.9 inci, 9 pitch) jatuh di kolom grid -6.35 dan 16.51.
       const ESP_X = 5.08, ESP_Z = 101.89;
@@ -709,10 +715,10 @@
       }
       calloutTargets.esp32 = new THREE.Vector3(ESP_X, 16.0, ESP_Z);
 
-      // 3. DERET HEADER PENDARAT JUMPER PADA PAPAN PERFBOARD
-      // Semua modul punya pin mendatar, jadi tidak ada yang disolder langsung ke papan.
-      // Header male 3-pin dipasang di baris grid; jumper female-female menghubungkannya
-      // ke pin modul. Baris grid: z = 63.79 + 2.54k, kolom x = -21.59 + 2.54k.
+      // 3. TITIK SOLDER MODUL PADA PAPAN PERFBOARD
+      // Semua modul punya pin mendatar, jadi tidak ada yang ditancap tegak ke papan.
+      // Kabel disolder ke papan di titik grid, konektor female dipasang di ujung modul.
+      // Baris grid: z = 63.79 + 2.54k, kolom x = -21.59 + 2.54k.
       //
       // A. Buzzer: pin modul di z 91.73 keluar ke +z, jumper ke baris 104.43.
       const hBuzzer = new THREE.Mesh(new THREE.BoxGeometry(7.62, 2.5, 2.54), matHeaderPlastic);
@@ -761,7 +767,7 @@
       powerBusGroup.add(tVinMotor);
 
       // Jalur 3.3V dari pin 15 kanan: menyusur kanan ke HX711, turun ke DHT11, lalu ke
-      // buzzer di strip kiri. Semua titik akhir = pin header pendarat jumper.
+      // buzzer di strip kanan (scene: kiri, karena cermin X). Semua titik akhir = pin header pendarat jumper.
       const t3v3Bus1 = createBoardTrace([
         [ESP_X + 11.43, 5.38, 119.67],
         [20.32, 5.38, 119.67],
@@ -885,7 +891,8 @@
       modulesGroup.add(espGroup);
 
       // 7. PENEMPATAN MODUL: BUZZER DI PAPAN, DHT11 & HX711 DI WADAH DEPAN
-      // A. MODUL BUZZER: memanjang di strip kiri papan (13 x 32 mm), duduk datar dengan
+      // A. MODUL BUZZER: memanjang di strip kanan papan secara fisik (13 x 32 mm);
+      // di scene ini tampil di kiri karena sumbu X dicerminkan., duduk datar dengan
       // tape 0.5 mm. Pin 3 keluar mendatar dari tepi belakang; jumper ke header 104.43.
       const BZ_X = -16.51, BZ_Z = 69.73, BZ_PCB_Y = 6.6;
       const bzGroup = new THREE.Group();
@@ -1235,8 +1242,8 @@
 
     function focusSensors() {
       flyCameraTo(new THREE.Vector3(65, 75, 60), new THREE.Vector3(0, 8, 35));
-      document.getElementById('panel-title').innerText = "Tata Letak: Buzzer di Strip Kiri Papan, DHT11 di Wadah Depan";
-      document.getElementById('panel-desc').innerHTML = "Buzzer duduk memanjang di strip kiri papan, di samping ESP32 48.26 mm. Sensor DHT11 pindah ke wadah depan kanan di atas piringan akrilik bawah, terpisah dari panas ESP32 oleh septum dan terbuka ke udara ruangan.";
+      document.getElementById('panel-title').innerText = "Tata Letak: Buzzer di Strip Kanan Papan, DHT11 di Wadah Depan";
+      document.getElementById('panel-desc').innerHTML = "Buzzer duduk memanjang di strip kanan papan, di samping ESP32. Sensor DHT11 pindah ke wadah depan kanan di atas piringan akrilik bawah, terpisah dari panas ESP32 oleh septum dan terbuka ke udara ruangan.";
     }
 
     function toggleTopDown() {
@@ -1320,15 +1327,15 @@
         },
         esp32: {
           title: "ESP32 DevKit V1 (Separuh Belakang Papan)",
-          desc: "Duduk di atas dua baris female header 15-pin di separuh belakang papan, digeser 5.08 mm ke kanan agar strip kiri 17.78 mm muat modul buzzer 13 mm; baris pinnya jatuh tepat di kolom lubang papan. Port micro-USB berada di z 13.8..17.8, sejajar bukaan sasis z 12.5..20.5."
+          desc: "Duduk di atas dua baris female header 15-pin di separuh belakang papan, digeser 5.08 mm ke kanan agar strip kanan 17.78 mm muat modul buzzer 13 mm; baris pinnya jatuh tepat di kolom lubang papan. Port micro-USB berada di z 13.8..17.8, sejajar bukaan sasis z 12.5..20.5."
         },
         hx711_hdr: {
           title: "Modul HX711 (Wadah Tatakan Depan Kiri)",
           desc: "Terletak di wadah tatakan depan sebelah kiri load cell. Berukuran 34.5 x 21 mm. Header 4-pin menghadap ke luar (x -44.79..-42.25), jadi kabel keluar menjauhi batang; tepi kanan PCB hanya 1.40 mm dari batang. Kabel menuju ESP32 lewat terowongan sekat sasis."
         },
         buzzer_mod: {
-          title: "Modul Buzzer (Strip Kiri Papan Perfboard)",
-          desc: "Dipasang memanjang 13 x 32 mm di strip kiri papan; melintang butuh 32 mm di strip depan yang hanya 18 mm. Can Ø12 mm tinggi 10 mm di ujung depan, tepat di bawah 9 lubang kisi suara tutup sasis; puncaknya 19.4 mm, tutup mulai 25.8 mm. VCC wajib 3.3V, pin I/O ke GPIO18 (Active-LOW)."
+          title: "Modul Buzzer (Strip Kanan Papan)",
+          desc: "Dipasang memanjang 13 x 32 mm di strip kanan papan; melintang butuh 32 mm di strip depan yang hanya 18 mm. Can Ø12 mm tinggi 10 mm di ujung depan, tepat di bawah 9 lubang kisi suara tutup sasis; puncaknya 19.4 mm, tutup mulai 25.8 mm. VCC wajib 3.3V, pin I/O ke GPIO18 (Active-LOW)."
         },
         dht_mod: {
           title: "Modul DHT11 (Wadah Tatakan Depan Kanan)",

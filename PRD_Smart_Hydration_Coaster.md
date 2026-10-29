@@ -239,7 +239,7 @@ Aturan sketch Arduino: satu sketch = satu folder, nama file `.ino` wajib sama de
 ## 8. Casing Sasis Kapsul 28 mm
 
 1. **Desain final:** sasis kapsul, bukan PVC foam board — kompartemen belakang 28,0 mm, bibir depan 23,2 mm. Panduan perakitan 3D interaktif di `web/casing_3d.html`; rincian dimensi komponen, grid perfboard, dan bukaan USB di `CLAUDE.md` §5.
-2. **Piringan akrilik** bertumpu pada ujung bebas load cell (puncak 24,2 mm, 1,0 mm di atas bibir depan) sehingga gelas menumpu hanya pada piringan. Modul buzzer, DHT11, dan motor dipasang tanpa solder ke papan: ditempel datar dan disambung jumper female-female ke header male.
+2. **Piringan akrilik** bertumpu pada ujung bebas load cell (puncak 24,2 mm, 1,0 mm di atas bibir depan) sehingga gelas menumpu hanya pada piringan. Modul buzzer, DHT11, dan motor ditempel datar. Kabelnya disolder permanen ke papan di satu ujung dan memakai konektor female di ujung modul, jadi sensor masih bisa dicabut tanpa menyentuh sambungan papan.
 
 ---
 
