@@ -230,7 +230,7 @@ void handleSerialCommands(float currentFilteredWeight) {
         buzzerMuted = !buzzerMuted;
         saveConfigToNvs();
         Serial.print(F("[KONFIG] Mode Suara Buzzer: "));
-        Serial.println(buzzerMuted ? F("HENING (Getar & LED Saja)") : F("AKTIF (Suara + Getar)"));
+        Serial.println(buzzerMuted ? F("HENING (Getar Saja)") : F("AKTIF (Suara + Getar)"));
     } else if (cmd == 'r' || cmd == 'R') {
         fsm.resetDailyStats();
         saveStatsToNvs();

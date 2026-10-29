@@ -10,7 +10,8 @@
 #define PIN_BUZZER     18
 #define PIN_MOTOR      17
 #define PIN_DHT        19
-#define PIN_LED_ALERT  2     // LED onboard: indikator alert saat buzzer/motor belum terpasang
+#define PIN_LED_ALERT  2     // LED onboard. Tidak dipakai di kit ini; pin tetap ditoggle
+                             // supaya board yang punya LED tetap punya indikator.
 #define DHT_TYPE       11
 
 // Polaritas aktuator (terverifikasi modul 2026-10-05)

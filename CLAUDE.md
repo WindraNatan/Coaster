@@ -15,7 +15,7 @@ Panduan persistent context untuk Claude Code & Claude Cowork. Proyek tatakan gel
   * **PENTING (Kelistrikan)**: VCC modul buzzer WAJIB terhubung ke pin `3V3` ESP32 (BUKAN 5V/VIN). Jika dihubungkan ke 5V, tegangan emitor-basis $V_{EB} = 5.0\text{V} - 3.3\text{V} = 1.7\text{V} > 0.7\text{V}$ saat pin HIGH sehingga buzzer menyala terus dan tidak bisa cut-off.
 * **Motor Getar (Transistor NPN S8050, ACTIVE-HIGH)**:
   * Pin Kontrol: `GPIO17` (`MOTOR_ACTIVE_LOW = 0`). VCC aman di `5V` (VIN) karena emitor bereferensi ke GND.
-* **LED Indikator Onboard**: `GPIO2` (`PIN_LED_ALERT`, active-HIGH).
+* **LED Indikator Onboard**: `GPIO2` (`PIN_LED_ALERT`, active-HIGH). Tidak dipakai sebagai indikator di kit ini; hanya ada di sebagian board. Firmware tetap menulis ke pin ini.
 * **Aturan Penulisan Kode Aktuator**: Jangan panggil `digitalWrite()` langsung. Selalu gunakan helper `writeActuator()`.
 
 ---
@@ -88,7 +88,7 @@ berasal dari lembar spesifikasi penjual di `Foto spesifikasi sensor dan aktuator
 **Grid perfboard** (dipakai SCAD dan HTML): kolom `x = -21.59 + 2.54k` (18 kolom), baris
 `y = 63.79 + 2.54k` (24 baris). Semua pin modul wajib jatuh di grid ini.
 
-Verifikasi: `python tools/cad_check/verify_stackup.py` (59 pemeriksaan). Temuan terbuka dan
+Verifikasi: `python tools/cad_check/verify_stackup.py` (60 pemeriksaan). Temuan terbuka dan
 status temuan lama ada di `AUDIT_DESIGN_3D.md`.
 
 ---

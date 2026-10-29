@@ -28,7 +28,7 @@ flowchart LR
     CFG["Setelan user<br/>interval dan berat gelas kosong"] --> SP
     GATE --> FSM["FSM 7 state<br/>9 string di kabel"]
     SP --> FSM
-    FSM --> ACT["Buzzer GPIO18<br/>motor getar GPIO17<br/>LED GPIO2"]
+    FSM --> ACT["Buzzer GPIO18<br/>motor getar GPIO17"]
     FSM --> SNAP["Snapshot telemetry"]
     SNAP -->|"PATCH tiap 5 s<br/>atau saat state berubah"| FB[("Firebase RTDB<br/>/users/&lt;uid&gt;/smart_coaster")]
     FB -->|"GET config<br/>tiap 15 s"| FSM
@@ -48,7 +48,7 @@ Gerbang stabilitas wajib ada. Tanpa gerbang itu, gelas yang diangkat bertahap (t
 | DHT11 | GPIO19 | Dibaca tiap 2 detik |
 | Buzzer aktif, transistor PNP S8550 | GPIO18, aktif LOW | VCC wajib 3V3, bukan 5V |
 | Motor getar, transistor NPN S8050 | GPIO17, aktif HIGH | VCC 5V aman karena emitor mereferensi GND |
-| LED onboard | GPIO2 | Indikator cadangan kalau buzzer dan motor belum dipasang |
+| LED onboard (tidak dipakai) | GPIO2 | Hanya ada di sebagian board. Firmware masih menulis ke pin ini, tetapi kit ini tidak memakai LED sebagai indikator |
 
 Satu jebakan listrik yang sempat kena: kalau VCC modul buzzer disambung ke 5V, tegangan emitor-basis jadi $V_{EB} = 5{,}0 - 3{,}3 = 1{,}7$ V, jauh di atas 0,7 V. Buzzer langsung menyala terus dan tidak bisa dimatikan lewat GPIO.
 
@@ -80,7 +80,7 @@ Baseline hanya ditimpa saat isi ulang sah, yaitu kenaikan 30 g ke atas. Isi ulan
 
 Kalibrasi saat state aktif memaksa `STATE_ALERT_REFILL` dan menyelaraskan baseline ke berat aktual lebih dulu, supaya air yang sudah ada di gelas tidak terhitung sebagai isi ulang.
 
-Buzzer yang diheningkan tidak mematikan motor dan LED. Ketiganya memakai pola toggle yang sama, hanya buzzer yang dipaksa mati.
+Buzzer yang diheningkan tidak mematikan motor. Keduanya memakai pola toggle yang sama, hanya buzzer yang dipaksa mati. Pin LED onboard di GPIO2 ikut ditoggle, tetapi tidak dipakai sebagai indikator di kit ini.
 
 ## 5. Timer adaptif
 
@@ -129,7 +129,7 @@ Perintah yang dikenali firmware, satu karakter diikuti argumen kalau perlu:
 | `i<menit>` | Atur interval dasar 1 sampai 180 menit, sekaligus mematikan mode demo |
 | `d` | Toggle mode demo 15 detik |
 | `m` | Toggle timer otomatis DHT11 versus manual |
-| `q` | Toggle hening, buzzer mati tapi getar dan LED tetap jalan |
+| `q` | Toggle hening, buzzer mati tapi getar tetap jalan |
 | `r` | Reset statistik harian |
 | `w<ssid>\|<pass>` | Simpan dan sambungkan Wi-Fi |
 | `f<url>` | Simpan URL Firebase RTDB, wajib diawali `https://` |
@@ -254,7 +254,7 @@ Ini yang membuat hasil simulasi web bisa dipercaya sebagai cermin perilaku peran
 | Uji C++ di PC (`tools/uji_fsm`) | 52 pemeriksaan, 0 gagal |
 | Simulasi Python (`test_simulation.py`) | 21 skenario lulus |
 | Simulasi web (`node web/fsm.test.js`) | 30 asersi untuk 4 skenario regresi K1 dan K3 |
-| Pemeriksaan tumpukan CAD (`tools/cad_check/verify_stackup.py`) | 59 pemeriksaan lulus |
+| Pemeriksaan tumpukan CAD (`tools/cad_check/verify_stackup.py`) | 60 pemeriksaan lulus |
 | Aplikasi Android (`app/test`) | 18 uji (7 widget, 11 unit). Belum dijalankan di mesin ini karena Flutter tidak terpasang |
 
 Program uji C++ mengompilasi `fsm.h` dan `adaptive_controller.h` yang asli, dengan `Arduino.h` tiruan di folder yang sama, jadi yang diuji memang kode yang dipakai firmware.

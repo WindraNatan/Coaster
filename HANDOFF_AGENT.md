@@ -1,6 +1,6 @@
 # LANJUTAN PROYEK: Smart Hydration Coaster
 
-Berkas panduan untuk agent (atau orang) yang melanjutkan proyek ini. Ditulis 2026-10-09 setelah sesi kerja terakhir. Baca ini dulu sebelum menyentuh kode.
+Berkas panduan untuk agent (atau orang) yang melanjutkan proyek ini. Ditulis 2026-10-09, bagian 8 ditambah 2026-10-25. Baca ini dulu sebelum menyentuh kode.
 
 ## 1. Apa proyeknya
 
@@ -70,7 +70,7 @@ Perbaikannya: setiap keputusan berbasis selisih berat menunggu berat baru stabil
 
 Yang perlu dicatat dari proses ini: sembilan skenario uji lama semuanya mengangkat gelas dalam satu langkah, sehingga cacat ini lolos dari seluruh rangkaian uji tanpa terdeteksi. Dua skenario regresi baru ditambahkan, yang ke-14 mengangkat gelas bertahap dan menuntut 0 minum palsu dengan baseline utuh, yang ke-15 melanjutkan ke `ALERT_CHEAT`. Keduanya sengaja ditambahkan karena membuktikan bahwa rangkaian uji yang "semuanya lulus" bisa buta terhadap bug tertentu. Kalau dikerjakan di masa depan, cek dulu apakah rangkaian ujimu benar-benar menggigit dengan sengaja merusak kodenya (misalnya dengan menghapus gerbangan) lalu memastikan tes gagal.
 
-Status verifikasi 2026-10-08: Python 15/15, C++ 26/26 dengan kompilasi bersih tanpa warning, dan kedelapan tombol skenario web sesuai harapan.
+Status verifikasi 2026-10-08 (angka saat itu): Python 15/15, C++ 26/26 dengan kompilasi bersih tanpa warning, dan kedelapan tombol skenario web sesuai harapan. Per 2026-10-25 angkanya sudah naik: Python 21/21, C++ 52/52, CAD 60/60, Flutter 18/18, dan ada test riwayat harian di `web/daily-history.test.js`.
 
 Cacat lama lain yang ikut ditemukan dan diperbaiki sesi itu, semuanya sudah ada sebelum Fix C4 dan bukan disebabkan olehnya:
 
@@ -113,7 +113,7 @@ Baseline tidak diperbarui ketika terjadi cheat (`STATE_ALERT_CHEAT`). Itu diseng
 
 Penurunan kurang dari 20 g baru benar-benar hilang dari `totalDrankGrams` jika setelah berkurang < 20 g user langsung melakukan **isi ulang (`refill` >= 30 g)**, karena cabang refill langsung menimpa `baselineWeight` dengan berat baru tanpa mencatat penurunan kecil sebelumnya. Efek samping lain dari ditahannya `baselineWeight` saat cheat: mengangkat dan menaruh kembali gelas pada berat yang sama (misal 372 g) berulang kali tanpa minum tambahan akan terhitung sebagai cheat baru setiap kali.
 
-## 8. Status Penyelesaian Terkini (2026-10-09)
+## 8. Status Penyelesaian (2026-10-09, diperbarui 2026-10-25)
 
 1. **Pembersihan Kode & Sinkronisasi 3 Port (Selesai):**
    - Blok sementara `[DBG]` di `SmartHydrationCoaster.ino` dan fungsi tak terpakai `isFilled()` di `filter.h` sudah dihapus.
@@ -129,3 +129,12 @@ Penurunan kurang dari 20 g baru benar-benar hilang dari `totalDrankGrams` jika s
 4. **Dokumentasi Akademis & PRD (Selesai):**
    - `docs/pemodelan_sistem_kendali.md` dan `PRD_Smart_Hydration_Coaster.md` telah diperbarui penuh dengan arsitektur ESP32, rumus interpolasi kontinu DHT11, serta data pengukuran nyata `run_noise_test` (`450.7f`, rata-rata `500.10 g`, *peak-to-peak jitter* `0.21 g`).
 
+### Pembaruan 2026-10-25
+
+- **Sambungan hybrid.** Kabel disolder permanen ke papan, konektor female di ujung modul, jadi sensor bisa dicabut. Dulu panduan mengajarkan jumper female-female; dokumen dan `web/casing_3d.html` sudah diselaraskan.
+- **Firmware bisa dikompilasi lagi.** `cloud_sync.h` memanggil `saveStatsToNvs()` tanpa deklarasi `extern`, sehingga `arduino-cli compile` gagal. Sudah diperbaiki; build 79% flash, 14% RAM.
+- **Data harian tidak hilang tiap reboot.** `sessionOwner` sekarang disimpan di NVS.
+- **Kode klaim tidak lagi di-PUT 250 ms terus.** `claimDone` dibaca saat init, plus backoff 1 jam.
+- **Simulator web tidak lagi menulis ke alat nyata.** `pushCloudTelemetry()` dan `pushCloudConfig()` keluar lebih awal saat mode Simulator.
+- **Angka verifikasi:** Python 21/21, C++ 52/52, CAD 60/60, Flutter 18/18, `web/fsm.test.js` 30 asersi, `web/daily-history.test.js` 3 asersi.
+- **LED onboard tidak dipakai** sebagai indikator di kit ini; firmware masih menulis ke GPIO2 tetapi tidak ada LED kit yang terpasang di sana.

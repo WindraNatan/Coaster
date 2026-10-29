@@ -11,7 +11,7 @@ Dokumen ini memuat panduan merakit, mengkalibrasi, serta mengoperasikan *Smart H
 | **DHT11** | `VCC` / `GND` / `DATA` | `3V3` / `GND` / `GPIO19` | Pembacaan suhu & kelembaban tiap 2 detik |
 | **Buzzer (PNP S8550)** | `VCC` / `GND` / `I-O` | **`3V3`** / `GND` / `GPIO18` | **Active-LOW** (`LOW` = bunyi). `VCC` **wajib** ke `3V3` agar transistor PNP *cut-off* saat `GPIO18` `HIGH` |
 | **Motor Getar (NPN S8050)** | `VCC` / `GND` / `IN` | `VIN (5V)` / `GND` / `GPIO17` | **Active-HIGH** (`HIGH` = getar) |
-| **LED Onboard** | Internal | `GPIO2` | Indikator visual yang berdenyut serempak dengan aktuator |
+| **LED Onboard** | Internal | `GPIO2` | Tidak dipakai di kit ini. Hanya ada di sebagian board; firmware tetap menulis ke pin ini, jadi abaikan kalau LED tidak menyala |
 
 Kabel *load cell* 5 kg ke modul HX711: Merah ke `E+`, Hitam ke `E-`, Hijau ke `A+`, Putih ke `A-`.
 
@@ -47,7 +47,7 @@ Buka [`SmartHydrationCoaster/SmartHydrationCoaster.ino`](file:///d:/Kuliah/Siste
 | `i<menit>` | `i25` | Tetapkan interval dasar pengingat minum (`1` s.d. `180` menit) dan aktifkan Mode Normal |
 | `d` | `d` | *Toggle* Mode Demo (`15 detik`) vs Mode Normal (interval dasar *user*) |
 | `m` | `m` | *Toggle* Mode Pewaktuan: **Adaptif Kontinu DHT11 (`AUTO`)** vs **Manual Tetap (`MANUAL`)** |
-| `q` | `q` | *Toggle* **Mode Hening (*Silent Mode*)**: mematikan suara *buzzer* (`MUTE`), mempertahankan getaran motor & LED |
+| `q` | `q` | *Toggle* **Mode Hening (*Silent Mode*)**: mematikan suara *buzzer* (`MUTE`), mempertahankan getaran motor |
 | `r` | `r` | *Reset* statistik minum harian ke nol |
 | `w<ssid>\|<pass>` | `wKosPutra\|rahasia123` | Simpan kredensial Wi-Fi 2,4 GHz ke NVS dan sambungkan ulang otomatis tanpa *re-flash* |
 | `f<url>` | `fhttps://...` | Simpan URL Firebase Realtime Database ke NVS dan aktifkan sinkronisasi *cloud* Core 0 |

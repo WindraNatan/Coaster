@@ -333,7 +333,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
       <div class="cfg-row">
         <button class="act active-btn" id="bAutoMode">Timer: Adaptif DHT11</button>
         <button class="act active-btn" id="bDemo">Demo 15 dtk: ON</button>
-        <button class="act" id="bMute" title="Matikan suara buzzer, pertahankan motor getar dan LED">Buzzer: ON</button>
+        <button class="act" id="bMute" title="Matikan suara buzzer, pertahankan motor getar">Buzzer: ON</button>
         <button class="act" id="bReset">Reset Harian</button>
       </div>
       <div class="cfg-row">
@@ -634,7 +634,7 @@ $('bMute').addEventListener('click', () => {
   applyTimerConfig();
   sendSerialCmd('q');
   pushCloudConfig();
-  log('Mode suara buzzer: ' + (buzzerMuted ? 'HENING (getar & LED saja)' : 'AKTIF'), '');
+  log('Mode suara buzzer: ' + (buzzerMuted ? 'HENING (getar saja)' : 'AKTIF'), '');
 });
 $('bApplyInt').addEventListener('click', () => {
   const m = Math.max(1, Math.min(180, Math.round(+$('baseMinIn').value || 30)));

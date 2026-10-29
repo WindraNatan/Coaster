@@ -68,8 +68,8 @@ Semua pin modul jatuh di grid: ESP32 di x -16.51 dan 6.35 dengan baris y 84.11..
 
 ## Verifikasi
 
-    python tools/cad_check/verify_stackup.py        # 59/59 lulus
+    python tools/cad_check/verify_stackup.py        # 60/60 lulus
 
-Tiga part: front 1324 facet, rear 1752, lid 3392, assembly 7708 facet. Export OpenSCAD selesai untuk empat STL (`front.stl`, `rear.stl`, `lid.stl`, `coaster_casing.stl`). OpenSCAD memberi `EXPORT-WARNING: Exported object may not be a valid 2-manifold and may need repair` pada assembly `all`, tetapi tiga part cetak lolos export bersih dan verifier geometri tetap 59/59.
+Tiga part: front 1324 facet, rear 1752, lid 3392, assembly 7708 facet. Export OpenSCAD selesai untuk empat STL (`front.stl`, `rear.stl`, `lid.stl`, `coaster_casing.stl`). OpenSCAD memberi `EXPORT-WARNING: Exported object may not be a valid 2-manifold and may need repair` pada assembly `all`, tetapi tiga part cetak lolos export bersih dan verifier geometri tetap 60/60.
 
 Pemeriksaan yang ditambahkan pada revisi ini: pin ESP32 dan buzzer harus jatuh di grid lubang, motor harus menempel di bawah tutup dan tidak menabrak shield RF, batang 80 mm harus muat di wadah depan, bukaan USB harus mengikuti pusat ESP32, dan geometri seam (baut di dalam kerah, pilot buta, clearance 0.2..0.4 mm, ulir M3x8 cukup, tiap part muat bed 175 mm).

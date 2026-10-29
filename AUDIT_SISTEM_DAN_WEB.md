@@ -8,6 +8,8 @@ Metode: baca seluruh sumber, jalankan empat suite verifikasi, replay paritas JS 
 
 Paritas tiga port lulus penuh dan itu bagian terkuat proyek ini: 21/21 skenario Python, 52/52 pemeriksaan C++, 30 asersi JS di `web/fsm.test.js` (4 skenario regresi K1/K3, bernomor 18-21). Geometri CAD 59/59 lulus. FSM tidak punya cacat regresi.
 
+> Angka di dokumen ini adalah rekaman saat audit ditulis. Per 2026-10-25: CAD **60/60** (satu pemeriksaan arah pin motor ditambahkan), dan `web/fsm.test.js` tetap 30 asersi.
+
 Yang tersisa adalah satu lubang logika serius yang belum diuji suite mana pun: alarm dan statistik bisa dikelabui dengan menekan gelas, tanpa minum dan tanpa mengangkatnya. Selain itu ada satu bug kehilangan data di tombol Reset Harian, satu label CSS yang membuat seluruh log alarm kehilangan warna, satu jalur putus USB yang tidak menutup port, dan drift dokumentasi yang cukup banyak (pin DHT, nama state, jumlah tes, klaim library dan NTP).
 
 Dari sisi AI slop: `web/index.html` tergolong bersih. `web/casing_3d.html` masih membawa pola slop yang jelas dan rusak total di layar ponsel.
