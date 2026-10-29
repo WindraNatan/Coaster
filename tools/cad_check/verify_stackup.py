@@ -202,10 +202,10 @@ check("pin ESP32 di baris lubang", on_grid(_esp_pin_y0, GRID_Y0),
 check("pin buzzer di grid", on_grid(_bz_x, GRID_X0) and on_grid(c("buzzer_pin_y"), GRID_Y0),
       f"({_bz_x:.2f}, {c('buzzer_pin_y'):.2f})")
 
-# Every module pin exits horizontally (photo evidence), so each one lands on a jumper
-# header soldered to the board. All four headers must sit on the hole grid, or the
-# jumper cannot be seated. A 3-pin header has its centre on a hole; a 4-pin header
-# spans an odd number of pitches, so its centre falls halfway between two holes.
+# Every module pin exits horizontally (photo evidence), so each one ends at a solder
+# point on the board. All four points must sit on the hole grid, or the wire cannot be
+# seated. A 3-pin point has its centre on a hole; a 4-pin point spans an odd number of
+# pitches, so its centre falls halfway between two holes.
 def pins_on_grid(cx, cy, n_pins):
     half = (n_pins - 1) / 2 * PITCH
     return (on_grid(cx - half, GRID_X0) and on_grid(cy, GRID_Y0)
@@ -214,19 +214,19 @@ def pins_on_grid(cx, cy, n_pins):
 for _name, _x, _y, _n in (("buzzer", "buzzer_hdr_x", "buzzer_hdr_y", 3),
                           ("DHT11", "dht_hdr_x", "dht_hdr_y", 3),
                           ("HX711", "hx_land_x", "hx_land_y", 4)):
-    check(f"header {_name} di grid", pins_on_grid(c(_x), c(_y), _n),
+    check(f"titik solder {_name} di grid", pins_on_grid(c(_x), c(_y), _n),
           f"pusat ({c(_x):.2f}, {c(_y):.2f}), {_n} pin")
 
-# The motor header runs along y, not x, so its pins span rows instead of columns.
-check("header motor sejajar baris",
+# The motor solder point runs along y, not x, so its pins span rows, not columns.
+check("titik solder motor sejajar baris",
       on_grid(c("mtr_hdr_x"), GRID_X0) and on_grid(c("mtr_hdr_y") - PITCH, GRID_Y0)
       and on_grid(c("mtr_hdr_y") + PITCH, GRID_Y0),
       f"x {c('mtr_hdr_x'):.2f}, y {c('mtr_hdr_y') - PITCH:.2f}..{c('mtr_hdr_y') + PITCH:.2f}")
-# Motor header body (2.54 wide, 7.62 long) must clear the buzzer PCB and its can.
-check("header motor di luar badan buzzer",
+# Motor solder point (2.54 wide, 7.62 long) must clear the buzzer PCB and its can.
+check("titik solder motor di luar badan buzzer",
       c("mtr_hdr_y") - PITCH - 1.27 >= c("buzzer_pcb_y0") + c("buzzer_pcb_l"),
       f"header y mulai {c('mtr_hdr_y') - PITCH - 1.27:.2f} vs buzzer {c('buzzer_pcb_y0') + c('buzzer_pcb_l'):.2f}")
-check("header motor di dalam papan (x)",
+check("titik solder motor di dalam papan (x)",
       _board_x0 <= c("mtr_hdr_x") - 1.27 and c("mtr_hdr_x") + 1.27 <= _board_x1,
       f"x {c('mtr_hdr_x') - 1.27:.2f}..{c('mtr_hdr_x') + 1.27:.2f}")
 
@@ -254,6 +254,19 @@ check("motor di dalam tutup (x/y)",
       abs(c("mtr_x")) + 11.5 <= c("lid_w") / 2 and
       c("mtr_y") + 10.5 <= c("rear_center_y") + c("lid_l") / 2,
       f"motor x {c('mtr_x') - 11.5:.1f}..{c('mtr_x') + 11.5:.1f}, y {c('mtr_y') - 10.5:.1f}..{c('mtr_y') + 10.5:.1f}")
+
+# Pin modul motor harus keluar ke arah header-nya (+x). Angkanya dibaca dari baris
+# translate() di SCAD, bukan dihitung ulang, supaya tanda x yang dibalik langsung gagal.
+# Kalau dibalik ke -x, ujung pin pindah ke -23.58 dan kabel harus menyeberang papan
+# 45.17 mm, bukan 8.17 mm.
+_pin_line = re.search(r"translate\(\[\s*mtr_x\s*([+-])\s*11\.5[^\]]*mod_pin_span", src)
+assert _pin_line, "baris translate pin motor tidak ditemukan di SCAD"
+_pin_sign = 1.0 if _pin_line.group(1) == "+" else -1.0
+_mtr_pin_end = c("mtr_x") + _pin_sign * 11.5 + c("mod_pin_l")
+check("pin motor menghadap header, bukan menyeberang papan",
+      _pin_sign > 0 and _mtr_pin_end <= c("cavity_w") / 2,
+      f"tanda {'+' if _pin_sign > 0 else '-'}11.5 di baris {src[:_pin_line.start()].count(chr(10)) + 1}, "
+      f"ujung pin x {_mtr_pin_end:.2f} (jarak ke header {c('mtr_hdr_x') - _mtr_pin_end:.2f} mm)")
 
 # Load cell 80 mm must sit inside the front well, corners included.
 _bar_corner = math.hypot(c("bar_w") / 2, c("bar_l") / 2)

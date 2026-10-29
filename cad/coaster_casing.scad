@@ -393,7 +393,7 @@ if (part_to_render == "front") {
     color("DimGray")
         translate([buzzer_hdr_x - 3.81, buzzer_hdr_y - 1.27, floor_th + 1.2 + 1.6])
             cube([7.62, 2.54, hdr_h]);
-    // Header motor 3-pin, deret sejajar y di kolom grid 21.59. Deret y-nya mulai 93.00,
+    // Titik solder motor 3-pin, deret sejajar y di kolom grid 21.59. Deret y mulai 93.00,
     // di belakang tepi PCB buzzer (91.73), jadi tidak menumpuk modul buzzer.
     color("DimGray")
         translate([mtr_hdr_x - 1.27, mtr_hdr_y - 3.81, floor_th + 1.2 + 1.6])
@@ -416,7 +416,7 @@ if (part_to_render == "front") {
     color("Silver")
         translate([mtr_x - 4.5, mtr_y - 4.5, mtr_z - mtr_can_h])
             cylinder(h = mtr_can_h, d = 9);
-    // Pin 3 keluar mendatar ke +x, ke arah header pendarat di x 21.59. Ujung pin
+    // Pin 3 keluar mendatar ke +x, ke arah titik solder di x 21.59. Ujung pin
     // berhenti di x 13.42, jadi kabel tinggal 8.17 mm ke header. Kalau dibalik ke -x,
     // pin berakhir di x -23.58 dan kabel harus menempuh 45.17 mm menyeberang papan.
     color("Silver")
