@@ -733,7 +733,11 @@ $('bUsbPushWifi').addEventListener('click', async () => {
     localStorage.setItem('shc_fb_url', url);
     await sendSerialCmd('f' + url + '\n');
   }
-  log('Konfigurasi Wi-Fi & Firebase dikirim ke NVS ESP32.', 'ev-TIMING');
+  // URL diisi di login.html; kalau kosong, jangan bilang "Cloud terkirim".
+  log(url
+    ? 'Konfigurasi Wi-Fi & Firebase dikirim ke NVS ESP32.'
+    : 'Wi-Fi terkirim. URL Firebase kosong: isi dulu di halaman Masuk / daftar.',
+    'ev-TIMING');
 });
 
 async function readSerialLoop(){
@@ -860,6 +864,7 @@ function renderSessionState(){
   $('sessionBox').hidden = !has;
   if (has) $('sessionLab').textContent = 'Sesi: belum dimulai';
 }
+renderSessionState();
 $('bStartSession').addEventListener('click', startSession);
 $('bEndSession').addEventListener('click', endSession);
 
