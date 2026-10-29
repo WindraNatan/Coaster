@@ -34,7 +34,7 @@ Aplikasi pengingat minum di ponsel bekerja *open-loop*: alarm berbunyi tanpa ver
 | | VCC/GND | VIN 5V / GND | Daya | Eksitasi load cell |
 | DHT11 | DATA | **GPIO 19** | I/O | Single-wire; VCC 3,3 V |
 | Buzzer (modul) | I-O | **GPIO 18** | Output | **Active-LOW** (PNP S8550); **VCC wajib 3,3 V** agar transistor mati saat GPIO HIGH (3,3 V) |
-| Motor getar (modul) | IN | **GPIO 17** | Output | **Active-HIGH** (NPN S8050); VCC ke VIN 5 V, GPIO2 dihindari karena strapping pin + LED onboard |
+| Motor getar (modul) | IN | **GPIO 17** | Output | **Active-HIGH** (NPN S8050); VCC ke VIN 5 V, GPIO2 dihindari karena strapping pin |
 
 Catatan desain: motor dipindah dari GPIO2 (strapping pin, berbagi LED onboard) ke GPIO17 agar boot ESP32 tidak memicu getaran parasit.
 

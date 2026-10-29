@@ -8,7 +8,7 @@ Tatakan gelas pintar berbasis ESP32 yang memantau hidrasi: load cell HX711 mengu
 
 Pemilik proyek mahasiswa S1 Rekayasa Sistem Komputer, Universitas Tanjungpura. Preferensi kerja yang perlu diketahui: meminta bahasa yang deskriptif, mau analisis yang jujur dan kritis, dan minta skill relevan dimuat tiap kali tanpa harus diminta ulang.
 
-Perangkat keras: ESP32 DevKit V1, HX711 + load cell, DHT11. Buzzer aktif dan motor getar sudah tersedia lagi untuk pengujian; keduanya sempat tertunda karena komponen hilang. Karena itu LED onboard di GPIO2 dipakai sebagai indikator alert pengganti, dan ia harus tetap ada sebagai jejak visual saat menelusuri masalah aktuator.
+Perangkat keras: ESP32 DevKit V1, HX711 + load cell, DHT11. Buzzer aktif dan motor getar sudah tersedia lagi untuk pengujian; keduanya sempat tertunda karena komponen hilang. LED onboard di GPIO2 sempat dipakai sebagai indikator alert pengganti saat komponen hilang; kit sekarang tidak memakai LED, jadi yang menjadi jejak visual adalah buzzer dan motor getar.
 
 ## 2. Peta berkas
 
@@ -95,7 +95,7 @@ Solusi yang sudah terverifikasi:
 2. `BUZZER_ACTIVE_LOW = 1` dan `MOTOR_ACTIVE_LOW = 0` di `config.h` sudah benar.
 3. `tools/test_hardware/test_hardware.ino` sudah diselaraskan: `PIN_MOTOR` diperbaiki dari `2` ke `17`, memakai `writeActuator()`, dan memiliki perintah `'5'` untuk uji polaritas `HIGH`/`LOW` 2 detik.
 
-Jangan menulis `digitalWrite` langsung untuk aktuator di kode baru; selalu gunakan `writeActuator()` termasuk untuk `PIN_LED_ALERT` (`GPIO2`, active-HIGH).
+Jangan menulis `digitalWrite` langsung untuk aktuator di kode baru; selalu gunakan `writeActuator()`. `PIN_LED_ALERT` (`GPIO2`, active-HIGH) tetap ikut ditulis walau kit ini tidak memasang LED.
 
 ## 6. BERKAS YANG HARUS DIBACA DULU, DAN YANG SUDAH BASI
 
