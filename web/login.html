@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0C1F27">
+<title>Masuk — Smart Hydration Coaster</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0C1F27; --panel:#132B35; --panel2:#0F242D; --line:#234654;
+  --ink:#E2F1F3; --dim:#93B8C2; --water:#44C8E6; --ok:#5FD195;
+  --warn:#F0C254; --alarm:#F26B6E;
+  --mono:'JetBrains Mono',ui-monospace,'Consolas',monospace;
+  --disp:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--disp);min-height:100dvh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 18px}
+button,input{font:inherit;touch-action:manipulation}
+h1{font-size:20px;font-weight:700;letter-spacing:.2px}
+h1 span{color:var(--water)}
+main{width:100%;max-width:520px}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+.card + .card{margin-top:14px}
+.card h2{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:2px}
+.card p{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.55}
+label{display:block;font-size:11px;font-family:var(--mono);color:var(--dim);margin:10px 0 4px}
+input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);
+  font-family:var(--mono);font-size:13px;padding:9px 11px;border-radius:6px;min-height:40px}
+input:focus-visible,button:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+input:disabled{opacity:.45;cursor:not-allowed}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+button{font-family:var(--mono);font-size:12px;padding:9px 14px;border-radius:6px;
+  border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;min-height:42px}
+button:hover{border-color:var(--water)}
+button.primary{background:var(--water);border-color:var(--water);color:#041217;font-weight:700}
+button:disabled{opacity:.45;cursor:not-allowed}
+
+.status{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--dim);
+  font-family:var(--mono);line-height:1.6;margin-bottom:6px}
+.status-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-top:5px}
+.status-dot.ok{background:var(--ok)}
+.status-dot.err{background:var(--alarm)}
+
+.pill-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+a.pill{font-family:var(--mono);font-size:11px;padding:7px 11px;border-radius:6px;
+  border:1px solid var(--line);color:var(--dim);text-decoration:none;min-height:36px;
+  display:inline-flex;align-items:center}
+a.pill:hover{border-color:var(--water);color:var(--ink)}
+a.pill.off{opacity:.55}
+.foot{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:18px;text-align:center;line-height:1.6}
+.foot a{color:var(--water)}
+@media(pointer:coarse){button,a.pill,input{min-height:44px}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Smart Hydration <span>Coaster</span></h1>
+  <p style="font-size:12px;color:var(--dim);margin:6px 0 18px;line-height:1.6">
+    Masuk dengan akun Firebase untuk membaca dan mengendalikan tatakanmu dari jarak jauh.
+    Simulator dan USB Live bisa dipakai tanpa akun.
+  </p>
+
+  <div class="pill-row">
+    <a class="pill" href="index.html">Simulator</a>
+    <a class="pill" href="index.html">USB Live</a>
+    <a class="pill" href="casing_3d.html">Panduan rakit 3D</a>
+  </div>
+
+  <section class="card" aria-label="Akun Firebase">
+    <h2>Akun</h2>
+    <p>Dipakai untuk menyimpan catatan hidrasi per pengguna di Realtime Database.</p>
+    <div class="status"><i class="status-dot err" id="authDot"></i><span id="authStatus">Belum masuk.</span></div>
+
+    <form id="authForm" novalidate>
+      <label for="authUrlIn">URL database</label>
+      <input type="url" id="authUrlIn" placeholder="https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app"
+             aria-label="URL dasar Firebase Realtime Database" autocomplete="off" required>
+
+      <label for="authEmailIn">Email</label>
+      <input type="email" id="authEmailIn" placeholder="nama@email.com" aria-label="Email akun Firebase" autocomplete="username" required>
+
+      <label for="authPassIn">Password</label>
+      <input type="password" id="authPassIn" placeholder="minimal 6 karakter" aria-label="Password akun Firebase" autocomplete="current-password" required>
+
+      <label for="authKeyIn">Web API Key proyek</label>
+      <input type="text" id="authKeyIn" placeholder="AIza..." aria-label="Firebase Web API Key" autocomplete="off" required>
+
+      <div class="actions">
+        <button type="submit" class="primary" id="bAuthLogin">Masuk</button>
+        <button type="button" id="bAuthRegister">Daftar akun baru</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" aria-label="Klaim alat">
+    <h2>Klaim alat</h2>
+    <p>Sekali saja per tatakan. Masukkan kode 8 karakter yang tampil di Serial Monitor ESP32.</p>
+    <div class="status"><i class="status-dot" id="claimDot"></i><span id="claimStatus">Alat belum tertaut ke akun ini.</span></div>
+    <form id="claimForm" novalidate>
+      <label for="deviceCodeIn">Kode alat</label>
+      <input type="text" id="deviceCodeIn" placeholder="ABCD2345" aria-label="Kode alat" maxlength="8"
+             autocomplete="off" style="text-transform:uppercase">
+      <div class="actions">
+        <button type="button" id="bClaim">Klaim alat</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" id="signedInCard" hidden aria-label="Akun aktif">
+    <h2>Sudah masuk</h2>
+    <p id="signedInLine">—</p>
+    <div class="actions">
+      <a class="pill" href="index.html?mode=cloud" style="border-color:var(--water);color:var(--water)">Buka dashboard</a>
+      <button type="button" id="bAuthLogout">Keluar</button>
+    </div>
+  </section>
+
+  <p class="foot">Catatan tersimpan per akun, bukan per perangkat.<br>
+    <a href="index.html">Lanjut tanpa akun (Simulator / USB)</a></p>
+</main>
+
+<script src="auth.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+
+function cleanUrl(raw){
+  const v = (raw || '').trim().replace(/\/+$/, '');
+  return v.startsWith('https://') ? v : '';
+}
+function setStatus(el, dot, text, kind){
+  el.textContent = text;
+  dot.className = 'status-dot ' + (kind || '');
+}
+
+function render(){
+  const email = localStorage.getItem(SHC_EMAIL_KEY) || '';
+  const ok = !!shcToken() || !!localStorage.getItem(SHC_REFRESH_KEY);
+  setStatus($('authStatus'), $('authDot'), ok ? ('Masuk sebagai ' + email) : 'Belum masuk.', ok ? 'ok' : 'err');
+  $('authForm').hidden = ok;
+  $('signedInCard').hidden = !ok;
+  $('signedInLine').textContent = ok ? ('Akun: ' + email) : '—';
+
+  const base = localStorage.getItem('shc_fb_url') || '';
+  const device = shcDeviceUid();
+  $('claimForm').hidden = !ok || !!device;
+  if (device) setStatus($('claimStatus'), $('claimDot'), 'Alat tertaut: ' + device.slice(0, 8) + '…', 'ok');
+  else if (ok) setStatus($('claimStatus'), $('claimDot'), 'Masukkan kode dari Serial Monitor ESP32.', '');
+  else setStatus($('claimStatus'), $('claimDot'), 'Masuk dulu untuk mengklaim alat.', '');
+}
+
+async function doAuth(kind){
+  const url = cleanUrl($('authUrlIn').value);
+  const email = ($('authEmailIn').value || '').trim();
+  const pass = $('authPassIn').value || '';
+  const key = ($('authKeyIn').value || '').trim();
+  if (!url) { setStatus($('authStatus'), $('authDot'), 'URL database wajib diawali https://', 'err'); return; }
+  if (!email || !pass) { setStatus($('authStatus'), $('authDot'), 'Email dan password wajib diisi.', 'err'); return; }
+  if (!key) { setStatus($('authStatus'), $('authDot'), 'Web API Key wajib diisi.', 'err'); return; }
+
+  $('bAuthLogin').disabled = true;
+  $('bAuthRegister').disabled = true;
+  setStatus($('authStatus'), $('authDot'), 'Menghubungi Firebase…', '');
+  try {
+    localStorage.setItem('shc_fb_url', url);
+    localStorage.setItem('shc_api_key', key);
+    await (kind === 'register' ? shcRegister(email, pass) : shcLogin(email, pass));
+    $('authPassIn').value = '';
+    render();
+    setStatus($('authStatus'), $('authDot'), 'Masuk sebagai ' + (localStorage.getItem(SHC_EMAIL_KEY) || email), 'ok');
+  } catch (e) {
+    setStatus($('authStatus'), $('authDot'),
+      (kind === 'register' ? 'Gagal daftar: ' : 'Gagal masuk: ') + (e.message || e), 'err');
+  } finally {
+    $('bAuthLogin').disabled = false;
+    $('bAuthRegister').disabled = false;
+  }
+}
+
+$('authForm').addEventListener('submit', e => { e.preventDefault(); doAuth('login'); });
+$('bAuthRegister').addEventListener('click', () => doAuth('register'));
+
+$('bClaim').addEventListener('click', async () => {
+  const base = cleanUrl($('authUrlIn').value) || (localStorage.getItem('shc_fb_url') || '');
+  if (!base) { setStatus($('claimStatus'), $('claimDot'), 'Isi URL database di kartu Akun.', 'err'); return; }
+  if (!shcToken()) { setStatus($('claimStatus'), $('claimDot'), 'Masuk dulu sebelum mengklaim alat.', 'err'); return; }
+  $('bClaim').disabled = true;
+  setStatus($('claimStatus'), $('claimDot'), 'Mencari kode alat…', '');
+  try {
+    const uid = await shcClaimDevice(base, $('deviceCodeIn').value);
+    $('deviceCodeIn').value = '';
+    setStatus($('claimStatus'), $('claimDot'), 'Alat tertaut: ' + uid.slice(0, 8) + '…', 'ok');
+    render();
+  } catch (e) {
+    setStatus($('claimStatus'), $('claimDot'), 'Gagal klaim: ' + (e.message || e), 'err');
+  } finally {
+    $('bClaim').disabled = false;
+  }
+});
+
+$('bAuthLogout').addEventListener('click', () => {
+  shcLogout();
+  localStorage.removeItem('shc_device_uid');
+  render();
+  setStatus($('authStatus'), $('authDot'), 'Sudah keluar.', '');
+});
+
+// Isi ulang kolom dari penyimpanan lokal, lalu arahkan ke dashboard kalau
+// pengguna datang dari tautan "Buka dashboard".
+$('authUrlIn').value = localStorage.getItem('shc_fb_url') || '';
+$('authEmailIn').value = localStorage.getItem(SHC_EMAIL_KEY) || '';
+$('authKeyIn').value = localStorage.getItem('shc_api_key') || '';
+render();
+
+if (new URLSearchParams(location.search).get('next') === 'dashboard'
+    && (shcToken() || localStorage.getItem(SHC_REFRESH_KEY))) {
+  location.replace('index.html?mode=cloud');
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

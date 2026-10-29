@@ -1,5 +1,5 @@
-const CACHE_NAME = 'shc-pwa-v7';
-const ASSETS = ['./', './index.html', './auth.js', './fsm.js', './manifest.json', './icon.svg'];
+const CACHE_NAME = 'shc-pwa-v8';
+const ASSETS = ['./', './index.html', './login.html', './auth.js', './fsm.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

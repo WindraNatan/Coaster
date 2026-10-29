@@ -84,9 +84,10 @@ input[type=range]{width:100%;accent-color:var(--water);margin-top:16px;height:28
 .stab-bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .12s linear}
 .stab-lab{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:5px;font-variant-numeric:tabular-nums}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
-button.act{font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:6px;
-  border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;min-height:38px}
-button.act:hover{border-color:var(--water)}
+button.act,a.act{font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:6px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;min-height:38px;
+  text-decoration:none;display:inline-flex;align-items:center}
+button.act:hover,a.act:hover{border-color:var(--water);color:var(--ink)}
 button.act.active-btn{border-color:var(--water);color:var(--water)}
 button.act:disabled{opacity:.45;cursor:not-allowed}
 .fold{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
@@ -197,28 +198,14 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 </div>
 
 <div class="conn-drawer" id="cloudDrawer">
-  <span><i class="status-dot" id="cloudDot"></i><span id="cloudStatus">Masukkan URL dasar RTDB. Node ditentukan akun yang masuk.</span></span>
-  <input type="url" id="fbUrlIn" placeholder="https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app" aria-label="URL dasar Firebase Realtime Database">
-  <button class="act" id="bCloudSave">Hubungkan Cloud</button>
-</div>
-
-<div class="conn-drawer" id="authDrawer">
-  <span><i class="status-dot" id="authDot"></i><span id="authStatus">Belum masuk. Data cloud butuh akun.</span></span>
-  <form class="auth-form" id="authForm" novalidate>
-    <input type="email" id="authEmailIn" placeholder="Email akun Firebase" aria-label="Email akun Firebase" autocomplete="username">
-    <input type="password" id="authPassIn" placeholder="Password" aria-label="Password akun Firebase" autocomplete="current-password">
-    <input type="text" id="authKeyIn" placeholder="Web API Key proyek Firebase" aria-label="Firebase Web API Key" autocomplete="off">
-    <input type="text" id="deviceCodeIn" placeholder="Kode alat (8 karakter)" aria-label="Kode alat" maxlength="8" autocomplete="off" style="text-transform:uppercase">
-    <button class="act" id="bClaim" type="button">Klaim Alat</button>
-    <button class="act" id="bAuthLogin" type="submit">Masuk</button>
-    <button class="act" id="bAuthRegister" type="button">Daftar</button>
-  </form>
-  <button class="act" id="bAuthLogout">Keluar</button>
+  <span><i class="status-dot" id="cloudDot"></i><span id="cloudStatus">Cloud belum aktif.</span></span>
+  <span id="accountLine" hidden></span>
   <span id="sessionBox" hidden>
     <span id="sessionLab">Sesi: belum dimulai</span>
     <button class="act" id="bStartSession">Mulai Sesi</button>
     <button class="act" id="bEndSession">Akhiri Sesi</button>
   </span>
+  <a class="act" id="bAccountLink" href="login.html">Masuk / ganti akun</a>
 </div>
 
 <main>
@@ -385,11 +372,7 @@ const $w = $('wSlider');
 $('baseMinIn').value = customBaseMin;
 $('goalIn').value = dailyGoalMl;
 $('emptyIn').value = fsm.emptyCup;
-$('fbUrlIn').value = localStorage.getItem('shc_fb_url') || '';
 $('espSsidIn').value = localStorage.getItem('shc_wifi_ssid') || '';
-$('authEmailIn').value = localStorage.getItem('shc_auth_email') || '';
-$('authKeyIn').value = localStorage.getItem('shc_api_key') || '';
-renderAuthState();
 
 function todayKey(){
   const d = new Date();
@@ -838,76 +821,17 @@ function handleSerialLine(line){
 
 let cloudTimer = null, lastCloudPushMs = 0;
 
+// Akun sekarang dikelola di login.html. Di sini hanya ditampilkan statusnya,
+// supaya dashboard tidak menampung form email/password/API key.
 function renderAuthState(){
   const email = localStorage.getItem(SHC_EMAIL_KEY) || '';
   const ok = !!shcToken() || !!localStorage.getItem(SHC_REFRESH_KEY);
-  $('authDot').className = 'status-dot ' + (ok ? 'ok' : 'err');
-  $('authStatus').textContent = ok ? ('Masuk sebagai ' + email) : 'Belum masuk. Data cloud butuh akun.';
-  $('bAuthLogin').hidden = ok;
-  $('bAuthRegister').hidden = ok;
-  $('bAuthLogout').hidden = !ok;
-  $('authEmailIn').disabled = ok;
-  $('authPassIn').disabled = ok;
-  $('authKeyIn').disabled = ok;
+  const line = $('accountLine');
+  line.hidden = !ok;
+  line.textContent = ok ? ('Masuk sebagai ' + email) : '';
+  $('bAccountLink').textContent = ok ? 'Ganti akun' : 'Masuk / daftar';
 }
-
-async function doAuth(kind){
-  const email = ($('authEmailIn').value || '').trim();
-  const pass = $('authPassIn').value || '';
-  const key = ($('authKeyIn').value || '').trim();
-  if (!email || !pass) { $('authStatus').textContent = 'Email dan password wajib diisi.'; return; }
-  if (!key) { $('authStatus').textContent = 'Web API Key wajib diisi.'; return; }
-  localStorage.setItem('shc_api_key', key);
-  $('bAuthLogin').disabled = true;
-  $('bAuthRegister').disabled = true;
-  $('authStatus').textContent = 'Menghubungi Firebase...';
-  try {
-    await (kind === 'register' ? shcRegister(email, pass) : shcLogin(email, pass));
-    $('authPassIn').value = '';
-    renderAuthState();
-    pollCloudOnce();
-  } catch (e) {
-    $('authStatus').textContent = (kind === 'register' ? 'Gagal daftar: ' : 'Gagal masuk: ') + (e.message || e);
-    $('authDot').className = 'status-dot err';
-  } finally {
-    $('bAuthLogin').disabled = false;
-    $('bAuthRegister').disabled = false;
-  }
-}
-
-// Enter di field mana pun mengirim form ini sebagai "Masuk"; tombol Daftar
-// punya type="button" supaya tidak ikut terkirim.
-$('authForm').addEventListener('submit', e => { e.preventDefault(); doAuth('login'); });
-$('bAuthRegister').addEventListener('click', () => doAuth('register'));
-
-$('bAuthLogout').addEventListener('click', () => {
-  shcLogout();
-  renderAuthState();
-  $('deviceCodeIn').value = '';
-  $('cloudDot').className = 'status-dot';
-  $('cloudStatus').textContent = 'Sudah keluar. Data cloud tidak bisa dibaca.';
-});
-
-// Klaim alat: satu kali per perangkat. Setelah tertaut, UID perangkat disimpan lokal
-// dan semua request memakai node itu, bukan node akun sendiri.
-$('bClaim').addEventListener('click', async () => {
-  const base = getCleanFbUrl();
-  if (!base) { $('authStatus').textContent = 'Isi URL database dulu.'; return; }
-  if (!shcToken()) { $('authStatus').textContent = 'Masuk dulu sebelum mengklaim alat.'; return; }
-  $('bClaim').disabled = true;
-  $('authStatus').textContent = 'Mencari kode alat...';
-  try {
-    const uid = await shcClaimDevice(base, $('deviceCodeIn').value);
-    $('authStatus').textContent = 'Alat tertaut. Node: ' + uid.slice(0, 8) + '...';
-    $('deviceCodeIn').value = '';
-    renderSessionState();
-    pollCloudOnce();
-  } catch (e) {
-    $('authStatus').textContent = 'Gagal klaim: ' + (e.message || e);
-  } finally {
-    $('bClaim').disabled = false;
-  }
-});
+renderAuthState();
 
 // Sesi bergiliran. Perangkat me-reset statistiknya saat nilai owner berubah, jadi
 // mulai dan akhiri sesi cukup menulis satu field.
@@ -934,16 +858,15 @@ async function endSession(){
 function renderSessionState(){
   const has = !!shcDeviceUid();
   $('sessionBox').hidden = !has;
-  $('bClaim').hidden = has;
-  $('deviceCodeIn').hidden = has;
   if (has) $('sessionLab').textContent = 'Sesi: belum dimulai';
 }
 $('bStartSession').addEventListener('click', startSession);
 $('bEndSession').addEventListener('click', endSession);
 
+// URL database sekarang diisi di login.html dan disimpan di localStorage.
 function getCleanFbUrl(){
-  const raw = ($('fbUrlIn').value || '').trim().replace(/\/+$/, '');
-  return raw.startsWith('https://') ? raw : '';
+  const raw = (localStorage.getItem('shc_fb_url') || '').trim();
+  return raw.startsWith('https://') ? raw.replace(/\/+$/, '') : '';
 }
 async function pushCloudTelemetry(){
   // Simulator tidak boleh menulis ke alat nyata: dulu klik tombol panel di mode
@@ -1060,24 +983,12 @@ async function pollCloudOnce(){
     $('cloudStatus').textContent = 'Gagal baca Cloud: ' + (err.message || err);
   }
 }
-$('bCloudSave').addEventListener('click', () => {
-  const url = getCleanFbUrl();
-  if (!url){
-    $('cloudDot').className = 'status-dot err';
-    $('cloudStatus').textContent = 'Masukkan URL HTTPS Firebase RTDB yang valid.';
-    return;
-  }
-  localStorage.setItem('shc_fb_url', url);
-  pollCloudOnce();
-});
-
 function setConnMode(mode){
   connMode = mode;
   document.querySelectorAll('.conn-pill').forEach(b =>
     b.classList.toggle('on', b.dataset.mode === mode));
   $('usbDrawer').classList.toggle('show', mode === 'usb');
   $('cloudDrawer').classList.toggle('show', mode === 'cloud');
-  $('authDrawer').classList.toggle('show', mode === 'cloud');
   $('simControls').style.display = mode === 'sim' ? 'block' : 'none';
   $('sTemp').disabled = (mode !== 'sim');
   $('sHum').disabled = (mode !== 'sim');
@@ -1213,6 +1124,10 @@ setInterval(() => {
 
 applyTimerConfig();
 render();
+
+// login.html menautkan ke ?mode=cloud supaya pengguna yang baru masuk langsung
+// melihat data cloud, bukan Simulator.
+if (new URLSearchParams(location.search).get('mode') === 'cloud') setConnMode('cloud');
 log('Smart Hydration Coaster siap. Pilih Simulator, USB Live, atau Cloud Firebase.', '');
 </script>
 </body>

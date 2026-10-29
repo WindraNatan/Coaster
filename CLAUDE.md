@@ -66,7 +66,7 @@ g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fs
 * **Protokol ESP32**: HTTPS REST via `HTTPClient` + `WiFiClientSecure` (`setInsecure()`, Port 443, Wi-Fi STA 2.4 GHz).
   * Endpoint: PATCH `/smart_coaster/telemetry.json` (on-change + heartbeat 5 s), GET `/smart_coaster/config.json` (poll 15 s).
   * Tanpa NTP: firmware tidak menyinkronkan waktu; riwayat harian dihitung di web (`localStorage`) per tanggal perangkat.
-* **Web App**: PWA (`web/manifest.json`, `web/sw.js`) mendukung mode Simulator, USB Live (`navigator.serial` 115200 baud), dan Firebase Cloud (poll REST 2,5 s).
+* **Web App**: PWA (`web/manifest.json`, `web/sw.js`) mendukung mode Simulator, USB Live (`navigator.serial` 115200 baud), dan Firebase Cloud (poll REST 2,5 s). Akun (URL database, email, password, Web API Key) dan klaim alat ada di halaman sendiri `web/login.html`; `web/index.html` hanya menampilkan status akun dan tautan ke sana. Login membuka dashboard lewat `index.html?mode=cloud`.
 * **Aplikasi Android (Flutter)**: `app/` (Dart, package `smart_coaster`) — mode Cloud saja: URL RTDB dimasukkan runtime (SharedPreferences `shc_fb_url`, setara `localStorage` PWA), polling `GET <url>/smart_coaster.json` 2,5 s, kontrol `PATCH <url>/smart_coaster/config.json` (`timer_mode`, `manual_interval_min`, `muted`). Identitas visual mengikuti web PWA (palet dark-teal/cyan, Space Grotesk + JetBrains Mono tabular, badge state berwarna); `ALERT_EMPTY_CUP`/`ALERT_MISSING_CUP` tetap dipetakan ke `ALERT_REFILL`. Kalibrasi `c`/tare `t` tetap USB-only. Verifikasi: `flutter pub get && flutter analyze && flutter test` (18 uji kontrak & alur cloud). Toolchain di luar repo: `D:/flutter`, `D:/jdk/jdk-17.0.20.1+1`, `D:/android-sdk`.
 
 ---
