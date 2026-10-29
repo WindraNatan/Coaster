@@ -55,7 +55,22 @@ a.pill:hover{border-color:var(--water);color:var(--ink)}
 a.pill.off{opacity:.55}
 .foot{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:18px;text-align:center;line-height:1.6}
 .foot a{color:var(--water)}
-@media(pointer:coarse){button,a.pill,input{min-height:44px}}
+/* Layar sentuh: kontrol utama naik ke 44 px supaya jempol tidak salah tekan. */
+@media(pointer:coarse){
+  button,a.pill,input{min-height:44px}
+  label{margin-top:14px}
+  .actions button{flex:1 1 auto}
+}
+/* Layar sangat sempit: buang hiasan, rapatkan padding, jangan biarkan teks melimpah. */
+@media(max-width:420px){
+  body{padding:18px 14px;justify-content:flex-start}
+  h1{font-size:18px}
+  .card{padding:16px;border-radius:8px}
+  .pill-row{gap:6px}
+  a.pill{font-size:10.5px;padding:6px 9px}
+  .actions{flex-direction:column}
+  .actions button,.actions a.pill{width:100%;justify-content:center}
+}
 </style>
 </head>
 <body>
