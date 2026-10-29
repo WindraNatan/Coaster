@@ -57,6 +57,8 @@ a.pill.off{opacity:.55}
 .foot a{color:var(--water)}
 /* Layar sentuh: kontrol utama naik ke 44 px supaya jempol tidak salah tekan. */
 @media(pointer:coarse){
+  /* iOS Safari memperbesar halaman saat input difokus kalau font < 16px. */
+  input{font-size:16px}
   button,a.pill,input{min-height:44px}
   label{margin-top:14px}
   .actions button{flex:1 1 auto}
