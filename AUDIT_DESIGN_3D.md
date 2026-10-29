@@ -52,7 +52,7 @@ Batang 80 mm: ujung depan y -40, ujung belakang y +40. Sudut terjauh radius 40.5
     kolom  x = -21.59 + 2.54k, k = 0..17   (margin 3.81 mm ke tepi)
     baris  y = 63.79 + 2.54k,  k = 0..23   (margin 5.79 mm ke tepi depan)
 
-Semua pin modul jatuh di grid: ESP32 di x -16.51 dan 6.35 dengan baris y 84.11..119.67; buzzer di x 16.51 dan baris y 91.73. Empat header pendarat jumper juga jatuh di grid: buzzer (16.51, 104.43), DHT11 (-3.81, 63.79), HX711 (2.54, 71.41, 4 pin), motor (21.59, 96.81).
+Semua pin modul jatuh di grid: ESP32 di x -16.51 dan 6.35 dengan baris y 84.11..119.67; buzzer di x 16.51 dan baris y 91.73. Empat titik solder juga jatuh di grid: buzzer (16.51, 104.43), DHT11 (-3.81, 63.79), HX711 (2.54, 71.41, 4 pin), motor (21.59, 96.81).
 
 ## Temuan terbuka
 

@@ -1,7 +1,7 @@
 // HydroCoaster - Two-Part Capsule Enclosure (Rear 28mm, Front Rim 23.2mm)
 // Dibagi di y = rear_front_y (56) supaya tiap part muat di bed A1 Mini 175 mm.
 // Kompartemen belakang 28mm memberi interior bersih 23.3mm di bawah tutup, cukup
-// untuk female header 8.5mm + PCB + shield RF + kabel jumper.
+// untuk female header 8.5mm + PCB + shield RF + kabel ke titik solder.
 // Bibir depan sengaja lebih rendah dari piringan atas supaya gelas hanya menumpu
 // pada piringan, bukan pada bibir sasis.
 
@@ -120,15 +120,16 @@ buzzer_y      = buzzer_pcb_y0 + 10.0;         // 69.73, can di ujung depan
 buzzer_can_d  = 12.0;                   // tidak ada di spek; diperkirakan dari foto modul
 buzzer_can_h  = 10.0;                   // spek: modul 32 x 13 x 10 mm
 // Pin modul keluar mendatar dari ujung PCB (foto), bukan tegak ke bawah, jadi modul
-// tidak bisa disolder langsung ke papan. Buzzer, motor, dan DHT11 ditempel datar,
-// lalu disambung jumper female-female ke header male yang disolder di baris grid.
+// tidak bisa disolder langsung ke papan. Buzzer, motor, dan DHT11 ditempel datar.
+// Tiap kabel disolder ke papan di titik grid dan memakai konektor female di ujung
+// modul, sehingga sensor bisa dicabut tanpa mengganggu sambungan papan.
 buzzer_lift     = 0.5;                  // tape 3M di bawah PCB modul
 mod_pin_l       = 7.0;                  // panjang pin mendatar modul
 mod_pin_span    = 5.08;                 // 3 pin, 2 pitch
 hdr_h           = 2.5;                  // header male di atas papan
 buzzer_pcb_z    = floor_th + 1.2 + 1.6 + buzzer_lift;  // 5.8
-// Header pendarat jumper. Pin modul buzzer berakhir di y 98.73; baris 104.43 (k=16)
-// menyisakan 1.70 mm supaya rumah jumper tidak menumpuk header.
+// Titik solder kabel buzzer. Pin modul berakhir di y 98.73; baris 104.43 (k=16)
+// menyisakan 1.70 mm supaya kabel tidak menumpuk modul.
 buzzer_hdr_x    = 16.51;               // 3 pin x 13.97..19.05
 buzzer_hdr_y    = 104.43;
 mtr_hdr_x       = 21.59;                // kolom grid k=17 (lubang paling kanan)
@@ -136,7 +137,7 @@ mtr_hdr_y       = 96.81;
 
 // --- POSISI DHT11 (wadah depan kiri) ---
 // Modul 32 x 14 mm (spek), diputar: pin 3 keluar dari tepi pendek (foto), jadi tepi 14 mm
-// menghadap septum dan jumper 3-pin bisa naik lurus lewat terowongan.
+// menghadap septum dan kabel 3 jalur bisa naik lurus lewat terowongan.
 // Wadah depan terbuka penuh ke atas, jadi tidak perlu kisi ventilasi di dinding.
 dht_front_w = 14.0;  // lebar PCB (x)
 dht_front_l = 32.0;  // panjang PCB (y), pin di tepi +y
@@ -149,8 +150,8 @@ dht_hdr_y   = 63.79; // baris grid k=0
 
 // --- POSISI HX711 (wadah depan kanan) ---
 // Papan modul duduk di atas piringan akrilik bawah, di luar jalur defleksi batang.
-// Pin 4 keluar mendatar dari tepi LUAR (+x): jumper keluar menjauhi batang, lalu menyusur
-// dinding kanan ke terowongan septum. Kalau pin menghadap ke dalam, jumper harus lewat
+// Pin 4 keluar mendatar dari tepi LUAR (+x): kabel keluar menjauhi batang, lalu menyusur
+// dinding kanan ke terowongan septum. Kalau pin menghadap ke dalam, kabel harus lewat
 // celah sempit antara PCB dan batang load cell.
 // Ukuran dari foto kit: PCB ±34.5 x 21 mm saat dikalibrasi ke disc akrilik Ø100.
 hx_x      = 25.0;   // pusat modul; tepi kiri x = 7.75, batang berakhir x = 6.35
@@ -161,7 +162,7 @@ hx_th     = 1.6;
 hx_hdr_l  = 10.16;  // header 4-pin, pitch 2.54
 hx_hdr_w  = 2.54;
 hx_hdr_h  = 8.5;    // header female 1x4, tegak di tepi luar (foto kit)
-// Header pendarat jumper HX711 di papan. Empat pin ganjil-genap, jadi pusatnya harus
+// Titik solder kabel HX711 di papan. Empat pin ganjil-genap, jadi pusatnya harus
 // di tengah antar-kolom: pin di x -1.27, 1.27, 3.81, 6.35.
 hx_land_x = 2.54;
 hx_land_y = 71.41;  // baris grid k=3
@@ -356,7 +357,7 @@ if (part_to_render == "front") {
         translate([hx_x + hx_w / 2, hx_y - hx_hdr_l / 2, disc_z + acr_th + hx_th])
             cube([hx_hdr_w, hx_hdr_l, hx_hdr_h]);
 
-    // Modul DHT11 diputar: pin 3 keluar mendatar ke +y, jumper naik lurus lewat
+    // Modul DHT11 diputar: pin 3 keluar mendatar ke +y, kabel naik lurus lewat
     // terowongan septum (x -8..8, y 52..56).
     color("DodgerBlue")
         translate([dht_front_x - dht_front_w / 2, dht_front_y - dht_front_l / 2, dht_pcb_z])
@@ -378,7 +379,7 @@ if (part_to_render == "front") {
 
     // Modul buzzer 13 x 32 mm duduk datar di strip kanan papan dengan tape 0.5 mm.
     // Pin keluar mendatar dari tepi belakang PCB (foto MH-FMD), jadi modul tidak bisa
-    // disolder ke papan; jumper 3-pin female-female turun ke header male di papan.
+    // disolder ke papan; kabel 3 jalur turun ke titik solder di papan.
     color("SteelBlue")
         translate([buzzer_pcb_x0, buzzer_pcb_y0, buzzer_pcb_z])
             cube([buzzer_pcb_w, buzzer_pcb_l, 1.6]);
@@ -388,7 +389,7 @@ if (part_to_render == "front") {
     color("Silver")
         translate([buzzer_x - mod_pin_span / 2, buzzer_pcb_y0 + buzzer_pcb_l, buzzer_pcb_z + 0.5])
             cube([mod_pin_span, mod_pin_l, 0.6]);
-    // Header male 3-pin tempat jumper mendarat, deret sejajar x di baris grid 104.43.
+    // Titik solder buzzer, deret sejajar x di baris grid 104.43.
     color("DimGray")
         translate([buzzer_hdr_x - 3.81, buzzer_hdr_y - 1.27, floor_th + 1.2 + 1.6])
             cube([7.62, 2.54, hdr_h]);
@@ -401,22 +402,23 @@ if (part_to_render == "front") {
     color("DimGray")
         translate([dht_hdr_x - 3.81, dht_hdr_y - 1.27, floor_th + 1.2 + 1.6])
             cube([7.62, 2.54, hdr_h]);
-    // Header pendarat jumper HX711 4-pin, satu baris di belakang header DHT.
+    // Titik solder HX711 4-pin, satu baris di belakang titik DHT.
     color("DimGray")
         translate([hx_land_x - 5.08, hx_land_y - 1.27, floor_th + 1.2 + 1.6])
             cube([10.16, 2.54, hdr_h]);
     // Modul motor getar 23 x 21 mm, PCB menempel di bawah tutup, motor koin menggantung.
-    // Pin 3 keluar mendatar ke -x; kabel disolder ke pad karena header male 11.5 mm
-    // akan menembus shield RF di bawahnya. Rumah jumper tidak dipakai: tebal 2.5 mm
-    // dari bidang pin (25.0) akan menembus tutup bawah 25.8.
+    // Pin 3 keluar mendatar ke +x; kabel disolder ke pad karena header male 11.5 mm
+    // akan menembus shield RF di bawahnya. Konektor female dipasang di ujung kabel,
+    // bukan di titik pin: tebal 2.5 mm dari bidang pin (25.0) akan menembus tutup 25.8.
     color("DimGray")
         translate([mtr_x - 11.5, mtr_y - 10.5, mtr_z])
             cube([23, 21, mtr_th]);
     color("Silver")
         translate([mtr_x - 4.5, mtr_y - 4.5, mtr_z - mtr_can_h])
             cylinder(h = mtr_can_h, d = 9);
-    // Pin 3 keluar mendatar ke +x, ke arah header pendarat di x 21.59. Kalau dibalik
-    // ke -x, kabel harus menyeberang papan 41 mm; posisi ini hanya 11.7 mm dari header.
+    // Pin 3 keluar mendatar ke +x, ke arah header pendarat di x 21.59. Ujung pin
+    // berhenti di x 13.42, jadi kabel tinggal 8.17 mm ke header. Kalau dibalik ke -x,
+    // pin berakhir di x -23.58 dan kabel harus menempuh 45.17 mm menyeberang papan.
     color("Silver")
         translate([mtr_x + 11.5, mtr_y - mod_pin_span / 2, mtr_z + 0.5])
             cube([mod_pin_l, mod_pin_span, 0.6]);

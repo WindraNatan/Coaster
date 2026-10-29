@@ -720,12 +720,12 @@
       // Kabel disolder ke papan di titik grid, konektor female dipasang di ujung modul.
       // Baris grid: z = 63.79 + 2.54k, kolom x = -21.59 + 2.54k.
       //
-      // A. Buzzer: pin modul di z 91.73 keluar ke +z, jumper ke baris 104.43.
+      // A. Buzzer: pin modul di z 91.73 keluar ke +z, kabel ke baris 104.43.
       const hBuzzer = new THREE.Mesh(new THREE.BoxGeometry(7.62, 2.5, 2.54), matHeaderPlastic);
       hBuzzer.position.set(-16.51, 6.55, 104.43);
       headersGroup.add(hBuzzer);
 
-      // B. DHT11: pin modul keluar ke +z dari (x 24, z 22), jumper melewati terowongan
+      // B. DHT11: pin modul keluar ke +z dari (x 24, z 22), kabel melewati terowongan
       // septum (x -8..8, z 52..56) ke baris depan. Tiga pin di x -1.27..3.81.
       const hDht = new THREE.Mesh(new THREE.BoxGeometry(7.62, 2.5, 2.54), matHeaderPlastic);
       hDht.position.set(3.81, 6.55, 63.79);
@@ -767,7 +767,7 @@
       powerBusGroup.add(tVinMotor);
 
       // Jalur 3.3V dari pin 15 kanan: menyusur kanan ke HX711, turun ke DHT11, lalu ke
-      // buzzer di strip kanan (scene: kiri, karena cermin X). Semua titik akhir = pin header pendarat jumper.
+      // buzzer di strip kanan (scene: kiri, karena cermin X). Semua titik akhir = titik solder.
       const t3v3Bus1 = createBoardTrace([
         [ESP_X + 11.43, 5.38, 119.67],
         [20.32, 5.38, 119.67],
@@ -893,7 +893,7 @@
       // 7. PENEMPATAN MODUL: BUZZER DI PAPAN, DHT11 & HX711 DI WADAH DEPAN
       // A. MODUL BUZZER: memanjang di strip kanan papan secara fisik (13 x 32 mm);
       // di scene ini tampil di kiri karena sumbu X dicerminkan., duduk datar dengan
-      // tape 0.5 mm. Pin 3 keluar mendatar dari tepi belakang; jumper ke header 104.43.
+      // tape 0.5 mm. Pin 3 keluar mendatar dari tepi belakang; kabel ke baris 104.43.
       const BZ_X = -16.51, BZ_Z = 69.73, BZ_PCB_Y = 6.6;
       const bzGroup = new THREE.Group();
       const bzPcb = new THREE.Mesh(
@@ -930,7 +930,7 @@
       calloutTargets.buzzer_mod = new THREE.Vector3(BZ_X, 18.0, BZ_Z);
 
       // B. MODUL DHT11 32 x 14 mm di wadah depan kanan, diputar: pin 3 keluar mendatar
-      // dari tepi +z (menuju septum), jadi jumper naik lurus lewat terowongan.
+      // dari tepi +z (menuju septum), jadi kabel naik lurus lewat terowongan.
       const dhtGroup = new THREE.Group();
       const dhtPcb = new THREE.Mesh(
         new THREE.BoxGeometry(14.0, 1.6, 32.0),
