@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth.dart';
+import 'project_config.dart';
 import 'telemetry.dart';
 
 // Palet & tipografi mengikuti identitas web PWA (web/index.html :root):
@@ -104,17 +105,26 @@ class _RootPageState extends State<RootPage> {
       session = await refreshSession(session);
     }
     if (!mounted) return;
+    // Urutan: URL yang pernah diketik pengguna (SharedPreferences) menang, lalu
+    // tetapan build. Dengan begitu instalasi lama tetap jalan, dan instalasi baru
+    // tidak perlu mengetik URL sama sekali.
+    final effective = (saved != null && saved.isNotEmpty) ? saved : kFirebaseUrl;
     setState(() {
-      _savedUrl = saved;
+      _savedUrl = effective;
       _session = (session != null && session.valid) ? session : null;
-      _url = (saved != null && saved.isNotEmpty && _session != null) ? saved : null;
+      _url = (effective.isNotEmpty && _session != null) ? effective : null;
     });
   }
 
-  void _openDashboard(String url, AuthSession session) =>
-      setState(() { _url = url; _session = session; });
+  void _openDashboard(String url, AuthSession session) => setState(() {
+        _url = url;
+        _session = session;
+        _editingUrl = false;
+      });
 
-  void _editUrl() => setState(() => _url = null);
+  bool _editingUrl = false;
+
+  void _editUrl() => setState(() { _url = null; _editingUrl = true; });
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +134,8 @@ class _RootPageState extends State<RootPage> {
         ? ConnectScreen(
             initialUrl: _savedUrl,
             onConnect: _openDashboard,
-            initialSession: session)
+            initialSession: session,
+            showUrlField: _editingUrl)
         : DashboardScreen(
             key: ValueKey(url),
             url: url,
@@ -139,8 +150,9 @@ class ConnectScreen extends StatefulWidget {
   final void Function(String url, AuthSession session) onConnect;
   final String? initialUrl;
   final AuthSession? initialSession;
-  const ConnectScreen(
-      {super.key, required this.onConnect, this.initialUrl, this.initialSession});
+  final bool showUrlField;
+  const ConnectScreen({super.key, required this.onConnect, this.initialUrl,
+      this.initialSession, this.showUrlField = false});
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -174,8 +186,29 @@ class _ConnectScreenState extends State<ConnectScreen> {
     super.dispose();
   }
 
+  // URL dan API key boleh datang dari tetapan build; kolomnya disembunyikan
+  // supaya pengguna umum hanya melihat email dan password. Isian pengguna menang
+  // atas tetapan build, sama seperti _boot() mendahulukan
+  // URL tersimpan. Tanpa urutan ini, kolom yang muncul lewat "Ubah URL" akan
+  // tampak bisa diketik padahal nilainya diabaikan.
+  String get _urlValue {
+    final typed = _ctrl.text.trim();
+    return typed.isNotEmpty ? typed : kFirebaseUrl;
+  }
+
+  String get _keyValue {
+    final typed = _key.text.trim();
+    return typed.isNotEmpty ? typed : kFirebaseApiKey;
+  }
+
+  // Kolom ditampilkan kalau nilainya belum ada di mana pun, atau kalau dashboard
+  // meminta lewat tombol "Ubah URL".
+  bool get _needsUrl =>
+      widget.showUrlField || (kFirebaseUrl.isEmpty && _ctrl.text.trim().isEmpty);
+  bool get _needsKey => kFirebaseApiKey.isEmpty && _key.text.trim().isEmpty;
+
   Future<void> _submit() async {
-    final raw = _ctrl.text.trim();
+    final raw = _urlValue;
     if (raw.isEmpty) {
       setState(() => _error = 'URL wajib diisi.');
       return;
@@ -187,7 +220,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final url = raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
     setState(() { _busy = true; _authError = null; _error = null; });
     try {
-      await saveApiKey(_key.text);
+      await saveApiKey(_keyValue);
       var existing = await loadSession();
       if (existing != null && !existing.valid && existing.refreshToken.isNotEmpty) {
         existing = await refreshSession(existing);
@@ -197,7 +230,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
           : await signIn(
               email: _email.text,
               password: _pass.text,
-              apiKey: _key.text,
+              apiKey: _keyValue,
               register: _registerMode,
             );
       final p = await SharedPreferences.getInstance();
@@ -235,45 +268,49 @@ class _ConnectScreenState extends State<ConnectScreen> {
                         fontWeight: FontWeight.w700,
                         color: _water,
                         letterSpacing: .2)),
-                const SizedBox(height: 8),
-                Text('Mode Cloud · Firebase Realtime Database',
-                    style: _monoStyle(12)),
-                const SizedBox(height: 28),
-                TextField(
-                  controller: _ctrl,
-                  keyboardType: TextInputType.url,
-                  textInputAction: TextInputAction.go,
-                  onSubmitted: (_) => _submit(),
-                  style: _monoStyle(13, color: _ink),
-                  decoration: InputDecoration(
-                    labelText: 'URL Firebase RTDB',
-                    labelStyle: _monoStyle(12),
-                    hintText:
-                        'https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app',
-                    hintStyle: _monoStyle(11, color: _dim),
-                    enabledBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _line)),
-                    focusedBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _water, width: 2)),
-                    errorText: _error,
-                    errorStyle: _monoStyle(11, color: _alarm),
-                  ),
-                ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6),
                 Text(
-                  'Salin URL dari Firebase Console → Realtime Database. '
-                  'ESP32 menulis ke /users/<uid>/smart_coaster lewat Wi-Fi 2,4 GHz; '
-                  'aplikasi ini membaca telemetry dan mengatur config.',
-                  style: _monoStyle(11, color: _dim, ),
+                  'Masuk untuk melihat tatakan gelasmu dari jauh.',
+                  style: TextStyle(fontSize: 14, color: _dim, height: 1.5),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 28),
+                if (_needsUrl) ...[
+                  TextField(
+                    controller: _ctrl,
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.go,
+                    onSubmitted: (_) => _submit(),
+                    style: _monoStyle(13, color: _ink),
+                    decoration: InputDecoration(
+                      labelText: 'URL Firebase RTDB',
+                      labelStyle: _monoStyle(12),
+                      hintText:
+                          'https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app',
+                      hintStyle: _monoStyle(11, color: _dim),
+                      enabledBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: _line)),
+                      focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: _water, width: 2)),
+                      errorText: _error,
+                      errorStyle: _monoStyle(11, color: _alarm),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Salin URL dari Firebase Console → Realtime Database. '
+                    'ESP32 menulis ke /users/<uid>/smart_coaster lewat Wi-Fi 2,4 GHz; '
+                    'aplikasi ini membaca telemetry dan mengatur config.',
+                    style: _monoStyle(11, color: _dim),
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 TextField(
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.username],
                   style: _monoStyle(13, color: _ink),
                   decoration: InputDecoration(
-                    labelText: 'Email akun Firebase',
+                    labelText: 'Email',
                     labelStyle: _monoStyle(12),
                     enabledBorder: const OutlineInputBorder(
                         borderSide: BorderSide(color: _line)),
@@ -297,6 +334,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                if (_needsKey)
                 TextField(
                   controller: _key,
                   autocorrect: false,
@@ -315,6 +353,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+                // Kolom API key bisa disembunyikan oleh tetapan build, jadi pesan
+                // gagal masuk ditampilkan di sini supaya tidak hilang.
+                if (_authError != null) ...[
+                  Text(_authError!,
+                      style: _monoStyle(12, color: _alarm), textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                ],
                 FilledButton(
                   onPressed: _busy ? null : _submit,
                   style: FilledButton.styleFrom(
@@ -327,8 +372,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
                         fontWeight: FontWeight.w600),
                   ),
                   child: Text(_busy
-                      ? 'Menghubungi...'
-                      : (_registerMode ? 'Daftar & Hubungkan' : 'Masuk & Hubungkan')),
+                      ? 'Sebentar...'
+                      : (_registerMode ? 'Buat akun' : 'Masuk')),
                 ),
                 const SizedBox(height: 8),
                 TextButton(
