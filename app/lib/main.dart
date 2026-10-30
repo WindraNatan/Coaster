@@ -174,7 +174,15 @@ class _ConnectScreenState extends State<ConnectScreen> {
     if (widget.initialUrl != null) _ctrl.text = widget.initialUrl!;
     final s = widget.initialSession;
     if (s != null) _email.text = s.email;
-    loadApiKey().then((k) { if (mounted && k.isNotEmpty) _key.text = k; });
+    // _storedKeyMissing hanya mencerminkan penyimpanan, bukan isi kolom, supaya
+    // kolom tidak hilang saat pengguna sedang mengetik.
+    loadApiKey().then((k) {
+      if (!mounted) return;
+      setState(() {
+        _key.text = k;
+        _storedKeyMissing = k.isEmpty;
+      });
+    });
   }
 
   @override
@@ -201,11 +209,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
     return typed.isNotEmpty ? typed : kFirebaseApiKey;
   }
 
-  // Kolom ditampilkan kalau nilainya belum ada di mana pun, atau kalau dashboard
-  // meminta lewat tombol "Ubah URL".
-  bool get _needsUrl =>
-      widget.showUrlField || (kFirebaseUrl.isEmpty && _ctrl.text.trim().isEmpty);
-  bool get _needsKey => kFirebaseApiKey.isEmpty && _key.text.trim().isEmpty;
+  // Visibilitas kolom ditentukan sekali saat layar dibuka, bukan dari isi kolom.
+  // Kalau bergantung pada _key.text, kolomnya hilang begitu pengguna mengetik
+  // (setState saat _busy=true) sehingga key yang salah tidak bisa diperbaiki.
+  late final bool _needsUrl = widget.showUrlField ||
+      (kFirebaseUrl.isEmpty && (_ctrl.text.trim().isEmpty));
+  bool _storedKeyMissing = true;
+  bool get _needsKey => kFirebaseApiKey.isEmpty && _storedKeyMissing;
 
   Future<void> _submit() async {
     final raw = _urlValue;
