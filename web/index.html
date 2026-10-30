@@ -565,6 +565,13 @@ function recomputeAdaptive(){
 function applyTimerConfig(){
   fsm.setMaxLift(demo ? CFG.DEMO_MAX_LIFT : CFG.MAX_LIFT);
   recomputeAdaptive();
+  syncModeLabels_();
+}
+
+// Label ketiga tombol mode. Dipisah dari applyTimerConfig() karena pemanggil dari
+// jalur serial hanya ingin memutakhirkan label: applyTimerConfig() juga menjalankan
+// recomputeAdaptive(), yang akan menimpa fsm.interval kiriman ESP32.
+function syncModeLabels_(){
   $('bDemo').textContent = 'Demo 15 dtk: ' + (demo ? 'ON' : 'OFF');
   $('bDemo').classList.toggle('active-btn', demo);
   $('bAutoMode').textContent = 'Timer: ' + (autoDht ? 'Adaptif DHT11' : 'Manual Tetap');
@@ -807,9 +814,9 @@ function handleSerialLine(line){
   if (mBuzzer){
     buzzerMuted = (mBuzzer[1] === 'MUTE');
   }
-  // applyTimerConfig() juga menyetel ketiga label ini; dulu blok yang sama disalin
-  // di sini sehingga perubahan label harus dikerjakan dua kali.
-  applyTimerConfig();
+  // Hanya label. applyTimerConfig() tidak boleh dipakai di sini: ia memanggil
+  // recomputeAdaptive() yang menimpa fsm.interval dari baris Target: ESP32.
+  syncModeLabels_();
 
   if (fsm.drinkCount !== prevDrink || fsm.refillCount !== prevRefill || fsm.cheatCount !== prevCheat){
     saveTodayStatsToHistory();
