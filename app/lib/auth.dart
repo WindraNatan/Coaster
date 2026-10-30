@@ -8,6 +8,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'project_config.dart';
+
 const _kToken = 'shc_id_token';
 const _kExp = 'shc_id_token_exp';
 const _kEmail = 'shc_auth_email';
@@ -110,9 +112,13 @@ Future<AuthSession?> loadSession() async {
       p.getString(_kRefresh) ?? '');
 }
 
+// Nilai tersimpan (diketik pengguna) menang; kalau kosong, pakai tetapan build.
+// refreshSession() memakai fungsi ini, jadi tanpa cadangan tetapan, instalasi
+// baru berhasil login sekali lalu kehilangan sesi setelah token kedaluwarsa.
 Future<String> loadApiKey() async {
   final p = await SharedPreferences.getInstance();
-  return p.getString(_kApiKey) ?? '';
+  final stored = (p.getString(_kApiKey) ?? '').trim();
+  return stored.isNotEmpty ? stored : kFirebaseApiKey;
 }
 
 Future<void> saveApiKey(String key) async {
