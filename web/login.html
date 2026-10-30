@@ -116,6 +116,8 @@ a.pill.off{opacity:.55}
 
       <label for="authKeyIn">Web API Key proyek</label>
       <input type="text" id="authKeyIn" placeholder="AIza..." aria-label="Firebase Web API Key" autocomplete="off">
+
+      <button type="button" id="bResetConfig" style="margin-top:10px;min-height:44px;">Kembalikan ke proyek bawaan</button>
     </details>
   </section>
 
@@ -168,7 +170,6 @@ function render(){
   $('signedInCard').hidden = !ok;
   $('signedInLine').textContent = ok ? ('Akun: ' + email) : '—';
 
-  const base = localStorage.getItem('shc_fb_url') || '';
   const device = shcDeviceUid();
   $('claimForm').hidden = !ok || !!device;
   if (device) setStatus($('claimStatus'), $('claimDot'), 'Alat tertaut: ' + device.slice(0, 8) + '…', 'ok');
@@ -191,9 +192,14 @@ async function doAuth(kind){
   $('bAuthRegister').disabled = true;
   setStatus($('authStatus'), $('authDot'), 'Menghubungi Firebase…', '');
   try {
-    // Simpan hanya kalau diketik sendiri, supaya tetapan tidak membeku di browser.
+    // Kolom lanjutan adalah satu-satunya sumber nilai tersimpan. Dikosongkan =
+    // kembali ke tetapan auth.js, jadi nilai lama harus ikut dihapus; tanpa ini
+    // URL proyek yang salah akan terus dipakai tanpa cara mengembalikannya.
+    const typedKey = ($('authKeyIn').value || '').trim();
     if (typedUrl) localStorage.setItem('shc_fb_url', url);
-    if (($('authKeyIn').value || '').trim()) localStorage.setItem('shc_api_key', key);
+    else localStorage.removeItem('shc_fb_url');
+    if (typedKey) localStorage.setItem('shc_api_key', key);
+    else localStorage.removeItem('shc_api_key');
     await (kind === 'register' ? shcRegister(email, pass) : shcLogin(email, pass));
     $('authPassIn').value = '';
     render();
@@ -228,6 +234,15 @@ $('bClaim').addEventListener('click', async () => {
   }
 });
 
+// Keluar dari proyek lain tanpa harus mengosongkan dua kolom satu per satu.
+$('bResetConfig').addEventListener('click', () => {
+  localStorage.removeItem('shc_fb_url');
+  localStorage.removeItem('shc_api_key');
+  $('authUrlIn').value = '';
+  $('authKeyIn').value = '';
+  setStatus($('authStatus'), $('authDot'), 'Kembali ke proyek bawaan.', '');
+});
+
 $('bAuthLogout').addEventListener('click', () => {
   shcLogout();
   localStorage.removeItem('shc_device_uid');
@@ -237,6 +252,7 @@ $('bAuthLogout').addEventListener('click', () => {
 
 // Isi ulang kolom dari penyimpanan lokal, lalu arahkan ke dashboard kalau
 // pengguna datang dari tautan "Buka dashboard".
+// Tampilkan nilai yang benar-benar dipakai, bukan hanya yang tersimpan.
 $('authUrlIn').value = localStorage.getItem('shc_fb_url') || '';
 $('authEmailIn').value = localStorage.getItem(SHC_EMAIL_KEY) || '';
 $('authKeyIn').value = localStorage.getItem('shc_api_key') || '';

@@ -945,9 +945,18 @@ async function pollCloudOnce(){
     $('cloudStatus').textContent = 'URL wajib diawali https://';
     return;
   }
-  if (!url || !await shcEnsureToken()){
+  // Tiga sebab berbeda, tiga pesan berbeda. Dulu semuanya "Masuk dulu",
+  // sehingga pengguna yang sudah masuk tapi belum menautkan alat diberi
+  // petunjuk yang salah.
+  if (!shcDeviceUid()){
     $('cloudDot').className = 'status-dot err';
-    $('cloudStatus').textContent = 'Masuk dulu untuk membaca data cloud.';
+    $('cloudStatus').innerHTML =
+      'Alat belum ditautkan. <a href="login.html" style="color:var(--water);">Buka halaman Akun</a> untuk memasukkan kode alat.';
+    return;
+  }
+  if (!await shcEnsureToken()){
+    $('cloudDot').className = 'status-dot err';
+    $('cloudStatus').textContent = 'Sesi berakhir. Masuk lagi lewat halaman Akun.';
     return;
   }
   try {
