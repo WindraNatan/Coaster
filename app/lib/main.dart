@@ -370,7 +370,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AuthSession _session = widget.session;
   Telemetry? _t;
   CloudConfig? _cfg;
@@ -392,13 +392,36 @@ class _DashboardScreenState extends State<DashboardScreen>
     _client = widget.client ?? http.Client();
     _pulse = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
+    WidgetsBinding.instance.addObserver(this);
     _poll();
-    _timer = Timer.periodic(_pollInterval, (_) => _poll());
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _timer ??= Timer.periodic(_pollInterval, (_) => _poll());
+  }
+
+  void _stopPolling() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  // Ponsel di kantong tidak perlu mengunduh tiap 2,5 detik. Hentikan saat aplikasi
+  // tidak terlihat, dan langsung ambil data segar begitu pengguna kembali.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _poll();
+      _startPolling();
+    } else {
+      _stopPolling();
+    }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPolling();
     _client.close();
     _pulse.dispose();
     _intervalCtrl.dispose();

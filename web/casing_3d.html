@@ -443,7 +443,7 @@
       </div>
       <div id="tag-hx711-hdr" class="callout-tag" onclick="inspectPart('hx711_hdr')">
         <span class="dot" style="background:#5FD195;"></span>
-        <span>Modul HX711 (Wadah Depan Kiri)</span>
+        <span>Modul HX711 (Wadah Depan Kanan)</span>
       </div>
       <div id="tag-buzzer-mod" class="callout-tag" onclick="inspectPart('buzzer_mod')">
         <span class="dot" style="background:var(--purple);"></span>
@@ -451,7 +451,7 @@
       </div>
       <div id="tag-dht-mod" class="callout-tag" onclick="inspectPart('dht_mod')">
         <span class="dot" style="background:var(--blue);"></span>
-        <span>Modul DHT11 (Wadah Depan Kanan)</span>
+        <span>Modul DHT11 (Wadah Depan Kiri)</span>
       </div>
       <div id="tag-motor-mod" class="callout-tag" onclick="inspectPart('motor_mod')">
         <span class="dot" style="background:var(--orange);"></span>
@@ -929,7 +929,8 @@
       modulesGroup.add(bzGroup);
       calloutTargets.buzzer_mod = new THREE.Vector3(BZ_X, 18.0, BZ_Z);
 
-      // B. MODUL DHT11 32 x 14 mm di wadah depan kanan, diputar: pin 3 keluar mendatar
+      // B. MODUL DHT11 32 x 14 mm di wadah depan KIRI secara fisik (scene: kanan, sumbu X
+      // dicerminkan). Diputar: pin 3 keluar mendatar
       // dari tepi +z (menuju septum), jadi kabel naik lurus lewat terowongan.
       const dhtGroup = new THREE.Group();
       const dhtPcb = new THREE.Mesh(
@@ -971,7 +972,8 @@
       modulesGroup.add(motorGroup);
       calloutTargets.motor_mod = new THREE.Vector3(5.08, 23.0, 100.0);
 
-      // D. MODUL HX711 34.5 x 21 mm di wadah depan kiri, di atas piringan akrilik bawah.
+      // D. MODUL HX711 34.5 x 21 mm di wadah depan KANAN secara fisik (scene: kiri, sumbu X
+      // dicerminkan). Duduk di atas piringan akrilik bawah.
       // Header 4-pin di tepi luar (-x), jadi kabel keluar menjauhi batang load cell.
       // Tepi kanan PCB x = -7.75, batang mulai x = -6.35: celah 1.40 mm.
       const hxGroup = new THREE.Group();
@@ -1243,7 +1245,7 @@
     function focusSensors() {
       flyCameraTo(new THREE.Vector3(65, 75, 60), new THREE.Vector3(0, 8, 35));
       document.getElementById('panel-title').innerText = "Tata Letak: Buzzer di Strip Kanan Papan, DHT11 di Wadah Depan";
-      document.getElementById('panel-desc').innerHTML = "Buzzer duduk memanjang di strip kanan papan, di samping ESP32. Sensor DHT11 pindah ke wadah depan kanan di atas piringan akrilik bawah, terpisah dari panas ESP32 oleh septum dan terbuka ke udara ruangan.";
+      document.getElementById('panel-desc').innerHTML = "Buzzer duduk memanjang di strip kanan papan, di samping ESP32. Sensor DHT11 pindah ke wadah depan kiri di atas piringan akrilik bawah, terpisah dari panas ESP32 oleh septum dan terbuka ke udara ruangan.";
     }
 
     function toggleTopDown() {
@@ -1330,7 +1332,7 @@
           desc: "Duduk di atas dua baris female header 15-pin di separuh belakang papan, digeser 5.08 mm ke kanan agar strip kanan 17.78 mm muat modul buzzer 13 mm; baris pinnya jatuh tepat di kolom lubang papan. Port micro-USB berada di z 13.8..17.8, sejajar bukaan sasis z 12.5..20.5."
         },
         hx711_hdr: {
-          title: "Modul HX711 (Wadah Tatakan Depan Kiri)",
+          title: "Modul HX711 (Wadah Tatakan Depan Kanan)",
           desc: "Terletak di wadah tatakan depan sebelah kiri load cell. Berukuran 34.5 x 21 mm. Header 4-pin menghadap ke luar (x -44.79..-42.25), jadi kabel keluar menjauhi batang; tepi kanan PCB hanya 1.40 mm dari batang. Kabel menuju ESP32 lewat terowongan sekat sasis."
         },
         buzzer_mod: {
@@ -1338,8 +1340,8 @@
           desc: "Dipasang memanjang 13 x 32 mm di strip kanan papan; melintang butuh 32 mm di strip depan yang hanya 18 mm. Can Ø12 mm tinggi 10 mm di ujung depan, tepat di bawah 9 lubang kisi suara tutup sasis; puncaknya 19.4 mm, tutup mulai 25.8 mm. VCC wajib 3.3V, pin I/O ke GPIO18 (Active-LOW)."
         },
         dht_mod: {
-          title: "Modul DHT11 (Wadah Tatakan Depan Kanan)",
-          desc: "Modul 32 x 14 mm di wadah depan kanan, di atas piringan akrilik bawah. Wadah depan terbuka penuh ke atas dan berjarak 50 mm dari septum, jadi sensor tidak menerima panas dari regulator dan WiFi ESP32."
+          title: "Modul DHT11 (Wadah Tatakan Depan Kiri)",
+          desc: "Modul 32 x 14 mm di wadah depan kiri, di atas piringan akrilik bawah. Wadah depan terbuka penuh ke atas dan berjarak 50 mm dari septum, jadi sensor tidak menerima panas dari regulator dan WiFi ESP32."
         },
         motor_mod: {
           title: "Modul Motor Getar 23 x 21 mm (Bawah Tutup)",
