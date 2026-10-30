@@ -14,5 +14,5 @@ const String kFirebaseUrl = String.fromEnvironment(
 
 const String kFirebaseApiKey = String.fromEnvironment(
   'FB_API_KEY',
-  defaultValue: '',
+  defaultValue: 'AIzaSyAsJOK540P20E2KeOyB2BdXQj3dOARfyLA',
 );

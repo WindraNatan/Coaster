@@ -9,7 +9,7 @@ import 'package:smart_coaster/project_config.dart';
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('URL tertanam: kolom URL disembunyikan', (tester) async {
+  testWidgets('URL dan API key tertanam: hanya email dan password', (tester) async {
     expect(kFirebaseUrl, isNotEmpty, reason: 'prasyarat: URL ditanam di build');
 
     await tester.pumpWidget(MaterialApp(
@@ -21,13 +21,10 @@ void main() {
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Masuk'), findsOneWidget);
-    // API key default-nya kosong, jadi kolomnya sengaja masih tampil sampai
-    // build memberi --dart-define=FB_API_KEY=...
-    if (kFirebaseApiKey.isEmpty) {
-      expect(find.text('Web API Key proyek Firebase'), findsOneWidget);
-    } else {
-      expect(find.text('Web API Key proyek Firebase'), findsNothing);
-    }
+    // Keduanya ditanam di project_config.dart, jadi pengguna umum tidak
+    // pernah melihat kolom teknis.
+    expect(find.text('Web API Key proyek Firebase'),
+        kFirebaseApiKey.isEmpty ? findsOneWidget : findsNothing);
   });
 
   testWidgets('URL tersimpan dipakai ulang, tidak minta diketik lagi',
@@ -68,9 +65,11 @@ void main() {
     expect(find.text(typed), findsOneWidget);
   });
 
+  // Hanya relevan kalau API key tidak ditanam; kalau ditanam, kolomnya memang
+  // tidak pernah tampil sehingga skenario ini tidak ada.
   testWidgets('kolom API key tidak hilang saat pengguna mengetik', (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: ConnectScreen(onConnect: (_, _) {}),
+      home: ConnectScreen(onConnect: (_, _) {}, showKeyField: true),
     ));
     await tester.pumpAndSettle();
 
@@ -82,5 +81,13 @@ void main() {
     // Masih terlihat, jadi key yang salah bisa diperbaiki tanpa keluar layar.
     expect(find.text('Web API Key proyek Firebase'), findsOneWidget);
     expect(find.text('AIzaSalahSekali'), findsOneWidget);
+  });
+
+  testWidgets('showKeyField memaksa kolom API key tampil', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ConnectScreen(onConnect: (_, _) {}, showKeyField: true),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Web API Key proyek Firebase'), findsOneWidget);
   });
 }

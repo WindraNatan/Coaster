@@ -151,8 +151,9 @@ class ConnectScreen extends StatefulWidget {
   final String? initialUrl;
   final AuthSession? initialSession;
   final bool showUrlField;
+  final bool showKeyField;
   const ConnectScreen({super.key, required this.onConnect, this.initialUrl,
-      this.initialSession, this.showUrlField = false});
+      this.initialSession, this.showUrlField = false, this.showKeyField = false});
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -215,7 +216,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
   late final bool _needsUrl = widget.showUrlField ||
       (kFirebaseUrl.isEmpty && (_ctrl.text.trim().isEmpty));
   bool _storedKeyMissing = true;
-  bool get _needsKey => kFirebaseApiKey.isEmpty && _storedKeyMissing;
+  bool get _needsKey =>
+      widget.showKeyField || (kFirebaseApiKey.isEmpty && _storedKeyMissing);
 
   Future<void> _submit() async {
     final raw = _urlValue;
