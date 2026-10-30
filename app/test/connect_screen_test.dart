@@ -83,6 +83,21 @@ void main() {
     expect(find.text('AIzaSalahSekali'), findsOneWidget);
   });
 
+  testWidgets('key tersimpan yang basi tidak mengalahkan tetapan build',
+      (tester) async {
+    // Key lama tersimpan (mis. dari build tanpa FB_API_KEY).
+    SharedPreferences.setMockInitialValues({'shc_api_key': 'AIzaKUNO_LAMA'});
+    expect(kFirebaseApiKey, isNotEmpty, reason: 'prasyarat: key ditanam');
+
+    await tester.pumpWidget(MaterialApp(
+      home: ConnectScreen(onConnect: (_, _) {}, showKeyField: true),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AIzaKUNO_LAMA'), findsNothing);
+    expect(find.text(kFirebaseApiKey), findsOneWidget);
+  });
+
   testWidgets('showKeyField memaksa kolom API key tampil', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: ConnectScreen(onConnect: (_, _) {}, showKeyField: true),

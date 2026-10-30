@@ -180,8 +180,12 @@ class _ConnectScreenState extends State<ConnectScreen> {
     loadApiKey().then((k) {
       if (!mounted) return;
       setState(() {
-        _key.text = k;
-        _storedKeyMissing = k.isEmpty;
+        // Key tersimpan tidak pernah diketik pengguna; ia ditulis otomatis oleh
+        // saveApiKey(). Kalau dibiarkan menang atas tetapan build, build dengan
+        // key baru tetap memakai key lama yang salah, dan karena kolomnya
+        // tersembunyi tidak ada cara memperbaikinya selain hapus data aplikasi.
+        _key.text = kFirebaseApiKey.isNotEmpty ? kFirebaseApiKey : k;
+        _storedKeyMissing = _key.text.isEmpty;
       });
     });
   }
@@ -232,7 +236,9 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final url = raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
     setState(() { _busy = true; _authError = null; _error = null; });
     try {
-      await saveApiKey(_keyValue);
+      // Simpan hanya kalau nilainya berasal dari pengguna, supaya tetapan build
+      // tidak membeku di penyimpanan.
+      if (kFirebaseApiKey.isEmpty) await saveApiKey(_keyValue);
       var existing = await loadSession();
       if (existing != null && !existing.valid && existing.refreshToken.isNotEmpty) {
         existing = await refreshSession(existing);
