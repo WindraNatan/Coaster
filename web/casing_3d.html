@@ -715,6 +715,11 @@
       }
       calloutTargets.esp32 = new THREE.Vector3(ESP_X, 16.0, ESP_Z);
 
+      // PENTING: label huruf-angka di panduan mengikuti CETAKAN papan (PY-5CM*7CM),
+      // bukan indeks kolom SCAD. Papan mencetak 18 di kiri dan 01 di kanan, sedangkan
+      // SCAD menomori kolom dari kiri (k=0 di x -21.59). Jadi label kolom = 19 - k.
+      // Contoh: motor k=18 (x +21.59) berlabel 01; DHT11 k=6..8 berlabel 12, 11, 10.
+      // Jangan "membetulkan" label ini ke indeks SCAD; keduanya memang berlawanan.
       // 3. TITIK SOLDER MODUL PADA PAPAN PERFBOARD
       // Semua modul punya pin mendatar, jadi tidak ada yang ditancap tegak ke papan.
       // Kabel disolder ke papan di titik grid, konektor female dipasang di ujung modul.
