@@ -95,24 +95,28 @@ a.pill.off{opacity:.55}
     <div class="status"><i class="status-dot err" id="authDot"></i><span id="authStatus">Belum masuk.</span></div>
 
     <form id="authForm" novalidate>
-      <label for="authUrlIn">URL database</label>
-      <input type="url" id="authUrlIn" placeholder="https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app"
-             aria-label="URL dasar Firebase Realtime Database" autocomplete="off" required>
-
       <label for="authEmailIn">Email</label>
       <input type="email" id="authEmailIn" placeholder="nama@email.com" aria-label="Email akun Firebase" autocomplete="username" required>
 
       <label for="authPassIn">Password</label>
       <input type="password" id="authPassIn" placeholder="minimal 6 karakter" aria-label="Password akun Firebase" autocomplete="current-password" required>
 
-      <label for="authKeyIn">Web API Key proyek</label>
-      <input type="text" id="authKeyIn" placeholder="AIza..." aria-label="Firebase Web API Key" autocomplete="off" required>
-
       <div class="actions">
         <button type="submit" class="primary" id="bAuthLogin">Masuk</button>
         <button type="button" id="bAuthRegister">Daftar akun baru</button>
       </div>
     </form>
+
+    <!-- Hanya untuk pemasangan proyek lain. Kosong = pakai tetapan di auth.js. -->
+    <details id="advancedBox" style="margin-top:14px;">
+      <summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim);min-height:44px;display:flex;align-items:center;">Pengaturan lanjutan (proyek Firebase lain)</summary>
+      <label for="authUrlIn">URL database</label>
+      <input type="url" id="authUrlIn" placeholder="https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app"
+             aria-label="URL dasar Firebase Realtime Database" autocomplete="off">
+
+      <label for="authKeyIn">Web API Key proyek</label>
+      <input type="text" id="authKeyIn" placeholder="AIza..." aria-label="Firebase Web API Key" autocomplete="off">
+    </details>
   </section>
 
   <section class="card" aria-label="Klaim alat">
@@ -173,20 +177,23 @@ function render(){
 }
 
 async function doAuth(kind){
-  const url = cleanUrl($('authUrlIn').value);
+  // Isian di "Pengaturan lanjutan" menang; kalau kosong, pakai tetapan auth.js.
+  const typedUrl = cleanUrl($('authUrlIn').value);
+  const url = typedUrl || SHC_DEFAULT_URL;
   const email = ($('authEmailIn').value || '').trim();
   const pass = $('authPassIn').value || '';
-  const key = ($('authKeyIn').value || '').trim();
-  if (!url) { setStatus($('authStatus'), $('authDot'), 'URL database wajib diawali https://', 'err'); return; }
+  const key = ($('authKeyIn').value || '').trim() || SHC_DEFAULT_API_KEY;
+  if (!url.startsWith('https://')) { setStatus($('authStatus'), $('authDot'), 'URL database wajib diawali https://', 'err'); return; }
   if (!email || !pass) { setStatus($('authStatus'), $('authDot'), 'Email dan password wajib diisi.', 'err'); return; }
-  if (!key) { setStatus($('authStatus'), $('authDot'), 'Web API Key wajib diisi.', 'err'); return; }
+  if (!key) { setStatus($('authStatus'), $('authDot'), 'Web API Key belum diisi. Buka Pengaturan lanjutan.', 'err'); return; }
 
   $('bAuthLogin').disabled = true;
   $('bAuthRegister').disabled = true;
   setStatus($('authStatus'), $('authDot'), 'Menghubungi Firebase…', '');
   try {
-    localStorage.setItem('shc_fb_url', url);
-    localStorage.setItem('shc_api_key', key);
+    // Simpan hanya kalau diketik sendiri, supaya tetapan tidak membeku di browser.
+    if (typedUrl) localStorage.setItem('shc_fb_url', url);
+    if (($('authKeyIn').value || '').trim()) localStorage.setItem('shc_api_key', key);
     await (kind === 'register' ? shcRegister(email, pass) : shcLogin(email, pass));
     $('authPassIn').value = '';
     render();
@@ -204,7 +211,7 @@ $('authForm').addEventListener('submit', e => { e.preventDefault(); doAuth('logi
 $('bAuthRegister').addEventListener('click', () => doAuth('register'));
 
 $('bClaim').addEventListener('click', async () => {
-  const base = cleanUrl($('authUrlIn').value) || (localStorage.getItem('shc_fb_url') || '');
+  const base = cleanUrl($('authUrlIn').value) || shcBaseUrl();
   if (!base) { setStatus($('claimStatus'), $('claimDot'), 'Isi URL database di kartu Akun.', 'err'); return; }
   if (!shcToken()) { setStatus($('claimStatus'), $('claimDot'), 'Masuk dulu sebelum mengklaim alat.', 'err'); return; }
   $('bClaim').disabled = true;

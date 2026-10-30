@@ -876,7 +876,8 @@ $('bEndSession').addEventListener('click', endSession);
 
 // URL database sekarang diisi di login.html dan disimpan di localStorage.
 function getCleanFbUrl(){
-  const raw = (localStorage.getItem('shc_fb_url') || '').trim();
+  // shcBaseUrl() mendahulukan isian pengguna, lalu tetapan di auth.js.
+  const raw = (typeof shcBaseUrl === 'function' ? shcBaseUrl() : '') || '';
   return raw.startsWith('https://') ? raw.replace(/\/+$/, '') : '';
 }
 async function pushCloudTelemetry(){

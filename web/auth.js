@@ -3,6 +3,14 @@
 // Tiap akun hanya bisa menyentuh node miliknya sendiri; itu yang dijaga rules.
 // ponytail: token disimpan apa adanya di localStorage. Kalau nanti perlu tahan XSS,
 // pindah ke httpOnly cookie lewat proxy sendiri. Untuk PWA statis ini cukup.
+// Tetapan proyek, ditanam di sini supaya pengguna hanya mengetik email dan
+// password. Keduanya bukan rahasia: URL RTDB dan Web API Key memang dirancang
+// untuk klien. Yang menjaga data adalah Firebase Rules.
+// Ganti dengan menyunting dua baris ini; nilai tersimpan di localStorage
+// (shc_fb_url / shc_api_key) tetap dipakai lebih dulu.
+const SHC_DEFAULT_URL = 'https://smart-coaster-64880-default-rtdb.asia-southeast1.firebasedatabase.app';
+const SHC_DEFAULT_API_KEY = '';
+
 const SHC_AUTH_KEY = 'shc_id_token';
 const SHC_EMAIL_KEY = 'shc_auth_email';
 const SHC_UID_KEY = 'shc_uid';
@@ -88,7 +96,12 @@ async function shcSetSession(base, ownerUid){
 }
 
 function shcApiKey(){
-  return (localStorage.getItem('shc_api_key') || '').trim();
+  return (localStorage.getItem('shc_api_key') || '').trim() || SHC_DEFAULT_API_KEY;
+}
+
+// URL database: isian pengguna menang, lalu tetapan di atas.
+function shcBaseUrl(){
+  return (localStorage.getItem('shc_fb_url') || '').trim() || SHC_DEFAULT_URL;
 }
 
 async function shcAuth(mode, email, password){
