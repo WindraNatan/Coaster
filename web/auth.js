@@ -9,7 +9,7 @@
 // Ganti dengan menyunting dua baris ini; nilai tersimpan di localStorage
 // (shc_fb_url / shc_api_key) tetap dipakai lebih dulu.
 const SHC_DEFAULT_URL = 'https://smart-coaster-64880-default-rtdb.asia-southeast1.firebasedatabase.app';
-const SHC_DEFAULT_API_KEY = '';
+const SHC_DEFAULT_API_KEY = 'AIzaSyAsJOK540P20E2KeOyB2BdXQj3dOARfyLA';
 
 const SHC_AUTH_KEY = 'shc_id_token';
 const SHC_EMAIL_KEY = 'shc_auth_email';
