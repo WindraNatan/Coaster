@@ -56,11 +56,7 @@ function shcDeviceUid(){
 }
 
 function shcCoasterUrl(base){
-  // Node data dimiliki UID akun, sama seperti firmware ESP32 (localId) dan aplikasi.
-  // UID alat hanya dipakai untuk /claims dan /links saat menautkan alat, bukan
-  // sebagai alamat data: memakai shcDeviceUid() di sini membuat web membaca node
-  // yang tidak pernah ditulis siapa pun.
-  const uid = shcUid();
+  const uid = shcDeviceUid();
   if (!uid) return '';
   return base + '/users/' + encodeURIComponent(uid) + '/smart_coaster';
 }
