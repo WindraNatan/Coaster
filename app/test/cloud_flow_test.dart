@@ -38,7 +38,8 @@ Future<void> _pumpApp(WidgetTester tester, MockClient client) async {
   await tester.pumpWidget(MaterialApp(
     home: DashboardScreen(
       url: _url,
-      session: const AuthSession('test-token', 'test@example.com', 'uid-test', 9999999999999),
+      session: const AuthSession('test-token', 'test@example.com', 'uid-akun', 9999999999999,
+          '', 'uid-test'),
       onChangeUrl: () {},
       client: client,
     ),
@@ -155,5 +156,26 @@ void main() {
     await _pumpApp(tester, client);
     await tester.pump();
     expect(paths, ['GET /users/uid-test/smart_coaster.json']);
+  });
+
+  // Node akun dipakai hanya sebagai cadangan saat alat belum ditautkan, supaya
+  // instalasi lama tetap jalan. Alat tertaut wajib menang.
+  testWidgets('sesi tanpa deviceUid memakai node akun', (tester) async {
+    final paths = <String>[];
+    final client = MockClient((req) async {
+      paths.add('${req.method} ${req.url.path}');
+      return Response(_telemetryBody, 200);
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: DashboardScreen(
+        url: _url,
+        session: const AuthSession(
+            'test-token', 'test@example.com', 'uid-akun', 9999999999999),
+        onChangeUrl: () {},
+        client: client,
+      ),
+    ));
+    await tester.pump();
+    expect(paths, ['GET /users/uid-akun/smart_coaster.json']);
   });
 }

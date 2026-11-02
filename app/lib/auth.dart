@@ -16,6 +16,7 @@ const _kEmail = 'shc_auth_email';
 const _kUid = 'shc_uid';
 const _kRefresh = 'shc_refresh_token';
 const _kApiKey = 'shc_api_key';
+const _kDeviceUid = 'shc_device_uid';
 
 /// Perpanjang ID token memakai refresh token, tanpa minta password lagi.
 Future<AuthSession?> refreshSession(AuthSession s, {http.Client? client}) async {
@@ -41,7 +42,8 @@ Future<AuthSession?> refreshSession(AuthSession s, {http.Client? client}) async 
         s.email,
         s.uid,
         DateTime.now().millisecondsSinceEpoch + expiresIn * 1000,
-        data['refresh_token']?.toString() ?? s.refreshToken);
+        data['refresh_token']?.toString() ?? s.refreshToken,
+        s.deviceUid);
     await saveSession(session);
     return session;
   } catch (_) {
@@ -70,8 +72,13 @@ class AuthSession {
   final String uid;
   final int expiresAtMs;
   final String refreshToken;
+
+  /// UID alat yang ditautkan akun ini. Berbeda dari [uid] (UID akun): data
+  /// telemetri hidup di node milik alat, sama seperti firmware dan web PWA.
+  final String deviceUid;
+
   const AuthSession(this.token, this.email, this.uid, this.expiresAtMs,
-      [this.refreshToken = '']);
+      [this.refreshToken = '', this.deviceUid = '']);
 
   bool get valid =>
       token.isNotEmpty &&
@@ -80,9 +87,71 @@ class AuthSession {
 
   String get suffix => token.isEmpty ? '' : '?auth=${Uri.encodeComponent(token)}';
 
-  /// Node milik akun ini. Rules menolak akses ke `/users/<uid>` milik orang lain.
-  String coasterUrl(String base) =>
-      '$base/users/${Uri.encodeComponent(uid)}/smart_coaster';
+  /// Node data milik alat. Kalau alat belum ditautkan, jatuh ke node akun supaya
+  /// instalasi lama tetap berfungsi; [AuthSession.hasDevice] membedakan keduanya
+  /// bagi pemanggil yang perlu tahu.
+  String coasterUrl(String base) => '$base/users/'
+      '${Uri.encodeComponent(deviceUid.isEmpty ? uid : deviceUid)}/smart_coaster';
+
+  bool get hasDevice => deviceUid.isNotEmpty;
+
+  AuthSession copyWith({String? deviceUid, String? refreshToken}) => AuthSession(
+      token, email, uid, expiresAtMs, refreshToken ?? this.refreshToken,
+      deviceUid ?? this.deviceUid);
+}
+
+/// Klaim kode alat 8 karakter: baca `/claims/<kode>`, lalu tulis tautan
+/// `/links/<uid akun>/<uid alat>`. Rules menolak kalau kode tidak menunjuk alat itu.
+Future<String> claimDevice({
+  required String base,
+  required String code,
+  required AuthSession session,
+  http.Client? client,
+}) async {
+  final c = client ?? http.Client();
+  final clean = code.trim().toUpperCase();
+  if (clean.length != 8) throw Exception('Kode alat harus 8 karakter.');
+  try {
+    final res = await c
+        .get(Uri.parse('$base/claims/${Uri.encodeComponent(clean)}.json${session.suffix}'))
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode != 200) throw Exception('Gagal membaca kode (HTTP ${res.statusCode}).');
+    final deviceUid = jsonDecode(res.body);
+    if (deviceUid is! String || deviceUid.isEmpty) {
+      throw Exception('Kode tidak dikenali. Cek lagi di layar alat.');
+    }
+    final put = await c
+        .put(
+          Uri.parse('$base/links/${Uri.encodeComponent(session.uid)}/'
+              '${Uri.encodeComponent(deviceUid)}.json${session.suffix}'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'code': clean, 'at': DateTime.now().millisecondsSinceEpoch}),
+        )
+        .timeout(const Duration(seconds: 12));
+    if (put.statusCode != 200) {
+      throw Exception('Gagal menautkan alat (HTTP ${put.statusCode}).');
+    }
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_kDeviceUid, deviceUid);
+    return deviceUid;
+  } catch (e) {
+    if (e is Exception) rethrow;
+    throw Exception('Gagal menautkan alat: jaringan bermasalah.');
+  } finally {
+    if (client == null) c.close();
+  }
+}
+
+/// UID alat yang sudah ditautkan, atau kosong. Dipakai saat boot sebelum
+/// [claimDevice] pernah dipanggil di perangkat ini.
+Future<String> loadDeviceUid() async {
+  final p = await SharedPreferences.getInstance();
+  return p.getString(_kDeviceUid) ?? '';
+}
+
+Future<void> clearDeviceUid() async {
+  final p = await SharedPreferences.getInstance();
+  await p.remove(_kDeviceUid);
 }
 
 /// Simpan sesi ke penyimpanan lokal. Nilai kosong menghapus semuanya.
@@ -101,6 +170,7 @@ Future<void> saveSession(AuthSession? s) async {
   await p.setString(_kEmail, s.email);
   await p.setString(_kUid, s.uid);
   if (s.refreshToken.isNotEmpty) await p.setString(_kRefresh, s.refreshToken);
+  if (s.deviceUid.isNotEmpty) await p.setString(_kDeviceUid, s.deviceUid);
 }
 
 Future<AuthSession?> loadSession() async {
@@ -109,7 +179,7 @@ Future<AuthSession?> loadSession() async {
   if (token.isEmpty) return null;
   return AuthSession(token, p.getString(_kEmail) ?? '',
       p.getString(_kUid) ?? '', p.getInt(_kExp) ?? 0,
-      p.getString(_kRefresh) ?? '');
+      p.getString(_kRefresh) ?? '', p.getString(_kDeviceUid) ?? '');
 }
 
 // Nilai tersimpan (diketik pengguna) menang; kalau kosong, pakai tetapan build.

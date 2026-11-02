@@ -125,22 +125,37 @@ class _RootPageState extends State<RootPage> {
   bool _editingUrl = false;
 
   void _editUrl() => setState(() { _url = null; _editingUrl = true; });
+  bool _claiming = false;
+  http.Client? _claimClient;
 
   @override
   Widget build(BuildContext context) {
     final url = _url;
     final session = _session;
-    return (url == null || session == null)
-        ? ConnectScreen(
-            initialUrl: _savedUrl,
-            onConnect: _openDashboard,
-            initialSession: session,
-            showUrlField: _editingUrl)
-        : DashboardScreen(
-            key: ValueKey(url),
-            url: url,
-            session: session,
-            onChangeUrl: _editUrl);
+    if (url == null || session == null) {
+      return ConnectScreen(
+          initialUrl: _savedUrl,
+          onConnect: _openDashboard,
+          initialSession: session,
+          showUrlField: _editingUrl);
+    }
+    if (_claiming) {
+      return ClaimScreen(
+          url: url,
+          session: session,
+          client: _claimClient,
+          onClaimed: (uid) => setState(() {
+                _session = session.copyWith(deviceUid: uid);
+                _claiming = false;
+              }),
+          onCancel: () => setState(() { _claiming = false; }));
+    }
+    return DashboardScreen(
+        key: ValueKey('$url/${session.deviceUid}'),
+        url: url,
+        session: session,
+        onChangeUrl: _editUrl,
+        onClaimDevice: () => setState(() { _claiming = true; }));
   }
 }
 
@@ -420,12 +435,14 @@ class DashboardScreen extends StatefulWidget {
   final String url;
   final AuthSession session;
   final VoidCallback onChangeUrl;
+  final VoidCallback? onClaimDevice;
   final http.Client? client; // seam untuk pengujian (MockClient)
   const DashboardScreen(
       {super.key,
       required this.url,
       required this.session,
       required this.onChangeUrl,
+      this.onClaimDevice,
       this.client});
 
   @override
@@ -1047,10 +1064,131 @@ class _DashboardScreenState extends State<DashboardScreen>
             'di web PWA; nilai empty_cup_weight_g di cloud mengikuti firmware.',
             style: _monoStyle(10, color: _dim),
           ),
+          if (widget.onClaimDevice != null) ...[
+            const Divider(color: _line, height: 20),
+            Text('Node alat', style: _monoStyle(12, color: _ink)),
+            const SizedBox(height: 2),
+            Text(
+              _session.hasDevice
+                  ? 'tertaut: ${_session.deviceUid}'
+                  : 'belum tertaut, memakai node akun',
+              style: _monoStyle(10, color: _session.hasDevice ? _ok : _warn),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton(
+                onPressed: widget.onClaimDevice,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: _line),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  minimumSize: const Size(0, 44),
+                ),
+                child: Text(_session.hasDevice ? 'Ganti alat' : 'Tautkan alat',
+                    style: _monoStyle(12, color: _water)),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+// ── Layar klaim alat ────────────────────────────────────────────────────────
+// Kode 8 karakter dibaca dari layar alat, lalu ditukar jadi tautan supaya akun
+// ini boleh membaca node alat. Sama seperti alur di web/login.html.
+class ClaimScreen extends StatefulWidget {
+  final String url;
+  final AuthSession session;
+  final void Function(String deviceUid) onClaimed;
+  final VoidCallback? onCancel;
+  final http.Client? client;
+  const ClaimScreen({super.key, required this.url, required this.session,
+      required this.onClaimed, this.onCancel, this.client});
+  @override
+  State<ClaimScreen> createState() => _ClaimScreenState();
+}
+
+class _ClaimScreenState extends State<ClaimScreen> {
+  final _code = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  Future<void> _submit() async {
+    setState(() { _busy = true; _error = null; });
+    try {
+      final deviceUid = await claimDevice(
+          base: widget.url, code: _code.text, session: widget.session,
+          client: widget.client);
+      if (!mounted) return;
+      widget.onClaimed(deviceUid);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _error = e.toString().replaceFirst('Exception: ', ''); });
+    } finally {
+      if (mounted) setState(() { _busy = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _bg,
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+            children: [
+              Text('Tautkan alat',
+                  style: TextStyle(fontFamily: _display, fontSize: 30,
+                      fontWeight: FontWeight.w700, color: _ink, height: 1.15)),
+              const SizedBox(height: 10),
+              Text('Masukkan kode 8 karakter yang tampil di layar tatakan.',
+                  style: _monoStyle(12, color: _dim)),
+              const SizedBox(height: 28),
+              TextField(
+                controller: _code,
+                textCapitalization: TextCapitalization.characters,
+                textInputAction: TextInputAction.go,
+                onSubmitted: (_) => _submit(),
+                maxLength: 8,
+                style: _monoStyle(20, color: _ink, weight: FontWeight.w600),
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: 'A1B2C3D4',
+                  hintStyle: _monoStyle(20, color: _dim),
+                  enabledBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: _line)),
+                  focusedBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: _water, width: 2)),
+                  errorText: _error,
+                  errorStyle: _monoStyle(11, color: _alarm),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  onPressed: _busy ? null : _submit,
+                  style: FilledButton.styleFrom(backgroundColor: _water),
+                  child: Text(_busy ? 'Menautkan…' : 'Tautkan',
+                      style: _monoStyle(13, color: _bg, weight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Sudah ditautkan di perangkat lain? Cukup masukkan kodenya sekali lagi.',
+                  style: _monoStyle(10, color: _dim)),
+              if (widget.onCancel != null) ...[
+                const SizedBox(height: 24),
+                TextButton(
+                  onPressed: _busy ? null : widget.onCancel,
+                  child: Text('Lewati, pakai node akun saja',
+                      style: _monoStyle(11, color: _dim)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
 }
 
 // ── Gelas: outline + kolom air proporsional water_ml ────────────────────────
