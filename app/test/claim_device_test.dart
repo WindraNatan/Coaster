@@ -115,6 +115,23 @@ void main() {
     expect(paths, ['GET /links/uid-akun.json']);
   });
 
+  // Aturan RTDB tidak menaikkan izin ke node induk: kalau `.read` hanya ada di
+  // links/$ownerUid/$deviceUid, permintaan daftar tautan selalu 401. Tes ini
+  // mengunci bahwa aplikasi tidak bergantung pada izin tingkat $deviceUid.
+  test('discoverDevice memakai jalur daftar, bukan per alat', () async {
+    final paths = <String>[];
+    final client = MockClient((req) async {
+      paths.add(req.url.path);
+      return Response('{"alat-a":{"at":9}}', 200);
+    });
+    await discoverDevice(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client);
+    expect(paths, ['/links/uid-akun.json']);
+    expect(paths.single.endsWith('/xxx.json'), isFalse);
+  });
+
   test('discoverDevice memilih tautan terakhir bila ada beberapa', () async {
     final client = MockClient((req) async => Response(
         '{"alat-lama":{"at":1},"alat-baru":{"at":99}}', 200));

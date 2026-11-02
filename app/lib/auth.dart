@@ -143,8 +143,12 @@ Future<String> claimDevice({
 }
 
 /// Baca tautan yang sudah ada di `/links/<uid akun>`, supaya menginstal ulang
-/// aplikasi tidak perlu mengetik kode alat lagi. Rules hanya mengizinkan
-/// membaca node milik sendiri. Nilai kosong kalau belum ada tautan.
+/// aplikasi tidak perlu mengetik kode alat lagi. Nilai kosong kalau belum ada
+/// tautan.
+///
+/// Butuh `.read` di level `links/$ownerUid` pada firebase-rules.json: izin RTDB
+/// tidak naik ke node induk, jadi `.read` yang hanya ada di `$deviceUid` membuat
+/// permintaan ini selalu 401.
 Future<String> discoverDevice({
   required String base,
   required AuthSession session,

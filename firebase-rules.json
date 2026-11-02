@@ -9,6 +9,7 @@
     },
     "links": {
       "$ownerUid": {
+        ".read": "auth != null && auth.uid === $ownerUid",
         "$deviceUid": {
           ".read": "auth != null && auth.uid === $ownerUid",
           ".write": "auth != null && auth.uid === $ownerUid && (newData.child('code').val() === null || root.child('claims/'+newData.child('code').val()).val() === $deviceUid)",
