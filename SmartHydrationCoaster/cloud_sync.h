@@ -76,6 +76,24 @@ static String jsonEscape(const String& s) {
     return out;
 }
 
+// Ambil nilai string dari JSON tanpa parser penuh. Melompati spasi setelah
+// titik dua: API Google (identitytoolkit, securetoken) membalas ber-pretty-print
+// ("idToken": "..."), sehingga pencarian pola rapat selalu gagal.
+static String jsonField(const String& s, const char* key) {
+    String pola = "\"" + String(key) + "\"";
+    int k = s.indexOf(pola);
+    if (k < 0) return String();
+    k += pola.length();
+    while (k < (int)s.length() && (s[k] == ' ' || s[k] == '\t')) k++;
+    if (k >= (int)s.length() || s[k] != ':') return String();
+    k++;
+    while (k < (int)s.length() && (s[k] == ' ' || s[k] == '\t')) k++;
+    if (k >= (int)s.length() || s[k] != '"') return String();
+    k++;
+    int e = s.indexOf('"', k);
+    if (e < 0) return String();
+    return s.substring(k, e);
+}
 static bool firebaseLogin() {
     if (activeApiKey.length() == 0 || activeUserEmail.length() == 0) return false;
     WiFiClientSecure client;
@@ -94,26 +112,19 @@ static bool firebaseLogin() {
     }
     String res = http.getString();
     http.end();
-    // Tidak ada parser JSON penuh di firmware; token selalu field pertama setelah idToken.
-    int k = res.indexOf("\"idToken\":\"");
-    if (k < 0) return false;
-    k += 11;
-    int e = res.indexOf('"', k);
-    if (e < 0) return false;
-    idToken = res.substring(k, e);
-    int uk = res.indexOf("\"localId\":\"");
-    if (uk < 0) return false;
-    uk += 11;
-    int ue = res.indexOf('"', uk);
-    if (ue < 0) return false;
-    activeUid = res.substring(uk, ue);
-    tokenExpiryMs = millis() + TOKEN_TTL_MS;
-    int rk = res.indexOf("\"refreshToken\":\"");
-    if (rk >= 0) {
-        rk += 16;
-        int re = res.indexOf('"', rk);
-        if (re > rk) refreshToken = res.substring(rk, re);
+    // API identitytoolkit mengembalikan JSON ber-pretty-print: ada spasi setelah
+    // titik dua ("idToken": "..."). Pencarian harus melompati spasi, kalau tidak
+    // login HTTP 200 tetap dianggap gagal.
+    idToken = jsonField(res, "idToken");
+    activeUid = jsonField(res, "localId");
+    if (idToken.length() == 0 || activeUid.length() == 0) {
+        Serial.println(F("[CLOUD] Respons login tidak memuat idToken/localId. "
+                         "Cek bentuk respons di atas."));
+        return false;
     }
+    tokenExpiryMs = millis() + TOKEN_TTL_MS;
+    String rt = jsonField(res, "refreshToken");
+    if (rt.length() > 0) refreshToken = rt;
     Preferences prefs;
     prefs.begin("shc", false);
     prefs.putString("idToken", idToken);
@@ -139,19 +150,16 @@ static bool firebaseRefresh() {
     if (code != 200) { http.end(); return false; }
     String res = http.getString();
     http.end();
-    int k = res.indexOf("\"id_token\":\"");
-    if (k < 0) return false;
-    k += 12;
-    int e = res.indexOf('"', k);
-    if (e < 0) return false;
-    idToken = res.substring(k, e);
-    tokenExpiryMs = millis() + TOKEN_TTL_MS;
-    int rk = res.indexOf("\"refresh_token\":\"");
-    if (rk >= 0) {
-        rk += 17;
-        int re = res.indexOf('"', rk);
-        if (re > rk) refreshToken = res.substring(rk, re);
+    // Sama seperti firebaseLogin: balasan ber-pretty-print, jadi harus lewat
+    // jsonField, bukan pencarian pola rapat.
+    idToken = jsonField(res, "id_token");
+    if (idToken.length() == 0) {
+        Serial.println(F("[CLOUD] Respons refresh tidak memuat id_token."));
+        return false;
     }
+    tokenExpiryMs = millis() + TOKEN_TTL_MS;
+    String rt = jsonField(res, "refresh_token");
+    if (rt.length() > 0) refreshToken = rt;
     Preferences prefs;
     prefs.begin("shc", false);
     prefs.putString("idToken", idToken);
