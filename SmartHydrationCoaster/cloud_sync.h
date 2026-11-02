@@ -252,8 +252,9 @@ static void cloudTask(void*) {
             if ((uint32_t)(millis() - lastWifiLogMs) > 10000UL) {
                 lastWifiLogMs = millis();
                 if (activeFirebaseUrl.length() == 0) {
-                    Serial.println(F("[CLOUD] URL Firebase kosong."));
-                } else {
+                    Serial.println(F("[CLOUD] URL Firebase kosong: periksa secrets.h "
+                                     "(FIREBASE_DB_URL)."));
+                } else if (WiFi.status() != WL_CONNECTED) {
                     Serial.printf("[CLOUD] Wi-Fi belum konek (status %d, SSID \"%s\"). "
                                   "ESP32 hanya bisa 2.4 GHz.\n",
                                   (int)WiFi.status(), activeWifiSsid.c_str());
@@ -261,6 +262,14 @@ static void cloudTask(void*) {
             }
             vTaskDelay(pdMS_TO_TICKS(2000));
             continue;
+        }
+        // Sekali saja: bukti asosiasi Wi-Fi benar-benar selesai, bukan sekadar
+        // WiFi.begin() dipanggil.
+        static bool connectedLogged = false;
+        if (!connectedLogged) {
+            connectedLogged = true;
+            Serial.printf("[CLOUD] Wi-Fi tersambung, IP %s\n",
+                          WiFi.localIP().toString().c_str());
         }
         if (!ensureToken()) {
             vTaskDelay(pdMS_TO_TICKS(30000));
@@ -386,7 +395,14 @@ inline void startCloudIfNeeded() {
     WiFi.mode(WIFI_STA);
     WiFi.begin(activeWifiSsid.c_str(), activeWifiPass.c_str());
     Serial.printf("[CLOUD] Menghubungkan Wi-Fi \"%s\"...\n", activeWifiSsid.c_str());
-    if (!cloudTaskRunning && activeFirebaseUrl.length() > 0) {
+    if (activeFirebaseUrl.length() == 0) {
+        // cloudTask tidak akan dibuat, jadi kabari di sini: tanpa pesan ini,
+        // secrets.h yang tidak ter-compile terlihat persis seperti Wi-Fi mati.
+        Serial.println(F("[CLOUD] URL Firebase kosong: cloud tidak dijalankan. "
+                         "Periksa FIREBASE_DB_URL di secrets.h."));
+        return;
+    }
+    if (!cloudTaskRunning) {
         cloudTaskRunning = true;
         xTaskCreatePinnedToCore(cloudTask, "cloudSync", 8192, nullptr, 1, nullptr, 0);
     }
@@ -426,6 +442,12 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     tokenExpiryMs = 0;
     prefs.end();
     Serial.printf("[CLOUD] Kode klaim alat: %s\n", claimCode.c_str());
+    // Ringkasan konfigurasi SEBELUM Wi-Fi dicoba. Tanpa ini, secrets.h yang tidak
+    // ikut ter-compile terlihat identik dengan Wi-Fi gagal: cloudTask tidak pernah
+    // dibuat, jadi tidak ada satu pun baris [CLOUD] sesudah boot.
+    Serial.printf("[CLOUD] Konfigurasi: ssid=%u url=%u key=%u email=%u\n",
+                  (unsigned)activeWifiSsid.length(), (unsigned)activeFirebaseUrl.length(),
+                  (unsigned)activeApiKey.length(), (unsigned)activeUserEmail.length());
     startCloudIfNeeded();
 }
 
