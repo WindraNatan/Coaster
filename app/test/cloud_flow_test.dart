@@ -8,6 +8,7 @@ import 'package:http/http.dart';
 import 'package:http/testing.dart';
 import 'package:smart_coaster/auth.dart';
 import 'package:smart_coaster/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _url = 'https://proyek-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -177,5 +178,105 @@ void main() {
     ));
     await tester.pump();
     expect(paths, ['GET /users/uid-akun/smart_coaster.json']);
+  });
+
+  // Beda UID: akun 19Wt…, alat uid-alat. Boot wajib baca /links lalu memakai
+  // node ALAT, bukan node akun — inilah bedanya dengan jalur fallback.
+  testWidgets('boot membaca /links lalu memakai node alat', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shc_id_token': 'tok',
+      'shc_id_token_exp': 9999999999999,
+      'shc_auth_email': 'a@b.c',
+      'shc_uid': 'uid-akun',
+      'shc_refresh_token': 'ref',
+    });
+    final paths = <String>[];
+    final client = MockClient((req) async {
+      paths.add('${req.method} ${req.url.path}');
+      if (req.url.path == '/links/uid-akun.json') {
+        return Response('{"uid-alat":{"code":"A1B2C3D4","at":123}}', 200);
+      }
+      if (req.url.path == '/users/uid-alat/smart_coaster.json') {
+        return Response(_telemetryBody, 200);
+      }
+      return Response('null', 200);
+    });
+
+    await tester.pumpWidget(MaterialApp(home: RootPage(client: client)));
+    await tester.pump(); // _boot selesai
+    await tester.pump(); // _poll selesai
+
+    expect(paths, contains('GET /links/uid-akun.json'));
+    expect(paths, contains('GET /users/uid-alat/smart_coaster.json'));
+    expect(paths, isNot(contains('GET /users/uid-akun/smart_coaster.json')));
+  });
+
+  // /links ditolak (rules belum memuat blok itu) -> fallback node akun.
+  testWidgets('boot tanpa /links jatuh ke node akun', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shc_id_token': 'tok',
+      'shc_id_token_exp': 9999999999999,
+      'shc_auth_email': 'a@b.c',
+      'shc_uid': 'uid-akun',
+      'shc_refresh_token': 'ref',
+    });
+    final paths = <String>[];
+    final client = MockClient((req) async {
+      paths.add('${req.method} ${req.url.path}');
+      if (req.url.path == '/links/uid-akun.json') {
+        return Response('Unauthorized', 401);
+      }
+      if (req.url.path == '/users/uid-akun/smart_coaster.json') {
+        return Response(_telemetryBody, 200);
+      }
+      return Response('null', 200);
+    });
+
+    await tester.pumpWidget(MaterialApp(home: RootPage(client: client)));
+    await tester.pump();
+    await tester.pump();
+
+    expect(paths, contains('GET /links/uid-akun.json'));
+    expect(paths, contains('GET /users/uid-akun/smart_coaster.json'));
+    expect(paths, isNot(contains('GET /users/uid-alat/smart_coaster.json')));
+  });
+
+  // Instalasi baru: tidak ada sesi tersimpan, jadi _boot() tidak punya apa pun.
+  // Login harus tetap menemukan tautan alat, bukan berhenti di node akun.
+  testWidgets('login baru menemukan tautan alat', (tester) async {
+    SharedPreferences.setMockInitialValues({}); // tanpa sesi
+    final paths = <String>[];
+    final client = MockClient((req) async {
+      paths.add('${req.method} ${req.url.path}');
+      if (req.url.path == '/v1/accounts:signInWithPassword') {
+        return Response(
+            jsonEncode({
+              'idToken': 'tok',
+              'localId': 'uid-akun',
+              'email': 'a@b.c',
+              'expiresIn': '3600',
+              'refreshToken': 'ref',
+            }),
+            200);
+      }
+      if (req.url.path == '/links/uid-akun.json') {
+        return Response('{"uid-alat":{"code":"A1B2C3D4","at":7}}', 200);
+      }
+      if (req.url.path == '/users/uid-alat/smart_coaster.json') {
+        return Response(_telemetryBody, 200);
+      }
+      return Response('null', 200);
+    });
+
+    await tester.pumpWidget(MaterialApp(home: RootPage(client: client)));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'a@b.c');
+    await tester.enterText(find.byType(TextField).at(1), 'rahasia');
+    await tester.tap(find.text('Masuk'));
+    await tester.pumpAndSettle();
+
+    expect(paths, contains('GET /links/uid-akun.json'));
+    expect(paths, contains('GET /users/uid-alat/smart_coaster.json'));
+    expect(paths, isNot(contains('GET /users/uid-akun/smart_coaster.json')));
   });
 }

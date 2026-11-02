@@ -80,7 +80,8 @@ class CoasterApp extends StatelessWidget {
 // ── Root: pilih antara layar koneksi (URL RTDB) dan dashboard ───────────────
 
 class RootPage extends StatefulWidget {
-  const RootPage({super.key});
+  final http.Client? client; // seam untuk pengujian (MockClient)
+  const RootPage({super.key, this.client});
 
   @override
   State<RootPage> createState() => _RootPageState();
@@ -109,24 +110,50 @@ class _RootPageState extends State<RootPage> {
     // tetapan build. Dengan begitu instalasi lama tetap jalan, dan instalasi baru
     // tidak perlu mengetik URL sama sekali.
     final effective = (saved != null && saved.isNotEmpty) ? saved : kFirebaseUrl;
+    if (!mounted) return;
     setState(() {
       _savedUrl = effective;
       _session = (session != null && session.valid) ? session : null;
       _url = (effective.isNotEmpty && _session != null) ? effective : null;
     });
+    // Tautan alat dipulihkan dari /links/<uid akun> setelah layar tampil, supaya
+    // menginstal ulang aplikasi tidak perlu mengetik kode alat lagi dan boot
+    // offline tidak tertahan menunggu jaringan. Gagal di sini bukan gagal boot:
+    // fallback ke node akun tetap dipakai sampai pengguna menautkan manual.
+    final s = _session;
+    if (s != null && s.deviceUid.isEmpty && effective.isNotEmpty) {
+      discoverDevice(base: effective, session: s, client: widget.client)
+          .then((found) {
+        if (!mounted || found.isEmpty) return;
+        setState(() { _session = _session!.copyWith(deviceUid: found); });
+        saveSession(_session!);
+      });
+    }
   }
 
-  void _openDashboard(String url, AuthSession session) => setState(() {
-        _url = url;
-        _session = session;
-        _editingUrl = false;
+  void _openDashboard(String url, AuthSession session) {
+    setState(() {
+      _url = url;
+      _session = session;
+      _editingUrl = false;
+    });
+    // Login baru tidak melewati _boot(), sedangkan signIn() tidak menghasilkan
+    // deviceUid. Tanpa penemuan di sini, akun yang sudah tertaut ke alat lain
+    // akan memakai node akun sampai aplikasi dijalankan ulang.
+    if (session.deviceUid.isEmpty && url.isNotEmpty) {
+      discoverDevice(base: url, session: session, client: widget.client)
+          .then((found) {
+        if (!mounted || found.isEmpty) return;
+        setState(() { _session = _session!.copyWith(deviceUid: found); });
+        saveSession(_session!);
       });
+    }
+  }
 
   bool _editingUrl = false;
 
   void _editUrl() => setState(() { _url = null; _editingUrl = true; });
   bool _claiming = false;
-  http.Client? _claimClient;
 
   @override
   Widget build(BuildContext context) {
@@ -137,13 +164,14 @@ class _RootPageState extends State<RootPage> {
           initialUrl: _savedUrl,
           onConnect: _openDashboard,
           initialSession: session,
+          client: widget.client,
           showUrlField: _editingUrl);
     }
     if (_claiming) {
       return ClaimScreen(
           url: url,
           session: session,
-          client: _claimClient,
+          client: widget.client,
           onClaimed: (uid) => setState(() {
                 _session = session.copyWith(deviceUid: uid);
                 _claiming = false;
@@ -155,6 +183,7 @@ class _RootPageState extends State<RootPage> {
         url: url,
         session: session,
         onChangeUrl: _editUrl,
+        client: widget.client,
         onClaimDevice: () => setState(() { _claiming = true; }));
   }
 }
@@ -167,8 +196,10 @@ class ConnectScreen extends StatefulWidget {
   final AuthSession? initialSession;
   final bool showUrlField;
   final bool showKeyField;
+  final http.Client? client; // seam untuk pengujian (MockClient)
   const ConnectScreen({super.key, required this.onConnect, this.initialUrl,
-      this.initialSession, this.showUrlField = false, this.showKeyField = false});
+      this.initialSession, this.showUrlField = false, this.showKeyField = false,
+      this.client});
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -256,7 +287,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
       if (kFirebaseApiKey.isEmpty) await saveApiKey(_keyValue);
       var existing = await loadSession();
       if (existing != null && !existing.valid && existing.refreshToken.isNotEmpty) {
-        existing = await refreshSession(existing);
+        existing = await refreshSession(existing, client: widget.client);
       }
       final session = (existing != null && existing.valid)
           ? existing
@@ -265,6 +296,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
               password: _pass.text,
               apiKey: _keyValue,
               register: _registerMode,
+              client: widget.client,
             );
       final p = await SharedPreferences.getInstance();
       await p.setString('shc_fb_url', url);

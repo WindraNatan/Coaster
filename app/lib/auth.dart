@@ -142,6 +142,45 @@ Future<String> claimDevice({
   }
 }
 
+/// Baca tautan yang sudah ada di `/links/<uid akun>`, supaya menginstal ulang
+/// aplikasi tidak perlu mengetik kode alat lagi. Rules hanya mengizinkan
+/// membaca node milik sendiri. Nilai kosong kalau belum ada tautan.
+Future<String> discoverDevice({
+  required String base,
+  required AuthSession session,
+  http.Client? client,
+}) async {
+  final c = client ?? http.Client();
+  try {
+    final res = await c
+        .get(Uri.parse(
+            '$base/links/${Uri.encodeComponent(session.uid)}.json${session.suffix}'))
+        // Timeout pendek: ini jalur bonus. Kalau gagal, boot tetap lanjut dengan
+        // node akun, dan pengguna masih bisa menautkan manual lewat tombol.
+        .timeout(const Duration(seconds: 4));
+    if (res.statusCode != 200) return '';
+    final data = jsonDecode(res.body);
+    if (data is! Map || data.isEmpty) return '';
+    // Bisa ada lebih dari satu alat; pakai yang terakhir ditautkan.
+    String best = '';
+    var bestAt = -1;
+    data.forEach((k, v) {
+      if (k is! String || k.isEmpty) return;
+      final at = v is Map ? (v['at'] as num?)?.toInt() ?? 0 : 0;
+      if (at >= bestAt) {
+        bestAt = at;
+        best = k;
+      }
+    });
+    return best;
+  } catch (_) {
+    // Jaringan/aturan bermasalah bukan kegagalan boot: tetap pakai fallback.
+    return '';
+  } finally {
+    if (client == null) c.close();
+  }
+}
+
 /// UID alat yang sudah ditautkan, atau kosong. Dipakai saat boot sebelum
 /// [claimDevice] pernah dipanggil di perangkat ini.
 Future<String> loadDeviceUid() async {

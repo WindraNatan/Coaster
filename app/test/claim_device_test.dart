@@ -100,4 +100,47 @@ void main() {
     expect(s.hasDevice, isTrue);
     expect(s.coasterUrl(_url), '$_url/users/uid-alat/smart_coaster');
   });
+
+  test('discoverDevice membaca /links uid akun', () async {
+    final paths = <String>[];
+    final client = MockClient((req) async {
+      paths.add('${req.method} ${req.url.path}');
+      return Response('{"uid-alat":{"code":"A1B2C3D4","at":5}}', 200);
+    });
+    final uid = await discoverDevice(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client);
+    expect(uid, 'uid-alat');
+    expect(paths, ['GET /links/uid-akun.json']);
+  });
+
+  test('discoverDevice memilih tautan terakhir bila ada beberapa', () async {
+    final client = MockClient((req) async => Response(
+        '{"alat-lama":{"at":1},"alat-baru":{"at":99}}', 200));
+    final uid = await discoverDevice(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client);
+    expect(uid, 'alat-baru');
+  });
+
+  // Rules belum memuat blok links -> 401. Bukan gagal boot: fallback dipakai.
+  test('discoverDevice mengembalikan kosong saat ditolak server', () async {
+    final client = MockClient((req) async => Response('Unauthorized', 401));
+    final uid = await discoverDevice(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client);
+    expect(uid, isEmpty);
+  });
+
+  test('discoverDevice mengabaikan respons kosong', () async {
+    final client = MockClient((req) async => Response('null', 200));
+    final uid = await discoverDevice(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client);
+    expect(uid, isEmpty);
+  });
 }
