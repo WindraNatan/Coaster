@@ -86,6 +86,13 @@ def main():
     if kotor:
         print('      PERINGATAN: ada perubahan belum di-commit; APK memuat kode '
               'yang tidak ada di komit mana pun.')
+    # Komit yang belum di-push tidak dikenal GitHub, sehingga target_commitish
+    # ditolak 422 dan pesannya menyesatkan (menyebut tag_name juga).
+    belum = sh(["git", "rev-list", "--count", "origin/master..HEAD"]).stdout.strip()
+    if belum.isdigit() and int(belum) > 0:
+        raise SystemExit(
+            f'{belum} komit belum di-push. GitHub tidak mengenal SHA ini, jadi '
+            'rilis akan ditolak 422.\nJalankan dulu: git push origin master')
     print(f'      sumber rilis: {sha[:7]}')
 
     print(f'[2/4] membuat rilis {tag}…')
