@@ -246,6 +246,19 @@ static void cloudTask(void*) {
 
     for (;;) {
         if (activeFirebaseUrl.length() == 0 || WiFi.status() != WL_CONNECTED) {
+            // Tanpa baris ini, Wi-Fi yang gagal terhubung terlihat identik dengan
+            // login yang gagal: cloudTask hanya diam. Cetak sesekali saja.
+            static uint32_t lastWifiLogMs = 0;
+            if ((uint32_t)(millis() - lastWifiLogMs) > 10000UL) {
+                lastWifiLogMs = millis();
+                if (activeFirebaseUrl.length() == 0) {
+                    Serial.println(F("[CLOUD] URL Firebase kosong."));
+                } else {
+                    Serial.printf("[CLOUD] Wi-Fi belum konek (status %d, SSID \"%s\"). "
+                                  "ESP32 hanya bisa 2.4 GHz.\n",
+                                  (int)WiFi.status(), activeWifiSsid.c_str());
+                }
+            }
             vTaskDelay(pdMS_TO_TICKS(2000));
             continue;
         }
@@ -365,9 +378,14 @@ static void cloudTask(void*) {
 }
 
 inline void startCloudIfNeeded() {
-    if (activeWifiSsid.length() == 0) return;
+    if (activeWifiSsid.length() == 0) {
+        Serial.println(F("[CLOUD] SSID kosong: cloud dimatikan. Isi WIFI_SSID di "
+                         "secrets.h atau kirim perintah w<SSID>|<pass>."));
+        return;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.begin(activeWifiSsid.c_str(), activeWifiPass.c_str());
+    Serial.printf("[CLOUD] Menghubungkan Wi-Fi \"%s\"...\n", activeWifiSsid.c_str());
     if (!cloudTaskRunning && activeFirebaseUrl.length() > 0) {
         cloudTaskRunning = true;
         xTaskCreatePinnedToCore(cloudTask, "cloudSync", 8192, nullptr, 1, nullptr, 0);
