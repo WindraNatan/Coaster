@@ -58,6 +58,9 @@ def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     tag = sys.argv[1]
+    # Tag rilis harus diawali 'v'; GitHub menolak nama lain.
+    if not tag.startswith('v'):
+        tag = 'v' + tag
     nama = sys.argv[2] if len(sys.argv) > 2 else f'Coaster {tag}'
 
     print(f'[1/4] membangun APK debug…')
