@@ -1174,8 +1174,15 @@ class _ClaimScreenState extends State<ClaimScreen> {
                   style: TextStyle(fontFamily: _display, fontSize: 30,
                       fontWeight: FontWeight.w700, color: _ink, height: 1.15)),
               const SizedBox(height: 10),
-              Text('Masukkan kode 8 karakter yang tampil di layar tatakan.',
-                  style: _monoStyle(12, color: _dim)),
+              Text('Masukkan kode 8 karakter dari alat.',
+                  style: _monoStyle(12, color: _ink)),
+              const SizedBox(height: 6),
+              // Tatakan tidak punya layar. Kode hanya dicetak firmware ke Serial,
+              // jadi arahkan ke sana daripada mencari tampilan yang tidak ada.
+              Text('Sambungkan alat ke komputer lewat USB, buka Serial Monitor '
+                  '115200 baud, lalu lihat baris "[CLOUD] Kode klaim alat: XXXXXXXX". '
+                  'Kode yang sama bisa dimasukkan di halaman Akun web PWA.',
+                  style: _monoStyle(11, color: _dim)),
               const SizedBox(height: 28),
               TextField(
                 controller: _code,
