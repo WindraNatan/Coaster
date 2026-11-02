@@ -70,6 +70,24 @@ void main() {
     expect(calls, ['GET']);
   });
 
+  // Tatakan tidak punya layar: pesan ini muncul tepat saat pengguna salah ketik,
+  // jadi tidak boleh menyuruh mencari tampilan yang tidak ada.
+  test('pesan kode salah mengarahkan ke Serial Monitor', () async {
+    final client = MockClient((req) async => Response('null', 200));
+    try {
+      await claimDevice(
+          base: _url,
+          code: 'ZZZZZZZZ',
+          session: const AuthSession('t', 'a@b.c', 'uid-akun', 9999999999999),
+          client: client);
+      fail('seharusnya melempar');
+    } catch (e) {
+      final pesan = e.toString();
+      expect(pesan, contains('Serial Monitor'));
+      expect(pesan, isNot(contains('layar')));
+    }
+  });
+
   test('refresh token mempertahankan deviceUid', () async {
     final client = MockClient((req) async => Response(
         jsonEncode({'id_token': 'baru', 'expires_in': '3600',

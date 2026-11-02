@@ -70,7 +70,7 @@ async function shcClaimDevice(base, code){
   const res = await fetch(base + '/claims/' + encodeURIComponent(clean) + '.json' + shcAuthSuffix());
   if (!res.ok) throw new Error('Gagal membaca kode (HTTP ' + res.status + ').');
   const deviceUid = await res.json();
-  if (!deviceUid || typeof deviceUid !== 'string') throw new Error('Kode tidak dikenali. Cek lagi di layar alat.');
+  if (!deviceUid || typeof deviceUid !== 'string') throw new Error('Kode tidak dikenali. Cek lagi di Serial Monitor (115200 baud).');
   const put = await fetch(base + '/links/' + encodeURIComponent(shcUid()) + '/' +
       encodeURIComponent(deviceUid) + '.json' + shcAuthSuffix(), {
     method: 'PUT',

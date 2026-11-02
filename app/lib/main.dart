@@ -1128,7 +1128,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 }
 
 // ── Layar klaim alat ────────────────────────────────────────────────────────
-// Kode 8 karakter dibaca dari layar alat, lalu ditukar jadi tautan supaya akun
+// Kode 8 karakter dibaca dari Serial Monitor alat, lalu ditukar jadi tautan supaya akun
 // ini boleh membaca node alat. Sama seperti alur di web/login.html.
 class ClaimScreen extends StatefulWidget {
   final String url;

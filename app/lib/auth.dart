@@ -118,7 +118,7 @@ Future<String> claimDevice({
     if (res.statusCode != 200) throw Exception('Gagal membaca kode (HTTP ${res.statusCode}).');
     final deviceUid = jsonDecode(res.body);
     if (deviceUid is! String || deviceUid.isEmpty) {
-      throw Exception('Kode tidak dikenali. Cek lagi di layar alat.');
+      throw Exception('Kode tidak dikenali. Cek lagi di Serial Monitor (115200 baud).');
     }
     final put = await c
         .put(
