@@ -73,12 +73,25 @@ def main():
     ukuran = os.path.getsize(APK)
 
     tok = github_token()
+    # Sumber rilis harus menunjuk komit yang benar-benar dibangun. Tanpa ini,
+    # tag baru berpijak pada cabang remote, yang bisa tertinggal dari HEAD lokal
+    # sehingga sumber rilis berbeda dari APK yang diunggah.
+    sha = sh(['git', 'rev-parse', 'HEAD']).stdout.strip()
+    if not sha:
+        raise SystemExit('Tidak bisa membaca HEAD; jalankan dari dalam repo git.')
+    kotor = sh(['git', 'status', '--porcelain', '--untracked-files=no']).stdout.strip()
+    if kotor:
+        print('      PERINGATAN: ada perubahan belum di-commit; APK memuat kode '
+              'yang tidak ada di komit mana pun.')
+    print(f'      sumber rilis: {sha[:7]}')
+
     print(f'[2/4] membuat rilis {tag}…')
     rel = api(tok, f'/repos/{REPO}/releases', 'POST', {
         'tag_name': tag,
+        'target_commitish': sha,
         'name': nama,
-        'body': 'APK debug untuk uji. Pasang di atas versi lama; sesi tidak hilang '
-                'karena ditandatangani kunci yang sama.',
+        'body': f'APK debug untuk uji, dibangun dari `{sha[:7]}`. Pasang di atas '
+                'versi lama; sesi tidak hilang karena ditandatangani kunci yang sama.',
         'draft': False,
         'prerelease': True,
     })
