@@ -206,6 +206,7 @@ Future<void> saveSession(AuthSession? s) async {
     await p.remove(_kEmail);
     await p.remove(_kUid);
     await p.remove(_kRefresh);
+    await p.remove(_kDeviceUid);
     return;
   }
   await p.setString(_kToken, s.token);
@@ -213,7 +214,14 @@ Future<void> saveSession(AuthSession? s) async {
   await p.setString(_kEmail, s.email);
   await p.setString(_kUid, s.uid);
   if (s.refreshToken.isNotEmpty) await p.setString(_kRefresh, s.refreshToken);
-  if (s.deviceUid.isNotEmpty) await p.setString(_kDeviceUid, s.deviceUid);
+  // Harus menimpa, bukan hanya menulis saat terisi: kalau dibiarkan, akun B
+  // yang login setelah akun A mewarisi UID alat A, melewati penemuan tautan,
+  // dan membaca node milik akun lain.
+  if (s.deviceUid.isEmpty) {
+    await p.remove(_kDeviceUid);
+  } else {
+    await p.setString(_kDeviceUid, s.deviceUid);
+  }
 }
 
 Future<AuthSession?> loadSession() async {

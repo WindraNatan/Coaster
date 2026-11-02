@@ -88,6 +88,29 @@ void main() {
     expect(s.coasterUrl(_url), '$_url/users/uid-alat/smart_coaster');
   });
 
+  // Akun B login setelah akun A tidak boleh mewarisi alat A: kalau tertinggal,
+  // penemuan tautan dilewati dan B membaca node milik A.
+  test('login akun lain menghapus UID alat sebelumnya', () async {
+    await saveSession(const AuthSession(
+        'tokA', 'a@b.c', 'uid-akun-a', 9999999999999, 'refA', 'uid-alat-a'));
+    expect((await loadSession())!.deviceUid, 'uid-alat-a');
+
+    await saveSession(const AuthSession(
+        'tokB', 'b@b.c', 'uid-akun-b', 9999999999999, 'refB'));
+    final b = await loadSession();
+    expect(b!.uid, 'uid-akun-b');
+    expect(b.deviceUid, isEmpty);
+    expect(await loadDeviceUid(), isEmpty);
+  });
+
+  test('keluar menghapus UID alat juga', () async {
+    await saveSession(const AuthSession(
+        'tok', 'a@b.c', 'uid-akun', 9999999999999, 'ref', 'uid-alat'));
+    await saveSession(null);
+    expect(await loadSession(), isNull);
+    expect(await loadDeviceUid(), isEmpty);
+  });
+
   test('tanpa UID alat, coasterUrl jatuh ke node akun', () async {
     const s = AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999);
     expect(s.hasDevice, isFalse);
