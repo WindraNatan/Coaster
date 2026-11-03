@@ -245,6 +245,7 @@ static void cloudTask(void*) {
     char lastState[20] = "";
     uint32_t lastPushMs = 0;
     uint32_t lastPollMs = 0;
+    uint32_t lastSessMs = 0;
     // Satu TLS untuk semua request. Sebelumnya tiap request membuat client baru:
     // handshake 1-3 dtk, dan satu siklus (push + config + session) membayarnya
     // tiga kali. Itu lag utama yang dirasakan di web dan aplikasi.
@@ -442,6 +443,12 @@ static void cloudTask(void*) {
             // Sesi bergiliran: web menulis session.owner. Begitu nilainya berbeda dari
             // pemilik terakhir, statistik di-reset supaya orang berikutnya tidak mewarisi
             // angka orang sebelumnya.
+            //
+            // Dibaca tiap 10 dtk, bukan 1 dtk: pemilik sesi hanya berubah saat
+            // pengguna menekan Mulai Sesi, jadi request per detik hanya menambah
+            // kuota terpakai tanpa manfaat.
+            if (now - lastSessMs >= 10000UL) {
+            lastSessMs = now;
             String sessUrl = userNode() + "/session.json" + authSuffix();
             if (rtdb.begin(tls, sessUrl) && rtdb.GET() == 200) {
                 String sess = rtdb.getString();
@@ -466,6 +473,7 @@ static void cloudTask(void*) {
                 }
             }
             rtdb.end();
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(250));

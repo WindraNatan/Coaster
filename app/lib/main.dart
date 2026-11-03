@@ -29,7 +29,10 @@ const _alarm = Color(0xFFF26B6E);
 
 const _display = 'SpaceGrotesk';
 const _mono = 'JetBrainsMono';
-const _pollInterval = Duration(milliseconds: 2500); // ritme poll PWA (cloud mode)
+// Jaring aman saja: data datang lewat stream SSE. Poll 20 dtk dipakai bila
+// stream mati (proxy memblokir event-stream). 2,5 dtk membakar kuota RTDB
+// tanpa menambah kesegaran, karena SSE sudah lebih cepat.
+const _pollInterval = Duration(seconds: 20);
 const _glassDisplayMl = 500.0; // skala tampilan gelas (gauge, bukan klaim volume)
 // Nilai aman sebelum node config pertama kali terbaca firmware
 // (BASE_INTERVAL_MS config.h = 30 menit; DEFAULT_EMPTY_CUP_G = 130 g).
