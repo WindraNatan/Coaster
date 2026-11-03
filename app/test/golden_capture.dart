@@ -100,7 +100,7 @@ Future<void> _loadFonts() async {
 void main() {
   setUpAll(_loadFonts);
   testWidgets('dashboard tampilan ponsel', (tester) async {
-    await _pump(tester, const Size(390, 1700));
+    await _pump(tester, const Size(390, 1280));
     await expectLater(
       find.byType(DashboardScreen),
       matchesGoldenFile('goldens/app-dashboard-hp.png'),
@@ -108,7 +108,7 @@ void main() {
   });
 
   testWidgets('dashboard tampilan lebar', (tester) async {
-    await _pump(tester, const Size(820, 1400));
+    await _pump(tester, const Size(820, 1000));
     await expectLater(
       find.byType(DashboardScreen),
       matchesGoldenFile('goldens/app-dashboard-lebar.png'),

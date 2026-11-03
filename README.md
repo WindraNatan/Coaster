@@ -16,6 +16,7 @@ ESP32 DevKit V1 · load cell 5 kg lewat HX711 · DHT11 · buzzer · motor getar.
 | `brand/` | logo dan panduan merek (SVG + PNG) |
 | `tools/` | harness uji, pemeriksaan CAD, skrip rilis APK |
 | `cad/` | model sasis OpenSCAD |
+| `docs/` | dokumen sistem dan arsip laporan audit lama |
 
 ## Menjalankan
 
@@ -33,9 +34,9 @@ flutter run
 Build rilis: `python tools/rilis_apk.py v1.0.0-betaN` — membangun APK release,
 mengunggahnya sebagai GitHub Release, dan mencetak tautan unduh.
 
-**Firmware.** Butuh Arduino IDE dengan core ESP32 3.x dan library WiFiManager,
-HX711, DHT. Isi `SmartHydrationCoaster/secrets.h` (tidak di-commit) dari
-`secrets.h.example`. Compile lewat CLI:
+**Firmware.** Butuh core ESP32 3.x dan library WiFiManager, HX711, DHT. Salin
+`SmartHydrationCoaster/secrets.h.example` menjadi `secrets.h` (tidak di-commit)
+lalu isi kredensialnya. Compile lewat CLI:
 
 ```
 arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 SmartHydrationCoaster
@@ -47,10 +48,14 @@ arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 SmartHydrationCoaster
 python test_simulation.py                 # 21 skenario FSM (Python)
 node web/fsm.test.js                      # paritas FSM di JS
 node web/daily-history.test.js            # riwayat + hitungan harian
-tools/uji_fsm/uji_fsm.exe                 # 52 pemeriksaan FSM (C++)
 python tools/cad_check/verify_stackup.py  # 60 pemeriksaan tata letak sasis
 python tools/cek_aturan_berkas.py         # berkas aturan Firebase
 cd app && flutter analyze && flutter test # 55 tes
+
+# Harness FSM (C++): dikompilasi dulu, binernya tidak disimpan di repo.
+cd tools/uji_fsm
+g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster \
+    -o uji_fsm uji_fsm.cpp && ./uji_fsm
 ```
 
 Logika FSM hidup di tiga tempat dan wajib identik: `fsm.h`, `test_simulation.py`,
@@ -66,7 +71,8 @@ dan `web/fsm.js`. Setiap perubahan disalin ke ketiganya.
   notifikasi Android 8+ mengunci suara saat dibuat, sehingga audio pilihan
   pengguna tidak bisa dipasang lewat konfigurasi kanal.
 
-## Lisensi dan atribusi
+## Dokumen lain
 
-Panduan konteks pengembangan ada di `CLAUDE.md`. Dokumen kebutuhan produk:
-`PRD_Smart_Hydration_Coaster.md`.
+Panduan konteks pengembangan untuk agen: `CLAUDE.md`. Kebutuhan produk beserta
+keputusan yang mengikat: `PRD_Smart_Hydration_Coaster.md`. Panduan merek:
+`brand/PANDUAN-LOGO.md`. Cara uji perangkat: `CARA_UJI_HARDWARE.md`.

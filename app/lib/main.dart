@@ -329,13 +329,13 @@ class _ConnectScreenState extends State<ConnectScreen> {
                 Text('Smart Hydration',
                     style: TextStyle(
                         fontSize: 30,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         color: _ink,
                         letterSpacing: .2)),
                 Text('Coaster',
                     style: TextStyle(
                         fontSize: 30,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         color: _water,
                         letterSpacing: .2)),
                 const SizedBox(height: 6),
@@ -927,7 +927,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 style: TextStyle(
                     fontFamily: _display,
                     fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: _ink,
                     letterSpacing: .2)),
             ),
@@ -1454,7 +1454,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   style: TextStyle(
                       fontFamily: _display,
                       fontSize: 24,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: color,
                       letterSpacing: .4)),
               const SizedBox(height: 4),
@@ -1722,7 +1722,7 @@ class _ClaimScreenState extends State<ClaimScreen> {
             children: [
               Text('Tautkan alat',
                   style: TextStyle(fontFamily: _display, fontSize: 30,
-                      fontWeight: FontWeight.w700, color: _ink, height: 1.15)),
+                      fontWeight: FontWeight.w500, color: _ink, height: 1.15)),
               const SizedBox(height: 10),
               Text('Masukkan kode 8 karakter dari alat.',
                   style: _monoStyle(12, color: _ink)),

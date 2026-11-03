@@ -89,7 +89,7 @@ berasal dari lembar spesifikasi penjual di `Foto spesifikasi sensor dan aktuator
 `y = 63.79 + 2.54k` (24 baris). Semua pin modul wajib jatuh di grid ini.
 
 Verifikasi: `python tools/cad_check/verify_stackup.py` (60 pemeriksaan). Temuan terbuka dan
-status temuan lama ada di `AUDIT_DESIGN_3D.md`.
+status temuan lama ada di `docs/arsip/AUDIT_DESIGN_3D.md`.
 
 ---
 
