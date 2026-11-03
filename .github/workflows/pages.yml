@@ -6,8 +6,8 @@ name: Deploy web PWA
 on:
   push:
     branches: [master]
-    paths: ['web/**', 'app/**', 'tools/**', 'test_simulation.py', 'firebase-rules.json',
-           '.github/workflows/pages.yml']
+    paths: ['web/**', 'app/**', 'tools/**', 'SmartHydrationCoaster/**',
+           'test_simulation.py', 'firebase-rules.json', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -43,9 +43,35 @@ jobs:
         run: python test_simulation.py
       - name: Garda berkas aturan Firebase
         run: python tools/cek_aturan_berkas.py
+      - name: Garda tata letak sasis
+        run: python tools/cad_check/verify_stackup.py
+      - name: Harness FSM (C++)
+        run: |
+          cd tools/uji_fsm
+          g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fsm.cpp
+          ./uji_fsm
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./web
       - id: deploy
         uses: actions/deploy-pages@v4
+
+  # Tes aplikasi Android. Dipisah dari job deploy supaya kegagalan Flutter tidak
+  # menahan penerbitan web, tetapi tetap menjadi gerbang sebelum rilis APK.
+  test-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Dependensi
+        run: flutter pub get
+        working-directory: app
+      - name: Analyze
+        run: flutter analyze
+        working-directory: app
+      - name: Test
+        run: flutter test
+        working-directory: app

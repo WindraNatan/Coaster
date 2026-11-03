@@ -5,11 +5,11 @@
    - Gunakan `ponytail-audit` ketika diminta mencari kode berlebih atau melakukan audit keringkasan repositori.
 
 2. **Konteks & Aturan Tiga Port 1:1:**
-   - Baca `HANDOFF_AGENT.md` dan `PRD_Smart_Hydration_Coaster.md` sebagai acuan utama.
+   - Baca `CLAUDE.md` dan `PRD_Smart_Hydration_Coaster.md` sebagai acuan utama.
    - Logika FSM hidup di tiga tempat dan wajib selalu identik 1:1:
      1. `SmartHydrationCoaster/fsm.h`
      2. `test_simulation.py`
-     3. `web/index.html` (`class CoasterFSM`)
+     3. `web/fsm.js` (`class CoasterFSM`, dimuat oleh `web/index.html`)
    - Setiap perubahan logika FSM wajib disalin ke ketiga port dan diverifikasi dengan `python test_simulation.py` serta harness C++ `tools/uji_fsm/uji_fsm.cpp`.
 
 <!-- antislop:start -->

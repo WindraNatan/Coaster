@@ -21,3 +21,11 @@ __pycache__/
 
 # Kredensial perangkat (jangan pernah di-commit)
 SmartHydrationCoaster/secrets.h
+
+# Bukti screenshot: artefak pengumpulan, bukan kode. Dibuat ulang kapan saja.
+/bukti-screenshot/
+/bukti-screenshot.zip
+
+# Keluaran alat tangkap layar (golden_capture.dart), bukan tes.
+/app/test/goldens/
+/app/test/failures/
