@@ -48,3 +48,22 @@ powershell Compress-Archive -Path bukti-screenshot -DestinationPath bukti-screen
 ```
 
 Atau klik kanan folder `bukti-screenshot`, lalu **Send to › Compressed (zipped) folder**.
+
+## Batas ukuran
+
+Formulir pengumpulan membatasi ZIP hingga **10 MB**. Setelah empat gambar
+aplikasi dimasukkan, periksa ukurannya:
+
+```
+powershell "(Get-Item bukti-screenshot.zip).Length / 1MB"
+```
+
+Bila lebih dari 10 MB, kecilkan gambar terlebih dahulu:
+
+```
+powershell Compress-Archive -Path bukti-screenshot -DestinationPath bukti-screenshot.zip -Force
+```
+
+Gambar PNG dari ponsel biasanya 2-4 MB per berkas, jadi empat gambar bisa
+mendekati batas. Cara mengecilkan: buka gambar di Photos, pilih **Resize**,
+simpan dengan lebar 1080 px.

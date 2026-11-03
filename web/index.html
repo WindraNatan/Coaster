@@ -23,7 +23,10 @@ button,input{font:inherit;touch-action:manipulation}
 header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   padding:10px 24px;border-bottom:1px solid var(--line)}
 /* Di bawah 920 px header jadi satu baris: judul boleh terpotong, kontrol tidak. */
-h1{font-size:16px;font-weight:700;letter-spacing:.2px;margin-right:auto;
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0;
+  text-decoration:none;color:inherit}
+.brand-mark{display:block;flex:none;border-radius:8px}
+.brand-name{font-size:16px;font-weight:700;letter-spacing:.2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .slider-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between}
 .slider-row .slider-cap{flex:1 1 200px;min-width:0}
@@ -69,7 +72,6 @@ main{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,450px);gap:0;
   .status{padding:18px 18px 0}
   .tele{padding:0 18px 20px}
   header{padding:12px 18px}
-  .h1-sub{display:none}
 }
 .stage-top{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;min-width:0}
 .glass-box{flex:0 0 130px}
@@ -179,7 +181,10 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 </head>
 <body>
 <header>
-  <h1>Smart Hydration Coaster<span class="h1-sub"> · Kendali &amp; IoT</span></h1>
+  <a class="brand" href="index.html" aria-label="Smart Hydration Coaster, beranda">
+    <img class="brand-mark" src="icon.svg" alt="" width="28" height="28">
+    <span class="brand-name">Smart Hydration Coaster</span>
+  </a>
   <div class="conn-bar" role="group" aria-label="Mode koneksi perangkat">
     <button class="conn-pill on" data-mode="sim" id="mSim">Simulator</button>
     <button class="conn-pill" data-mode="usb" id="mUsb">USB Live</button>

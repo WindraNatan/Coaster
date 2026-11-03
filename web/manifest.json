@@ -1,12 +1,11 @@
 {
   "name": "Smart Hydration Coaster",
-  "short_name": "Hydration",
-  "description": "Pemantau hidrasi closed-loop berbasis ESP32, HX711, dan DHT11.",
+  "short_name": "Coaster",
+  "description": "Pengingat minum dan pemantau hidrasi dari tatakan gelas.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#0C1F27",
+    "background_color": "#0C1F27",
   "theme_color": "#0C1F27",
   "icons": [
     {

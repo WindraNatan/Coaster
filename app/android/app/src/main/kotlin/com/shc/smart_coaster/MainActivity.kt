@@ -201,7 +201,9 @@ object Reminder {
         return Notification.Builder(ctx, channelFor(vibrate))
             .setContentTitle("Waktunya minum")
             .setContentText("Angkat gelas dan minum sedikit air.")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            // Small icon notifikasi harus drawable satu warna; launcher
+            // adaptive-icon tidak boleh dipakai di sini.
+            .setSmallIcon(R.drawable.ic_stat_coaster)
             .setContentIntent(open)
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_ALARM)

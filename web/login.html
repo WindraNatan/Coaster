@@ -21,6 +21,8 @@
 body{background:var(--bg);color:var(--ink);font-family:var(--disp);min-height:100dvh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 18px}
 button,input{font:inherit;touch-action:manipulation}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.brand-mark{display:block;flex:none;border-radius:10px}
 h1{font-size:20px;font-weight:700;letter-spacing:.2px}
 h1 span{color:var(--water)}
 main{width:100%;max-width:520px}
@@ -77,11 +79,10 @@ a.pill.off{opacity:.55}
 </head>
 <body>
 <main>
-  <h1>Smart Hydration <span>Coaster</span></h1>
-  <p style="font-size:12px;color:var(--dim);margin:6px 0 18px;line-height:1.6">
-    Masuk dengan akun Firebase untuk membaca dan mengendalikan tatakanmu dari jarak jauh.
-    Simulator dan USB Live bisa dipakai tanpa akun.
-  </p>
+  <div class="brand">
+    <img class="brand-mark" src="icon.svg" alt="" width="40" height="40">
+    <h1>Smart Hydration <span>Coaster</span></h1>
+  </div>
 
   <div class="pill-row">
     <a class="pill" href="index.html">Simulator</a>
@@ -91,7 +92,6 @@ a.pill.off{opacity:.55}
 
   <section class="card" aria-label="Akun Firebase">
     <h2>Akun</h2>
-    <p>Dipakai untuk menyimpan catatan hidrasi per pengguna di Realtime Database.</p>
     <div class="status"><i class="status-dot err" id="authDot"></i><span id="authStatus">Belum masuk.</span></div>
 
     <form id="authForm" novalidate>
@@ -123,7 +123,6 @@ a.pill.off{opacity:.55}
 
   <section class="card" aria-label="Klaim alat">
     <h2>Klaim alat</h2>
-    <p>Sekali saja per tatakan. Masukkan kode 8 karakter yang tampil di Serial Monitor ESP32.</p>
     <div class="status"><i class="status-dot" id="claimDot"></i><span id="claimStatus">Alat belum tertaut ke akun ini.</span></div>
     <form id="claimForm" novalidate>
       <label for="deviceCodeIn">Kode alat</label>
@@ -144,8 +143,7 @@ a.pill.off{opacity:.55}
     </div>
   </section>
 
-  <p class="foot">Catatan tersimpan per akun, bukan per perangkat.<br>
-    <a href="index.html">Lanjut tanpa akun (Simulator / USB)</a></p>
+  <p class="foot"><a href="index.html">Lanjut tanpa akun</a></p>
 </main>
 
 <script src="auth.js"></script>

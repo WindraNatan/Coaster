@@ -1,6 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
-  <rect width="192" height="192" rx="38" fill="#0C1F27"/>
-  <path d="M52 38 L140 38 L128 148 Q126 160 114 160 L78 160 Q66 160 64 148 Z" fill="#132B35" stroke="#3CC2E0" stroke-width="6"/>
-  <path d="M59 86 L133 86 L124 146 Q123 154 114 154 L78 154 Q69 154 68 146 Z" fill="#3CC2E0" opacity="0.88"/>
-  <rect x="38" y="166" width="116" height="8" rx="4" fill="#5BC98F"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192" role="img" aria-label="Smart Hydration Coaster">
+  <defs>
+    <!-- Air mengikuti bentuk gelas: satu klip, bukan dua trapesium terpisah yang
+         mudah tidak sejajar. -->
+    <clipPath id="glass">
+      <path d="M62 46 L130 46 L115 126 Q114 131 109 131 L83 131 Q78 131 77 126 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect width="192" height="192" rx="40" fill="#0C1F27"/>
+
+  <!-- Tatakan: bentuk datar di bawah gelas, inilah benda yang membedakan produk
+       ini dari aplikasi pengingat minum biasa. -->
+  <rect x="44" y="126" width="104" height="22" rx="11" fill="#44C8E6" opacity="0.42"/>
+
+  <!-- Gelas kosong -->
+  <path d="M62 46 L130 46 L115 126 Q114 131 109 131 L83 131 Q78 131 77 126 Z"
+        fill="#132B35" stroke="#44C8E6" stroke-width="5" stroke-linejoin="round"/>
+
+  <!-- Air, tinggi tetap supaya terbaca di ukuran 16 px -->
+  <rect x="56" y="78" width="80" height="60" fill="#44C8E6" clip-path="url(#glass)"/>
 </svg>

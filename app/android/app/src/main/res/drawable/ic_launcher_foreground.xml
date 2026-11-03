@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lapisan depan adaptive icon. Isi digambar ulang sebagai vektor, bukan
+     memakai PNG, supaya tajam di semua kerapatan tanpa lima berkas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <path
+        android:fillColor="#44C8E6"
+        android:fillAlpha="0.42"
+        android:pathData="M44,126 h104 a11,11 0 0 1 0,22 h-104 a11,11 0 0 1 0,-22 z" />
+    <path
+        android:fillColor="#132B35"
+        android:strokeColor="#44C8E6"
+        android:strokeWidth="5"
+        android:pathData="M62,46 L130,46 L115,126 Q114,131 109,131 L83,131 Q78,131 77,126 Z" />
+    <path
+        android:fillColor="#44C8E6"
+        android:pathData="M62,78 h68 v53 h-68 z" />
+</vector>
