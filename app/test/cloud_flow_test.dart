@@ -11,28 +11,27 @@ import 'package:smart_coaster/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _url = 'https://proyek-rtdb.asia-southeast1.firebasedatabase.app';
-
+// _poll() menarik dua node terpisah: telemetry.json dan config.json. Mock harus
+// mengembalikan badan yang sesuai per path, bukan satu node induk.
 final _telemetryBody = jsonEncode({
-  'telemetry': {
-    'weight_g': 315,
-    'water_ml': 185,
-    'temp_c': 27,
-    'humidity_pct': 60,
-    'remaining_sec': 423,
-    'target_interval_min': 45,
-    'total_ml': 750,
-    'drink_count': 3,
-    'refill_count': 1,
-    'cheat_count': 0,
-    'muted': false,
-    'fsm_state': 'TIMING',
-  },
-  'config': {
-    'timer_mode': 'MANUAL',
-    'manual_interval_min': 30,
-    'empty_cup_weight_g': 130,
-    'muted': false,
-  },
+  'weight_g': 315,
+  'water_ml': 185,
+  'temp_c': 27,
+  'humidity_pct': 60,
+  'remaining_sec': 423,
+  'target_interval_min': 45,
+  'total_ml': 750,
+  'drink_count': 3,
+  'refill_count': 1,
+  'cheat_count': 0,
+  'muted': false,
+  'fsm_state': 'TIMING',
+});
+final _configBody = jsonEncode({
+  'timer_mode': 'MANUAL',
+  'manual_interval_min': 30,
+  'empty_cup_weight_g': 130,
+  'muted': false,
 });
 
 Future<void> _pumpApp(WidgetTester tester, MockClient client) async {
@@ -50,8 +49,11 @@ Future<void> _pumpApp(WidgetTester tester, MockClient client) async {
 void main() {
   testWidgets('loading lalu data telemetry ter-render', (tester) async {
     final client = MockClient((req) async {
-      if (req.url.path == '/users/uid-test/smart_coaster.json') {
+      if (req.url.path == '/users/uid-test/smart_coaster/telemetry.json') {
         return Response(_telemetryBody, 200);
+      }
+        if (req.url.path == '/users/uid-test/smart_coaster/config.json') {
+        return Response(_configBody, 200);
       }
       return Response('{}', 200);
     });
@@ -92,22 +94,21 @@ void main() {
   testWidgets('state turunan ALERT_MISSING_CUP render sebagai ALERT REFILL',
       (tester) async {
     final body = jsonEncode({
-      'telemetry': {
-        'weight_g': 0,
-        'water_ml': 0,
-        'temp_c': 27,
-        'humidity_pct': 60,
-        'remaining_sec': 0,
-        'target_interval_min': 30,
-        'total_ml': 0,
-        'drink_count': 0,
-        'refill_count': 0,
-        'cheat_count': 0,
-        'muted': false,
-        'fsm_state': 'ALERT_MISSING_CUP',
-      },
+      'weight_g': 0,
+      'water_ml': 0,
+      'temp_c': 27,
+      'humidity_pct': 60,
+      'remaining_sec': 0,
+      'target_interval_min': 30,
+      'total_ml': 0,
+      'drink_count': 0,
+      'refill_count': 0,
+      'cheat_count': 0,
+      'muted': false,
+      'fsm_state': 'ALERT_MISSING_CUP',
     });
-    final client = MockClient((req) async => Response(body, 200));
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json') ? _configBody : body, 200));
     await _pumpApp(tester, client);
     await tester.pump();
     expect(find.text('ALERT REFILL'), findsOneWidget);
@@ -123,11 +124,12 @@ void main() {
         patches.add('${req.url.path} ${req.body}');
         return Response('{}', 200);
       }
-      return Response(_telemetryBody, 200);
+      return Response(
+          req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200);
     });
     await _pumpApp(tester, client);
     await tester.pump();
-    expect(find.text('aktif'), findsOneWidget);
+    expect(find.text('ON'), findsOneWidget);
 
     await tester.ensureVisible(find.byType(Switch));
     await tester.pump();
@@ -135,11 +137,68 @@ void main() {
     await tester.pump();
 
     expect(patches, ['/users/uid-test/smart_coaster/config.json {"muted":true}']);
-    expect(find.text('muted'), findsOneWidget);
+    expect(find.text('OFF'), findsOneWidget);
+  });
+
+  // Regresi desinkronisasi mute: config adalah perintah (saklar pengguna),
+  // telemetry adalah echo perangkat yang baru berubah setelah ESP32 poll config
+  // (15 dtk). Kalau telemetry menang, saklar membalik sendiri beberapa detik
+  // setelah diklik. Web memakai presedensi yang sama (web/index.html mutedFrom).
+  testWidgets('telemetry.muted basi tidak menimpa config.muted',
+      (tester) async {
+    final staleTelemetry = jsonEncode({
+      'weight_g': 315, 'water_ml': 185, 'temp_c': 27, 'humidity_pct': 60,
+      'remaining_sec': 423, 'target_interval_min': 30, 'total_ml': 750,
+      'drink_count': 3, 'refill_count': 1, 'cheat_count': 0,
+      'fsm_state': 'TIMING',
+      'muted': false, // echo lama: perangkat belum sempat membaca config baru
+    });
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json')
+            ? jsonEncode({'timer_mode': 'MANUAL', 'manual_interval_min': 30,
+                          'empty_cup_weight_g': 130, 'muted': true})
+            : staleTelemetry,
+        200));
+    await _pumpApp(tester, client);
+    for (var i = 0; i < 4; i++) { await tester.pump(); }
+    // Pisahkan dua hipotesis kegagalan: field ini hanya muncul bila _cfg sudah
+    // terisi dari body config (timer_mode MANUAL). Hilang -> mock/path bermasalah;
+    // muncul tapi switch false -> presedensi muted yang rusak.
+    expect(find.text('Interval dasar (menit)'), findsOneWidget);
+    final sw = tester.widget<Switch>(find.byType(Switch));
+    expect(sw.value, isTrue,
+        reason: 'config.muted=true harus menang atas telemetry.muted=false yang basi');
+  });
+
+  // Regresi event stream: PATCH dari web/app sampai ke RTDB sebagai `event: patch`
+  // dengan `path` sebagian, bukan `put` node penuh. Tanpa penanganan patch, field
+  // yang berubah baru terlihat 20 dtk kemudian lewat poll cadangan.
+  testWidgets('event patch sebagian diterapkan menurut path', (tester) async {
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200));
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    // Snapshot awal, lalu patch sebagian seperti tombol mute di aplikasi.
+    final state = TlmStreamState();
+    state.apply('event: put\ndata: {"path":"/","data":{"weight_g":300,"muted":false,'
+        '"fsm_state":"TIMING","water_ml":150,"temp_c":27,"humidity_pct":60,'
+        '"remaining_sec":100,"target_interval_min":30,"total_ml":500,'
+        '"drink_count":2,"refill_count":1,"cheat_count":0}}\n\n');
+    expect(state.json['weight_g'], 300);
+    expect(state.json['muted'], false);
+
+    state.apply('event: patch\ndata: {"path":"/","data":{"muted":true}}\n\n');
+    expect(state.json['muted'], true);
+    expect(state.json['weight_g'], 300, reason: 'field lain tidak boleh hilang');
+
+    state.apply('event: patch\ndata: {"path":"/weight_g","data":340}\n\n');
+    expect(state.json['weight_g'], 340);
   });
 
   testWidgets('mode MANUAL memperlihatkan field interval', (tester) async {
-    final client = MockClient((req) async => Response(_telemetryBody, 200));
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200));
     await _pumpApp(tester, client);
     await tester.pump();
     // config kirim timer_mode MANUAL → field interval muncul, terisi 30
@@ -147,16 +206,26 @@ void main() {
     expect(find.text('AUTO_DHT'), findsOneWidget);
   });
 
-  testWidgets('poll memakai GET node induk, bukan config.json',
+  // Dua node kecil, bukan seluruh /smart_coaster: daily/<tanggal> tumbuh tanpa
+  // batas dan tidak pernah dibaca _poll(), jadi menariknya tiap 2,5 detik hanya
+  // membakar kuota.
+  testWidgets('poll menarik dua node kecil, bukan seluruh node alat',
       (tester) async {
     final paths = <String>[];
     final client = MockClient((req) async {
       paths.add('${req.method} ${req.url.path}');
-      return Response(_telemetryBody, 200);
+      return Response(
+          req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200);
     });
     await _pumpApp(tester, client);
     await tester.pump();
-    expect(paths, ['GET /users/uid-test/smart_coaster.json']);
+    // Telemetry boleh muncul dua kali: sekali dari _poll() dan sekali dari
+    // stream SSE yang sengaja dibuka _startPolling(). Yang dilarang adalah
+    // menarik node induk.
+    expect(paths, contains('GET /users/uid-test/smart_coaster/config.json'));
+    expect(paths, contains('GET /users/uid-test/smart_coaster/telemetry.json'));
+    expect(paths.any((p) => p.endsWith('/smart_coaster.json')), isFalse,
+        reason: 'node induk tidak boleh ditarik lagi');
   });
 
   // Node akun dipakai hanya sebagai cadangan saat alat belum ditautkan, supaya
@@ -177,7 +246,9 @@ void main() {
       ),
     ));
     await tester.pump();
-    expect(paths, ['GET /users/uid-akun/smart_coaster.json']);
+    expect(paths, contains('GET /users/uid-akun/smart_coaster/config.json'));
+    expect(paths, contains('GET /users/uid-akun/smart_coaster/telemetry.json'));
+    expect(paths.any((p) => p.endsWith('/smart_coaster.json')), isFalse);
   });
 
   // Beda UID: akun 19Wt…, alat uid-alat. Boot wajib baca /links lalu memakai
@@ -196,8 +267,11 @@ void main() {
       if (req.url.path == '/links/uid-akun.json') {
         return Response('{"uid-alat":{"code":"A1B2C3D4","at":123}}', 200);
       }
-      if (req.url.path == '/users/uid-alat/smart_coaster.json') {
+      if (req.url.path == '/users/uid-alat/smart_coaster/telemetry.json') {
         return Response(_telemetryBody, 200);
+      }
+        if (req.url.path == '/users/uid-alat/smart_coaster/config.json') {
+        return Response(_configBody, 200);
       }
       return Response('null', 200);
     });
@@ -207,8 +281,8 @@ void main() {
     await tester.pump(); // _poll selesai
 
     expect(paths, contains('GET /links/uid-akun.json'));
-    expect(paths, contains('GET /users/uid-alat/smart_coaster.json'));
-    expect(paths, isNot(contains('GET /users/uid-akun/smart_coaster.json')));
+    expect(paths, contains('GET /users/uid-alat/smart_coaster/telemetry.json'));
+    expect(paths, isNot(contains('GET /users/uid-akun/smart_coaster/telemetry.json')));
   });
 
   // /links ditolak (rules belum memuat blok itu) -> fallback node akun.
@@ -226,8 +300,11 @@ void main() {
       if (req.url.path == '/links/uid-akun.json') {
         return Response('Unauthorized', 401);
       }
-      if (req.url.path == '/users/uid-akun/smart_coaster.json') {
+      if (req.url.path == '/users/uid-akun/smart_coaster/telemetry.json') {
         return Response(_telemetryBody, 200);
+      }
+        if (req.url.path == '/users/uid-akun/smart_coaster/config.json') {
+        return Response(_configBody, 200);
       }
       return Response('null', 200);
     });
@@ -237,8 +314,8 @@ void main() {
     await tester.pump();
 
     expect(paths, contains('GET /links/uid-akun.json'));
-    expect(paths, contains('GET /users/uid-akun/smart_coaster.json'));
-    expect(paths, isNot(contains('GET /users/uid-alat/smart_coaster.json')));
+    expect(paths, contains('GET /users/uid-akun/smart_coaster/telemetry.json'));
+    expect(paths, isNot(contains('GET /users/uid-alat/smart_coaster/telemetry.json')));
   });
 
   // Instalasi baru: tidak ada sesi tersimpan, jadi _boot() tidak punya apa pun.
@@ -262,8 +339,11 @@ void main() {
       if (req.url.path == '/links/uid-akun.json') {
         return Response('{"uid-alat":{"code":"A1B2C3D4","at":7}}', 200);
       }
-      if (req.url.path == '/users/uid-alat/smart_coaster.json') {
+      if (req.url.path == '/users/uid-alat/smart_coaster/telemetry.json') {
         return Response(_telemetryBody, 200);
+      }
+        if (req.url.path == '/users/uid-alat/smart_coaster/config.json') {
+        return Response(_configBody, 200);
       }
       return Response('null', 200);
     });
@@ -276,7 +356,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(paths, contains('GET /links/uid-akun.json'));
-    expect(paths, contains('GET /users/uid-alat/smart_coaster.json'));
-    expect(paths, isNot(contains('GET /users/uid-akun/smart_coaster.json')));
+    expect(paths, contains('GET /users/uid-alat/smart_coaster/telemetry.json'));
+    expect(paths, isNot(contains('GET /users/uid-akun/smart_coaster/telemetry.json')));
   });
 }

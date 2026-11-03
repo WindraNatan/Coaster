@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shc-pwa-v12';
+const CACHE_NAME = 'shc-pwa-v13';
 const ASSETS = ['./', './index.html', './login.html', './auth.js', './fsm.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
@@ -19,6 +19,21 @@ self.addEventListener('fetch', e => {
   // file diedit, sampai pengguna menghapus data situs. Cache hanya dipakai saat offline.
   if (e.request.mode === 'navigate') {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
+  // Script dan stylesheet: jaringan dulu, cache hanya saat offline. Cache-first
+  // pernah mencampur HTML baru dengan fsm.js lama, sehingga halaman memanggil
+  // fungsi yang belum ada di berkas yang tersaji.
+  const url = new URL(e.request.url);
+  const isCode = /\.(js|css)$/.test(url.pathname);
+  if (isCode) {
+    e.respondWith(fetch(e.request).then(res => {
+      if (res && res.status === 200) {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+      }
+      return res;
+    }).catch(() => caches.match(e.request)));
     return;
   }
   e.respondWith(

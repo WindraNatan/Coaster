@@ -8,6 +8,7 @@
 #if defined(ESP32)
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
 
@@ -96,11 +97,11 @@ static String jsonField(const String& s, const char* key) {
 }
 static bool firebaseLogin() {
     if (activeApiKey.length() == 0 || activeUserEmail.length() == 0) return false;
-    WiFiClientSecure client;
-    client.setInsecure();
+    WiFiClientSecure tls;
+    tls.setInsecure();
     HTTPClient http;
     String url = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + activeApiKey;
-    if (!http.begin(client, url)) return false;
+    if (!http.begin(tls, url)) return false;
     http.addHeader("Content-Type", "application/json");
     String body = "{\"email\":\"" + jsonEscape(activeUserEmail) + "\",\"password\":\"" +
                   jsonEscape(activeUserPassword) + "\",\"returnSecureToken\":true}";
@@ -139,11 +140,11 @@ static bool firebaseLogin() {
 // baru, supaya alat yang menyala berhari-hari tidak bergantung pada satu login awal.
 static bool firebaseRefresh() {
     if (refreshToken.length() == 0 || activeApiKey.length() == 0) return false;
-    WiFiClientSecure client;
-    client.setInsecure();
+    WiFiClientSecure tls;
+    tls.setInsecure();
     HTTPClient http;
     String url = "https://securetoken.googleapis.com/v1/token?key=" + activeApiKey;
-    if (!http.begin(client, url)) return false;
+    if (!http.begin(tls, url)) return false;
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
     String body = "grant_type=refresh_token&refresh_token=" + refreshToken;
     int code = http.POST(body);
@@ -189,6 +190,7 @@ static String authSuffix() {
 extern bool demoMode;
 extern bool autoDhtTimerMode;
 extern bool buzzerMuted;
+extern volatile bool configDirty;
 extern uint32_t customBaseIntervalMs;
 extern CoasterFSM fsm;
 extern void updateAdaptiveInterval();
@@ -219,11 +221,11 @@ static String makeClaimCode() {
 // hanya kalau nilainya UID si penulis, jadi kode tidak bisa dipalsukan orang lain.
 static bool publishClaimCode() {
     if (claimCode.length() == 0 || activeUid.length() == 0) return false;
-    WiFiClientSecure client;
-    client.setInsecure();
+    WiFiClientSecure tls;
+    tls.setInsecure();
     HTTPClient http;
     String url = activeFirebaseUrl + "/claims/" + claimCode + ".json" + authSuffix();
-    if (!http.begin(client, url)) return false;
+    if (!http.begin(tls, url)) return false;
     http.addHeader("Content-Type", "application/json");
     int code = http.PUT("\"" + activeUid + "\"");
     http.end();
@@ -243,6 +245,22 @@ static void cloudTask(void*) {
     char lastState[20] = "";
     uint32_t lastPushMs = 0;
     uint32_t lastPollMs = 0;
+    // Satu TLS untuk semua request. Sebelumnya tiap request membuat client baru:
+    // handshake 1-3 dtk, dan satu siklus (push + config + session) membayarnya
+    // tiga kali. Itu lag utama yang dirasakan di web dan aplikasi.
+    WiFiClientSecure tls;
+    tls.setInsecure();
+    tls.setTimeout(8);
+    // Satu HTTPClient untuk semua request RTDB. Destruktor HTTPClient memanggil
+    // client->stop(), jadi objek ini harus hidup selama loop, bukan per blok.
+    HTTPClient rtdb;
+    rtdb.setReuse(true);
+    rtdb.setTimeout(8000);
+    float lastWeightG = -999, lastTempC = -999, lastHumPct = -999, lastTargetMin = -1;
+    uint16_t lastDrinkCnt = 0xFFFF, lastRefillCnt = 0xFFFF, lastCheatCnt = 0xFFFF;
+    bool lastMuted = false;
+    uint16_t hbCounter = 0;
+    uint8_t cfgPatchFails = 0;
 
     for (;;) {
         if (activeFirebaseUrl.length() == 0 || WiFi.status() != WL_CONNECTED) {
@@ -290,75 +308,143 @@ static void cloudTask(void*) {
         }
 
         bool stateChanged = strncmp(local.stateStr, lastState, sizeof(lastState)) != 0;
-        if (stateChanged || (now - lastPushMs >= 5000UL)) {
+        // Push hanya saat isi berubah. Sebelumnya ada push buta tiap 5 dtk yang
+        // menulis ulang angka yang sama: kuota terpakai, dan web/aplikasi tetap
+        // menunggu jeda poll-nya sendiri. Pembanding mencakup semua field yang
+        // dikirim, kecuali remaining_sec yang memang berjalan terus.
+        bool dataChanged =
+            stateChanged ||
+            fabsf(local.weightG - lastWeightG) > 0.5f ||
+            local.drinkCnt != lastDrinkCnt ||
+            local.refillCnt != lastRefillCnt ||
+            local.cheatCnt != lastCheatCnt ||
+            local.muted != lastMuted ||
+            fabsf(local.targetMin - lastTargetMin) > 0.01f ||
+            fabsf(local.tempC - lastTempC) > 0.2f ||
+            fabsf(local.humPct - lastHumPct) > 1.0f;
+        // Heartbeat 60 dtk: penanda hidup, bukan data. Klien bisa membedakan
+        // "alat diam" dari "alat mati" tanpa membandingkan nilai yang identik.
+        bool heartbeat = (now - lastPushMs >= 60000UL);
+        if (dataChanged || heartbeat) {
             strncpy(lastState, local.stateStr, sizeof(lastState) - 1);
+            lastState[sizeof(lastState) - 1] = '\0';
+            lastWeightG = local.weightG;
+            lastDrinkCnt = local.drinkCnt;
+            lastRefillCnt = local.refillCnt;
+            lastCheatCnt = local.cheatCnt;
+            lastMuted = local.muted;
+            lastTargetMin = local.targetMin;
+            lastTempC = local.tempC;
+            lastHumPct = local.humPct;
             lastPushMs = now;
 
-            WiFiClientSecure client;
-            client.setInsecure();
-            HTTPClient http;
             String url = userNode() + "/telemetry.json" + authSuffix();
-            if (http.begin(client, url)) {
-                http.addHeader("Content-Type", "application/json");
+            if (rtdb.begin(tls, url)) {
+                rtdb.addHeader("Content-Type", "application/json");
                 char body[360];
                 snprintf(body, sizeof(body),
                     "{\"weight_g\":%.1f,\"water_ml\":%.1f,\"temp_c\":%.1f,\"humidity_pct\":%.0f,"
                     "\"fsm_state\":\"%s\",\"remaining_sec\":%lu,\"target_interval_min\":%.2f,"
-                    "\"total_ml\":%.1f,\"drink_count\":%u,\"refill_count\":%u,\"cheat_count\":%u,\"muted\":%s}",
+                    "\"total_ml\":%.1f,\"drink_count\":%u,\"refill_count\":%u,\"cheat_count\":%u,"
+                    "\"muted\":%s,\"hb\":%u}",
                     local.weightG, local.waterMl, local.tempC, local.humPct,
                     local.stateStr, (unsigned long)local.remSec, local.targetMin,
                     local.totalMl, local.drinkCnt, local.refillCnt, local.cheatCnt,
-                    local.muted ? "true" : "false");
-                http.PATCH((uint8_t*)body, strlen(body));
-                http.end();
+                    local.muted ? "true" : "false", (unsigned)(++hbCounter));
+                rtdb.PATCH((uint8_t*)body, strlen(body));
+                rtdb.end();
             }
         }
 
-        if (now - lastPollMs >= 15000UL) {
+        // Unggah perubahan lokal lebih dulu, supaya GET berikutnya sudah membaca
+        // nilai yang benar. Yang menentukan adalah gerbang if (!configDirty) di
+        // blok apply: tanpa gerbang itu, perintah serial yang jatuh saat GET
+        // berjalan akan tertimpa nilai cloud lama dan NVS-nya ikut ditulis basi.
+        if (configDirty) {
+            configDirty = false;
+            bool patchOk = false;
+            String cfgUrl = userNode() + "/config.json" + authSuffix();
+            if (rtdb.begin(tls, cfgUrl)) {
+                rtdb.addHeader("Content-Type", "application/json");
+                char cfgBody[160];
+                snprintf(cfgBody, sizeof(cfgBody),
+                    "{\"timer_mode\":\"%s\",\"manual_interval_min\":%lu,"
+                    "\"muted\":%s,\"empty_cup_weight_g\":%.1f}",
+                    autoDhtTimerMode ? "AUTO_DHT" : "MANUAL",
+                    (unsigned long)(customBaseIntervalMs / 60000UL),
+                    buzzerMuted ? "true" : "false",
+                    fsm.getEmptyCupWeight());
+                int code = rtdb.PATCH((uint8_t*)cfgBody, strlen(cfgBody));
+                patchOk = (code >= 200 && code < 300);
+                rtdb.end();
+            }
+            // PATCH gagal: pasang lagi flag-nya supaya nilai lokal tidak hilang
+            // pada GET berikutnya, tetapi beri jeda agar jaringan mati tidak
+            // memicu PATCH beruntun tiap 250 ms.
+            if (!patchOk) {
+                if (cfgPatchFails < 3) {
+                    cfgPatchFails++;
+                    configDirty = true;
+                    vTaskDelay(pdMS_TO_TICKS(1500));
+                } else {
+                    cfgPatchFails = 0;
+                }
+            } else {
+                cfgPatchFails = 0;
+            }
+        }
+
+        // 1 dtk: config adalah perintah (saklar mute, mode timer). Ini setengah
+        // dari anggaran latensi kontrol, dan dengan TLS yang dipakai ulang biayanya
+        // hanya satu GET kecil. Sebelumnya 15 dtk, lalu 3 dtk — keduanya masih
+        // terasa mati dibanding SSE di sisi klien.
+        if (now - lastPollMs >= 1000UL) {
             lastPollMs = now;
-            WiFiClientSecure client;
-            client.setInsecure();
-            HTTPClient http;
             String url = userNode() + "/config.json" + authSuffix();
-            if (http.begin(client, url) && http.GET() == 200) {
-                String cfg = http.getString();
-                bool changed = false;
-                if (cfg.indexOf("\"MANUAL\"") >= 0 && autoDhtTimerMode) { autoDhtTimerMode = false; changed = true; }
-                else if (cfg.indexOf("\"AUTO_DHT\"") >= 0 && !autoDhtTimerMode) { autoDhtTimerMode = true; changed = true; }
-
-                if (cfg.indexOf("\"muted\":true") >= 0 && !buzzerMuted) { buzzerMuted = true; changed = true; }
-                else if (cfg.indexOf("\"muted\":false") >= 0 && buzzerMuted) { buzzerMuted = false; changed = true; }
-
-                float mins = extractJsonFloat(cfg, "\"manual_interval_min\"", 0.0f);
-                if (mins >= MIN_CUSTOM_INTERVAL_MIN && mins <= MAX_CUSTOM_INTERVAL_MIN) {
-                    uint32_t newBase = (uint32_t)(mins * 60000.0f);
-                    if (newBase != customBaseIntervalMs) {
-                        customBaseIntervalMs = newBase;
+            if (rtdb.begin(tls, url) && rtdb.GET() == 200) {
+                String cfg = rtdb.getString();
+                // Perintah serial lokal (q/m/i/e/c) bisa jatuh selama GET ini
+                // berjalan (1-3 dtk). Saat itu nilai cloud yang baru dibaca basi:
+                // lewati penerapan seluruhnya, biarkan flag terpasang supaya tick
+                // berikut mengunggah nilai lokal. Tanpa gerbang ini, setelan lokal
+                // tertimpa nilai lama dan NVS-nya ikut ditulis basi.
+                if (!configDirty) {
+                    bool changed = false;
+                    if (cfg.indexOf("\"MANUAL\"") >= 0 && autoDhtTimerMode) { autoDhtTimerMode = false; changed = true; }
+                    else if (cfg.indexOf("\"AUTO_DHT\"") >= 0 && !autoDhtTimerMode) { autoDhtTimerMode = true; changed = true; }
+                    if (cfg.indexOf("\"muted\":true") >= 0 && !buzzerMuted) { buzzerMuted = true; changed = true; }
+                    else if (cfg.indexOf("\"muted\":false") >= 0 && buzzerMuted) { buzzerMuted = false; changed = true; }
+                    float mins = extractJsonFloat(cfg, "\"manual_interval_min\"", 0.0f);
+                    if (mins >= MIN_CUSTOM_INTERVAL_MIN && mins <= MAX_CUSTOM_INTERVAL_MIN) {
+                        uint32_t newBase = (uint32_t)(mins * 60000.0f);
+                        if (newBase != customBaseIntervalMs) {
+                            customBaseIntervalMs = newBase;
+                            changed = true;
+                        }
+                    }
+                    float emptyG = extractJsonFloat(cfg, "\"empty_cup_weight_g\"", 0.0f);
+                    if (emptyG >= CUP_ON_THRESHOLD && emptyG <= MAX_EMPTY_CUP_G &&
+                        fabs(emptyG - fsm.getEmptyCupWeight()) > 0.5f) {
+                        fsm.setEmptyCupWeight(emptyG);
                         changed = true;
                     }
-                }
-                float emptyG = extractJsonFloat(cfg, "\"empty_cup_weight_g\"", 0.0f);
-                if (emptyG >= CUP_ON_THRESHOLD && emptyG <= MAX_EMPTY_CUP_G &&
-                    fabs(emptyG - fsm.getEmptyCupWeight()) > 0.5f) {
-                    fsm.setEmptyCupWeight(emptyG);
-                    changed = true;
-                }
-                if (changed) {
-                    updateAdaptiveInterval();
-                    saveConfigToNvs();
+                    if (changed) {
+                        updateAdaptiveInterval();
+                        saveConfigToNvs();
+                        configDirty = false;
+                        // Tidak perlu memaksa push: muted dan targetMin ikut
+                        // dataChanged, jadi tick berikut mengirimnya sendiri.
+                    }
                 }
             }
-            http.end();
+            rtdb.end();
 
             // Sesi bergiliran: web menulis session.owner. Begitu nilainya berbeda dari
             // pemilik terakhir, statistik di-reset supaya orang berikutnya tidak mewarisi
             // angka orang sebelumnya.
-            WiFiClientSecure sessClient;
-            sessClient.setInsecure();
-            HTTPClient sessHttp;
             String sessUrl = userNode() + "/session.json" + authSuffix();
-            if (sessHttp.begin(sessClient, sessUrl) && sessHttp.GET() == 200) {
-                String sess = sessHttp.getString();
+            if (rtdb.begin(tls, sessUrl) && rtdb.GET() == 200) {
+                String sess = rtdb.getString();
                 int oi = sess.indexOf("\"owner\":\"");
                 if (oi >= 0) {
                     oi += 9;
@@ -379,25 +465,73 @@ static void cloudTask(void*) {
                     }
                 }
             }
-            sessHttp.end();
+            rtdb.end();
         }
 
         vTaskDelay(pdMS_TO_TICKS(250));
     }
 }
 
+// Portal tangkap: buka AP sendiri, jadi SSID tidak perlu diketik satu per satu
+// lewat Serial Monitor. Dipakai hanya saat kredensial kosong atau sambungan gagal
+// 20 dtk; pemakaian normal tidak terganggu. Nilai portal ditulis ke NVS dengan
+// kunci yang sama seperti perintah serial `w`, supaya kedua jalur tidak menimpa.
+static String wifiPortalSsid, wifiPortalPass;
+
+static void wifiOnSaveParams() {
+    if (wifiPortalSsid.length() == 0) return;
+    activeWifiSsid = wifiPortalSsid;
+    activeWifiPass = wifiPortalPass;
+    Preferences p;
+    p.begin("shc", false);
+    p.putString("wifiSsid", wifiPortalSsid);
+    p.putString("wifiPass", wifiPortalPass);
+    p.end();
+    Serial.printf("[WIFI] Portal menyimpan SSID \"%s\"\n", wifiPortalSsid.c_str());
+}
+
+inline void startWifiPortal(bool force) {
+    WiFiManager wm;
+    wm.setConfigPortalTimeout(180);
+    wm.setConnectTimeout(20);
+    WiFiManagerParameter pSsid("ssid", "Nama Wi-Fi (2.4 GHz)", "", 33);
+    WiFiManagerParameter pPass("pass", "Kata sandi", "", 65);
+    wm.addParameter(&pSsid);
+    wm.addParameter(&pPass);
+    wm.setSaveParamsCallback([&]() {
+        wifiPortalSsid = pSsid.getValue();
+        wifiPortalPass = pPass.getValue();
+        wifiOnSaveParams();
+    });
+    Serial.println(F("[WIFI] Portal dibuka. Sambungkan ponsel ke Wi-Fi \"Coaster-Setup\" "
+                     "(sandi: coaster123), lalu isi nama dan sandi jaringan rumah."));
+    if (!wm.autoConnect("Coaster-Setup", "coaster123")) {
+        Serial.println(F("[WIFI] Portal berakhir tanpa kredensial. Alat berjalan luring; "
+                         "kirim 'w<SSID>|<sandi>' lewat serial atau nyalakan ulang."));
+        WiFi.mode(WIFI_STA);
+    }
+}
+
 inline void startCloudIfNeeded() {
     if (activeWifiSsid.length() == 0) {
-        Serial.println(F("[CLOUD] SSID kosong: cloud dimatikan. Isi WIFI_SSID di "
-                         "secrets.h atau kirim perintah w<SSID>|<pass>."));
-        return;
+        Serial.println(F("[CLOUD] SSID kosong: menyiapkan portal Wi-Fi."));
+        startWifiPortal(true);
+    } else {
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(activeWifiSsid.c_str(), activeWifiPass.c_str());
+        Serial.printf("[CLOUD] Menghubungkan Wi-Fi \"%s\"...\n", activeWifiSsid.c_str());
+        // Kredensial tersimpan bisa sudah tidak berlaku (router pindah/ganti sandi).
+        // Tanpa portal di sini, alat mati diam sampai dicolok USB.
+        uint32_t t0 = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000UL) {
+            delay(200);
+        }
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.println(F("[WIFI] Gagal tersambung 20 dtk: membuka portal."));
+            startWifiPortal(true);
+        }
     }
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(activeWifiSsid.c_str(), activeWifiPass.c_str());
-    Serial.printf("[CLOUD] Menghubungkan Wi-Fi \"%s\"...\n", activeWifiSsid.c_str());
     if (activeFirebaseUrl.length() == 0) {
-        // cloudTask tidak akan dibuat, jadi kabari di sini: tanpa pesan ini,
-        // secrets.h yang tidak ter-compile terlihat persis seperti Wi-Fi mati.
         Serial.println(F("[CLOUD] URL Firebase kosong: cloud tidak dijalankan. "
                          "Periksa FIREBASE_DB_URL di secrets.h."));
         return;

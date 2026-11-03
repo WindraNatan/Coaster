@@ -257,6 +257,16 @@ class CoasterFSM {
   }
 }
 
+// Presedensi muted harus sama di web dan aplikasi: config adalah perintah dari
+// pengguna, telemetry adalah echo perangkat yang baru berubah setelah ESP32 poll
+// config (15 s). Memakai telemetry lebih dulu membuat saklar membalik sendiri
+// beberapa detik setelah diklik. Dipisah jadi fungsi murni supaya bisa diuji.
+function mutedFrom(cfg, tlm){
+  if (cfg && typeof cfg.muted === 'boolean') return cfg.muted;
+  if (tlm && typeof tlm.muted === 'boolean') return tlm.muted;
+  return null; // tidak ada sumber: pertahankan nilai yang sedang dipakai
+}
+
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { CFG, computeAdaptiveIntervalMs, CoasterFSM };
+  module.exports = { CFG, computeAdaptiveIntervalMs, CoasterFSM, mutedFrom };
 }

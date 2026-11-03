@@ -133,8 +133,10 @@ function shcRegister(email, password){ return shcAuth('signUp', email, password)
 
 // ID token berlaku satu jam. Daripada minta password lagi, tukar refreshToken yang
 // disimpan saat login. Return true kalau sekarang ada token yang masih berlaku.
-async function shcEnsureToken(){
-  if (shcToken()) return true;
+// force=true memaksa tukar refresh token walau token tersimpan masih ada.
+// Dipakai saat stream SSE ditutup server (token kedaluwarsa di tengah koneksi).
+async function shcEnsureToken(force){
+  if (!force && shcToken()) return true;
   const rt = localStorage.getItem(SHC_REFRESH_KEY) || '';
   const key = shcApiKey();
   if (!rt || !key) return false;

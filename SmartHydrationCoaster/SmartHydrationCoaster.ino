@@ -7,6 +7,7 @@
 #include <DHT.h>
 #if defined(ESP32)
 #include <Preferences.h>
+#include <WiFiManager.h>
 Preferences prefs;
 #endif
 
@@ -28,6 +29,11 @@ bool actuatorOutputState = false;
 bool demoMode = true;
 bool autoDhtTimerMode = true;
 bool buzzerMuted = false;
+// Perintah serial lokal menyimpan ke NVS tetapi tidak menulis cloud, sehingga
+// bacaan config berikutnya menimpanya kembali. cloudTask (core 0) mengungkap
+// config saat flag ini terpasang — jangan PATCH dari loop() core 1: satu HTTPS
+// butuh 1-3 dtk dan menghentikan sampling 10 Hz.
+volatile bool configDirty = false;
 uint32_t customBaseIntervalMs = BASE_INTERVAL_MS;
 
 uint16_t prevDrinkCnt = 0;
@@ -39,6 +45,7 @@ inline void writeActuator(uint8_t pin, bool on, bool activeLow) {
 }
 
 void saveConfigToNvs() {
+    configDirty = true;
 #if defined(ESP32)
     prefs.begin("shc", false);
     prefs.putFloat("emptyCup", fsm.getEmptyCupWeight());

@@ -192,11 +192,6 @@ Future<String> loadDeviceUid() async {
   return p.getString(_kDeviceUid) ?? '';
 }
 
-Future<void> clearDeviceUid() async {
-  final p = await SharedPreferences.getInstance();
-  await p.remove(_kDeviceUid);
-}
-
 /// Simpan sesi ke penyimpanan lokal. Nilai kosong menghapus semuanya.
 Future<void> saveSession(AuthSession? s) async {
   final p = await SharedPreferences.getInstance();

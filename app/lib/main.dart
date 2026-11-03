@@ -481,6 +481,82 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
+
+/// Cache node telemetry + penerapan event RTDB (`put`, `patch`) menurut `path`.
+/// Dipisah dari widget supaya bisa diuji tanpa jaringan: PATCH kiriman aplikasi
+/// dan web datang sebagai `event: patch` dengan path sebagian, dan kalau path
+/// diabaikan field lain ikut terhapus.
+class TlmStreamState {
+  final Map<String, dynamic> json = <String, dynamic>{};
+
+  /// Menerapkan satu blok SSE. Mengembalikan true bila ada data yang berubah.
+  bool apply(String block) {
+    String type = '';
+    String payload = '';
+    for (final line in block.split('\n')) {
+      if (line.startsWith('event:')) {
+        type = line.substring(6).trim();
+      } else if (line.startsWith('data:')) {
+        payload += line.substring(5).trim();
+      }
+    }
+    if (payload.isEmpty) return false;
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(payload);
+    } catch (_) {
+      return false;
+    }
+    if (decoded is! Map) return false;
+    final path = (decoded['path'] as String?) ?? '/';
+    final data = decoded['data'];
+    if (type == 'put') {
+      if (data == null) {
+        json.clear();
+        return true;
+      }
+      if (path == '/') {
+        json
+          ..clear()
+          ..addAll(Map<String, dynamic>.from(data as Map));
+      } else {
+        _setAtPath(path, data);
+      }
+      return true;
+    }
+    if (type == 'patch') {
+      if (path == '/') {
+        json.addAll(Map<String, dynamic>.from(data as Map));
+      } else {
+        _setAtPath(path, data);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  void _setAtPath(String path, dynamic value) {
+    final parts = path.split('/').where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return;
+    var cur = json;
+    for (var i = 0; i < parts.length - 1; i++) {
+      final nxt = cur[parts[i]];
+      if (nxt is Map<String, dynamic>) {
+        cur = nxt;
+      } else {
+        final m = <String, dynamic>{};
+        cur[parts[i]] = m;
+        cur = m;
+      }
+    }
+    if (value == null) {
+      cur.remove(parts.last);
+    } else {
+      cur[parts.last] = value;
+    }
+  }
+}
+
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AuthSession _session = widget.session;
@@ -491,6 +567,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _polling = false;
   DateTime? _lastSync;
   Timer? _timer;
+  StreamSubscription<String>? _streamSub;
+  Timer? _streamRetry;
   late final http.Client _client;
 
   late final AnimationController _pulse;
@@ -510,12 +588,83 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _startPolling() {
+    // SSE dulu: satu request yang tetap terbuka, data berubah seketika tanpa
+    // jeda 2,5 dtk. Poll lambat tetap ada sebagai jaring aman bila stream mati
+    // di jaringan yang memblokir event-stream (mis. proxy kantor).
+    _openStream();
     _timer ??= Timer.periodic(_pollInterval, (_) => _poll());
   }
 
   void _stopPolling() {
     _timer?.cancel();
     _timer = null;
+    _streamSub?.cancel();
+    _streamSub = null;
+    _streamRetry?.cancel();
+    _streamRetry = null;
+  }
+
+  // Stream telemetry: setiap event `put` langsung diterapkan. Token 1 jam
+  // ditangani dengan memperbarui sesi lalu membuka ulang stream — pengguna
+  // tidak perlu masuk lagi.
+  Future<void> _openStream() async {
+    await _streamSub?.cancel();
+    _streamSub = null;
+    if (!mounted) return;
+    final url = '${_session.coasterUrl(_base)}/telemetry.json${_session.suffix}';
+    try {
+      final req = http.Request('GET', Uri.parse(url))
+        ..headers['Accept'] = 'text/event-stream';
+      final res = await _client.send(req).timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+      _streamSub = res.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(_onStreamLine, onError: (_) => _restartStream(),
+              onDone: _restartStream, cancelOnError: true);
+    } catch (_) {
+      _restartStream();
+    }
+  }
+
+
+
+  final TlmStreamState _stream = TlmStreamState();
+  String _streamBuf = '';
+
+  void _onStreamLine(String line) {
+    // Blok SSE dipisah baris kosong; event: dan data: bisa lebih dari satu baris.
+    if (line.isNotEmpty) {
+      _streamBuf += '$line\n';
+      return;
+    }
+    if (_streamBuf.isEmpty) return;
+    final changed = _stream.apply(_streamBuf);
+    _streamBuf = '';
+    if (!changed || !mounted) return;
+    setState(() {
+      _t = Telemetry.fromJson(Map<String, dynamic>.from(_stream.json));
+      _error = null;
+      _loading = false;
+      _lastSync = DateTime.now();
+    });
+  }
+
+  void _restartStream() {
+    _streamSub?.cancel();
+    _streamSub = null;
+    _streamRetry?.cancel();
+    if (!mounted) return;
+    // Simpan timer-nya supaya dispose() benar-benar membatalkan percobaan ulang.
+    _streamRetry = Timer(const Duration(milliseconds: 800), () async {
+      if (!mounted) return;
+      // Coba segarkan sesi; kalau berhasil, stream dibuka dengan token baru.
+      try {
+        final renewed = await refreshSession(_session, client: _client);
+        if (renewed != null && mounted) setState(() => _session = renewed);
+      } catch (_) {}
+      _openStream();
+    });
   }
 
   // Ponsel di kantong tidak perlu mengunduh tiap 2,5 detik. Hentikan saat aplikasi
@@ -534,6 +683,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopPolling();
+    _streamRetry?.cancel();
+    _streamRetry = null;
     _client.close();
     _pulse.dispose();
     _intervalCtrl.dispose();
@@ -544,20 +695,31 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (_polling) return;
     _polling = true;
     try {
-      final res = await _client
-          .get(Uri.parse('${_session.coasterUrl(_base)}.json${_session.suffix}'))
-          .timeout(const Duration(seconds: 8));
+      // Hanya dua node kecil. Sebelumnya seluruh /smart_coaster ditarik tiap 2,5
+      // detik, termasuk daily/<tanggal> yang tumbuh tanpa batas, padahal _poll()
+      // tidak pernah membacanya. Web sudah memakai pola yang sama.
+      final base = _session.coasterUrl(_base);
+      final results = await Future.wait([
+        _client.get(Uri.parse('$base/telemetry.json${_session.suffix}'))
+            .timeout(const Duration(seconds: 8)),
+        _client.get(Uri.parse('$base/config.json${_session.suffix}'))
+            .timeout(const Duration(seconds: 8)),
+      ]);
+      final res = results[0];
       if (res.statusCode != 200) {
         throw Exception('HTTP ${res.statusCode}');
       }
-      final data = jsonDecode(res.body);
-      if (data is Map && data['telemetry'] is Map) {
-        final t = Telemetry.fromJson(Map<String, dynamic>.from(data['telemetry']));
+      final tRaw = jsonDecode(res.body);
+      if (tRaw is Map) {
+        final t = Telemetry.fromJson(Map<String, dynamic>.from(tRaw));
         CloudConfig? c = _cfg;
-        if (data['config'] is Map) {
-          c = CloudConfig.fromJson(Map<String, dynamic>.from(data['config']));
-          if (_cfg == null) {
-            _intervalCtrl.text = c.manualIntervalMin.toString();
+        if (results[1].statusCode == 200) {
+          final cRaw = jsonDecode(results[1].body);
+          if (cRaw is Map) {
+            c = CloudConfig.fromJson(Map<String, dynamic>.from(cRaw));
+            if (_cfg == null) {
+              _intervalCtrl.text = c.manualIntervalMin.toString();
+            }
           }
         }
         if (!mounted) return;
@@ -1027,7 +1189,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           Row(
             children: [
               Expanded(child: Text('Buzzer', style: _monoStyle(12, color: _ink))),
-              Text(muted ? 'muted' : 'aktif',
+              Text(muted ? 'OFF' : 'ON',
                   style: _monoStyle(11, color: muted ? _warn : _ok)),
               Switch(
                 value: muted,
@@ -1091,11 +1253,8 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ],
           const SizedBox(height: 12),
-          Text(
-            'Kalibrasi berat gelas kosong (c) dan tare (t) hanya lewat USB/serial '
-            'di web PWA; nilai empty_cup_weight_g di cloud mengikuti firmware.',
-            style: _monoStyle(10, color: _dim),
-          ),
+          Text('Kalibrasi gelas kosong dan tare lewat USB.',
+              style: _monoStyle(10, color: _dim)),
           if (widget.onClaimDevice != null) ...[
             const Divider(color: _line, height: 20),
             Text('Node alat', style: _monoStyle(12, color: _ink)),

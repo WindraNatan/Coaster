@@ -68,4 +68,20 @@ assert.strictEqual(trimmed.length, 30, `harus 30 entri, dapat ${trimmed.length}`
 assert(trimmed.includes('2026-10-25'), 'hari terbaru wajib ada');
 assert(!trimmed.includes('2026-09-01'), 'entri terlama harus dibuang');
 
+// Guard Reset di mode cloud: handler-nya anonim di addEventListener, jadi
+// dibaca langsung dari sumber. Yang dijaga urutannya: early-return cloud harus
+// muncul SEBELUM fsm.resetStats() — kalau kebalik, reset tetap jalan walau
+// guard ada di file.
+const resetHandler =
+  /\$\('bReset'\)\.addEventListener\('click', \(\) => \{([\s\S]*?)\n\}\);/.exec(html);
+assert(resetHandler, 'handler bReset tidak ditemukan di index.html');
+const resetBody = resetHandler[1];
+const iGuard = resetBody.indexOf("connMode === 'cloud'");
+const iReset = resetBody.indexOf('fsm.resetStats()');
+assert(iGuard >= 0, 'guard mode cloud hilang dari handler Reset');
+assert(iReset > iGuard, 'guard cloud harus muncul sebelum fsm.resetStats()');
+assert(resetBody.indexOf('return;') > iGuard && resetBody.indexOf('return;') < iReset,
+  'guard cloud wajib return, bukan lanjut ke reset');
+
+console.log('[PASS] Guard Reset mode cloud urut sebelum resetStats');
 console.log('SEMUA LULUS (daily-history.test.js)');

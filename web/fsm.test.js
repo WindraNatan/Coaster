@@ -4,7 +4,7 @@
 // ponytail: hanya regresi K1/K3 di JS; mirror penuh 21 skenario Python/C++
 // belum ada — tambahkan bila web jadi sumber kebenaran kedua.
 const assert = require('assert');
-const { CoasterFSM } = require('./fsm.js');
+const { CoasterFSM, mutedFrom } = require('./fsm.js');
 
 function settle(f, w, t0){
   f.update(w, t0);
@@ -83,4 +83,21 @@ assert.strictEqual(n.state, 'TIMING');
 assert.strictEqual(n.baseline, 400);
 console.log('[PASS] 21. Flag kalibrasi tidak basi: isi ulang cepat setelah lift tetap terhitung');
 
+// Regresi desinkronisasi mute: config (perintah) harus menang atas telemetry
+// (echo perangkat yang baru berubah setelah ESP32 poll config, 15 s). Kalau
+// urutannya dibalik, saklar membalik sendiri beberapa detik setelah diklik dan
+// web tidak sepakat dengan aplikasi.
+assert.strictEqual(mutedFrom({muted: true}, {muted: false}), true,
+  'config.muted=true harus menang walau telemetry masih false');
+assert.strictEqual(mutedFrom({muted: false}, {muted: true}), false,
+  'config.muted=false harus menang walau telemetry masih true');
+assert.strictEqual(mutedFrom(null, {muted: true}), true,
+  'tanpa config, telemetry dipakai sebagai cadangan');
+assert.strictEqual(mutedFrom({}, {muted: false}), false,
+  'config tanpa field muted jatuh ke telemetry');
+assert.strictEqual(mutedFrom(null, null), null,
+  'tanpa keduanya, nilai yang sedang dipakai dipertahankan');
+assert.strictEqual(mutedFrom({muted: true}, null), true,
+  'config saja sudah cukup');
+console.log('[PASS] 22. muted dari config, bukan echo telemetry');
 console.log('\nSEMUA LULUS (fsm.test.js)');

@@ -6,7 +6,8 @@ name: Deploy web PWA
 on:
   push:
     branches: [master]
-    paths: ['web/**', '.github/workflows/pages.yml']
+    paths: ['web/**', 'app/**', 'tools/**', 'test_simulation.py', 'firebase-rules.json',
+           '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -26,6 +27,22 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Tes sebelum deploy: paritas fsm.js (8 tombol skenario wajib hijau) dan
+      # presedensi muted. Tanpa langkah ini, regresi web terkirim diam-diam.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Tes web
+        run: |
+          node web/fsm.test.js
+          node web/daily-history.test.js
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Tes paritas Python
+        run: python test_simulation.py
+      - name: Garda berkas aturan Firebase
+        run: python tools/cek_aturan_berkas.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

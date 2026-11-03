@@ -298,13 +298,13 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 
     <div class="hist-box">
       <div class="hist-head">
-        <span>Riwayat hidrasi harian (tersimpan otomatis)</span>
+        <span>Riwayat harian</span>
         <span id="todayKeyLab"></span>
       </div>
       <div class="hist-list" id="histList"></div>
     </div>
 
-    <p class="foot">Logika di halaman ini disalin 1:1 dari firmware, jadi simulasi di sini mengikuti perilaku alat asli. Bisa dipakai tanpa perangkat, lewat kabel USB, atau lewat cloud. <a href="casing_3d.html">Lihat model casing 3D</a>.</p>
+    <p class="foot">Simulator, USB, atau cloud. <a href="casing_3d.html">Model casing 3D</a></p>
   </section>
 
   <aside class="tele">
@@ -315,14 +315,14 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
       <input type="range" id="sTemp" min="18" max="40" step="0.5" value="27">
       <label for="sHum"><span>Kelembapan relatif (RH)</span><span id="tHum">60 %</span></label>
       <input type="range" id="sHum" min="20" max="95" step="1" value="60">
-      <p class="adaptive-note" id="adaptiveNote">Suhu dan kelembapan dibaca dari DHT11 alat; penggeser ini hanya untuk simulasi.</p>
+      <p class="adaptive-note" id="adaptiveNote">Penggeser hanya untuk simulasi.</p>
     </div>
 
     <div class="cfg-grid">
       <div class="cfg-row">
         <button class="act active-btn" id="bAutoMode">Timer: Adaptif DHT11</button>
         <button class="act active-btn" id="bDemo">Demo 15 dtk: ON</button>
-        <button class="act" id="bMute" title="Matikan suara buzzer, pertahankan motor getar">Buzzer: ON</button>
+        <button class="act" id="bMute" title="Buzzer mati, motor getar tetap jalan">Buzzer: ON</button>
         <button class="act" id="bReset">Reset Harian</button>
       </div>
       <div class="cfg-row">
@@ -576,7 +576,7 @@ function syncModeLabels_(){
   $('bDemo').classList.toggle('active-btn', demo);
   $('bAutoMode').textContent = 'Timer: ' + (autoDht ? 'Adaptif DHT11' : 'Manual Tetap');
   $('bAutoMode').classList.toggle('active-btn', autoDht);
-  $('bMute').textContent = 'Buzzer: ' + (buzzerMuted ? 'Hening' : 'ON');
+  $('bMute').textContent = 'Buzzer: ' + (buzzerMuted ? 'OFF' : 'ON');
   $('bMute').classList.toggle('active-btn', !buzzerMuted);
 }
 
@@ -669,6 +669,14 @@ $('bSaveGoal').addEventListener('click', () => {
   render();
 });
 $('bReset').addEventListener('click', () => {
+  // Statistik dimiliki firmware, dan firmware tidak membaca perintah reset dari
+  // cloud. Dari browser, reset hanya menolkan salinan lokal; push telemetry alat
+  // berikutnya (<=5 s) memulihkan angkanya, jadi tombolnya tampak gagal. Di mode
+  // cloud, arahkan ke perangkat alih-alih berpura-pura berhasil.
+  if (connMode === 'cloud') {
+    log('Reset statistik harus dari alat: kirim perintah r lewat USB, atau tekan tombol di perangkat.', 'ev-ALERT_DRINK');
+    return;
+  }
   // K2: simpan dulu ke riwayat, baru reset. Kebalikannya, resetStats()
   // menolkan semua nilai ke nol dan saveTodayStatsToHistory() menyimpan nol.
   saveTodayStatsToHistory();
@@ -903,8 +911,7 @@ async function pushCloudTelemetry(){
     humidity_pct: Math.round(roomHum),
     fsm_state: fsm.stateString,
     remaining_sec: rem,
-    target_interval_min: +(fsm.interval / 60000).toFixed(2),
-    muted: buzzerMuted
+    target_interval_min: +(fsm.interval / 60000).toFixed(2)
   }, dailyObj);
   try {
     await fetch(url + '/telemetry.json' + shcAuthSuffix(), {
@@ -937,6 +944,147 @@ async function pushCloudConfig(){
     });
   } catch(_){}
 }
+// Menerapkan satu snapshot cloud ke UI. Dipakai jalur SSE (utama) dan poll
+// (cadangan), supaya kedua jalur tidak pernah berbeda perilaku.
+function applyCloudData(t, cfgRemote){
+  $('cloudDot').className = 'status-dot ok';
+  $('cloudStatus').textContent = 'Cloud sinkron (' + new Date().toLocaleTimeString('id-ID') + ')';
+  const muteNow = mutedFrom(cfgRemote, t);
+  if (muteNow !== null) buzzerMuted = muteNow;
+  // Mode timer + interval dasar dari cloud, sama seperti aplikasi. applyTimerConfig
+  // memanggil recomputeAdaptive, jadi interval dasar lokal ikut diselaraskan dulu:
+  // tanpa ini, tombol mode berubah tetapi angkanya tetap milik perangkat ini.
+  if (cfgRemote && typeof cfgRemote.timer_mode === 'string'){
+    const auto = cfgRemote.timer_mode !== 'MANUAL';
+    const mins = +cfgRemote.manual_interval_min;
+    if (mins >= 1 && mins <= 180 && Math.round(mins) !== customBaseMin){
+      customBaseMin = Math.round(mins);
+      $('baseMinIn').value = customBaseMin;
+    }
+    if (auto !== autoDht){ autoDht = auto; applyTimerConfig(); }
+    else syncModeLabels_();
+  }
+  if (!t) return;
+  const prevSt = fsm.stateString;
+  weight = +(t.weight_g || 0);
+  liveWaterMl = +(t.water_ml || 0);
+  roomT = +(t.temp_c || 27);
+  roomHum = +(t.humidity_pct || 60);
+  $('sTemp').value = roomT; $('tVal').textContent = roomT.toFixed(1) + ' °C';
+  $('sHum').value = roomHum; $('tHum').textContent = roomHum + ' %';
+  liveRemSec = +(t.remaining_sec || 0);
+  if (t.target_interval_min) fsm.interval = Math.round(t.target_interval_min * 60000);
+  fsm.totalDrank = +(t.total_ml || 0);
+  fsm.drinkCount = +(t.drink_count || 0);
+  fsm.refillCount = +(t.refill_count || 0);
+  fsm.cheatCount = +(t.cheat_count || 0);
+  const st = t.fsm_state || 'IDLE';
+  if (st === 'ALERT_MISSING_CUP'){ fsm.state = 'ALERT_REFILL'; fsm.missing = true; }
+  else if (st === 'ALERT_EMPTY_CUP'){ fsm.state = 'ALERT_REFILL'; fsm.missing = false; }
+  else { fsm.state = st; fsm.missing = false; }
+  saveTodayStatsToHistory();
+  if (fsm.stateString !== prevSt){
+    log('[CLOUD] ' + prevSt + ' -> ' + fsm.stateString, evCls(fsm.stateString));
+    notifyAlertTransition(fsm.stateString);
+  }
+  render();
+}
+
+// SSE: RTDB mengirim setiap perubahan sebagai event `put`, jadi layar berubah
+// dalam ~0,2 dtk tanpa polling. EventSource menyambung ulang sendiri saat koneksi
+// putus; token kedaluwarsa ditangani dengan menutup lalu membuka stream baru
+// memakai token hasil refresh — pengguna tidak perlu memasukkan apa pun.
+let cloudStream = null, cloudStreamCfg = null, streamRetry = null;
+let tlmBox = { v: null }, lastTelemetry = null;
+
+function closeCloudStreams(){
+  if (cloudStream){ cloudStream.close(); cloudStream = null; }
+  if (cloudStreamCfg){ cloudStreamCfg.close(); cloudStreamCfg = null; }
+  if (streamRetry){ clearTimeout(streamRetry); streamRetry = null; }
+}
+
+function openCloudStreams(){
+  closeCloudStreams();
+  if (connMode !== 'cloud') return;
+  const base = getCleanFbUrl();
+  const url = shcCoasterUrl(base);
+  if (!base || !url || !shcDeviceUid()) return;
+
+  let cfgRemoteLast = null;
+  tlmBox = { v: null }; lastTelemetry = null;
+  const onErr = async () => {
+    // Token 1 jam: RTDB menutup stream dengan 401. Ambil token baru, buka lagi.
+    closeCloudStreams();
+    const ok = await shcEnsureToken(true);
+    if (connMode !== 'cloud') return;
+    if (!ok){
+      $('cloudDot').className = 'status-dot err';
+      $('cloudStatus').textContent = 'Sesi berakhir. Masuk lagi lewat halaman Akun.';
+      return;
+    }
+    streamRetry = setTimeout(openCloudStreams, 800);
+  };
+
+  // RTDB mengirim tiga jenis event: put (seluruh node), patch (sebagian, yang
+  // dipakai PATCH dari web dan aplikasi), dan keep-alive. Patch WAJIB diterapkan
+  // menurut `path`, kalau tidak perubahan sebagian hanya terlihat 20 dtk
+  // kemudian lewat poll cadangan.
+  function applyEvent(obj, e){
+    let ev;
+    try { ev = JSON.parse(e.data); } catch (_) { return; }
+    if (!obj.v) obj.v = {};
+    if (e.type === 'put'){
+      if (ev.data === null) obj.v = {};
+      else if (ev.path === '/') obj.v = ev.data || {};
+      else setAtPath(obj.v, ev.path, ev.data);
+    } else if (e.type === 'patch'){
+      const p = ev.path || '/';
+      if (p === '/') Object.assign(obj.v, ev.data || {});
+      else {
+        const cur = atPath(obj.v, p);
+        if (cur && typeof cur === 'object') Object.assign(cur, ev.data || {});
+        else setAtPath(obj.v, p, ev.data);
+      }
+    }
+  }
+  function setAtPath(root, path, val){
+    const parts = path.split('/').filter(Boolean);
+    let cur = root;
+    for (let i = 0; i < parts.length - 1; i++){
+      if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) cur[parts[i]] = {};
+      cur = cur[parts[i]];
+    }
+    if (val === null) delete cur[parts[parts.length - 1]];
+    else cur[parts[parts.length - 1]] = val;
+  }
+  function atPath(root, path){
+    return path.split('/').filter(Boolean).reduce((a, k) => (a && typeof a === 'object') ? a[k] : undefined, root);
+  }
+
+  const cfgBox = { v: cfgRemoteLast };
+  cloudStreamCfg = new EventSource(url + '/config.json' + shcAuthSuffix());
+  cloudStreamCfg.addEventListener('put', e => {
+    applyEvent(cfgBox, e);
+    cfgRemoteLast = cfgBox.v;
+    pollCloudOnce();
+  });
+  cloudStreamCfg.addEventListener('patch', e => {
+    applyEvent(cfgBox, e);
+    cfgRemoteLast = cfgBox.v;
+    // Nilai yang berubah hanya sebagian; cukup terapkan ulang snapshot terakhir.
+    if (lastTelemetry) applyCloudData(lastTelemetry, cfgRemoteLast);
+  });
+  cloudStreamCfg.onerror = onErr;
+
+  cloudStream = new EventSource(url + '/telemetry.json' + shcAuthSuffix());
+  ['put', 'patch'].forEach(t => cloudStream.addEventListener(t, e => {
+    applyEvent(tlmBox, e);
+    lastTelemetry = tlmBox.v;
+    applyCloudData(lastTelemetry, cfgRemoteLast);
+  }));
+  cloudStream.onerror = onErr;
+}
+
 async function pollCloudOnce(){
   const base = getCleanFbUrl();
   const url = shcCoasterUrl(base);
@@ -968,37 +1116,7 @@ async function pollCloudOnce(){
       fetch(url + '/config.json' + shcAuthSuffix())
     ]);
     if (!resT.ok) throw new Error('HTTP ' + resT.status);
-    const t = await resT.json();
-    const cfgRemote = resC.ok ? await resC.json() : null;
-    $('cloudDot').className = 'status-dot ok';
-    $('cloudStatus').textContent = 'Cloud sinkron (' + new Date().toLocaleTimeString('id-ID') + ')';
-    if (cfgRemote && typeof cfgRemote.muted === 'boolean') buzzerMuted = cfgRemote.muted;
-    if (t){
-      const prevSt = fsm.stateString;
-      weight = +(t.weight_g || 0);
-      liveWaterMl = +(t.water_ml || 0);
-      roomT = +(t.temp_c || 27);
-      roomHum = +(t.humidity_pct || 60);
-      $('sTemp').value = roomT; $('tVal').textContent = roomT.toFixed(1) + ' °C';
-      $('sHum').value = roomHum; $('tHum').textContent = roomHum + ' %';
-      liveRemSec = +(t.remaining_sec || 0);
-      if (t.target_interval_min) fsm.interval = Math.round(t.target_interval_min * 60000);
-      fsm.totalDrank = +(t.total_ml || 0);
-      fsm.drinkCount = +(t.drink_count || 0);
-      fsm.refillCount = +(t.refill_count || 0);
-      fsm.cheatCount = +(t.cheat_count || 0);
-      if (typeof t.muted === 'boolean') buzzerMuted = t.muted;
-      const st = t.fsm_state || 'IDLE';
-      if (st === 'ALERT_MISSING_CUP'){ fsm.state = 'ALERT_REFILL'; fsm.missing = true; }
-      else if (st === 'ALERT_EMPTY_CUP'){ fsm.state = 'ALERT_REFILL'; fsm.missing = false; }
-      else { fsm.state = st; fsm.missing = false; }
-      saveTodayStatsToHistory();
-      if (fsm.stateString !== prevSt){
-        log('[CLOUD] ' + prevSt + ' -> ' + fsm.stateString, evCls(fsm.stateString));
-        notifyAlertTransition(fsm.stateString);
-      }
-      render();
-    }
+    applyCloudData(await resT.json(), resC.ok ? await resC.json() : null);
   } catch (err){
     $('cloudDot').className = 'status-dot err';
     $('cloudStatus').textContent = 'Gagal baca Cloud: ' + (err.message || err);
@@ -1015,9 +1133,12 @@ function setConnMode(mode){
   $('sHum').disabled = (mode !== 'sim');
   $('adaptiveNote').classList.toggle('show', mode !== 'sim');
   if (cloudTimer){ clearInterval(cloudTimer); cloudTimer = null; }
+  closeCloudStreams();
   if (mode === 'cloud'){
-    if (getCleanFbUrl()) pollCloudOnce();
-    cloudTimer = setInterval(pollCloudOnce, 2500);
+    // SSE untuk perubahan seketika; poll 20 dtk hanya jaring aman bila stream
+    // diam (mis. proxy memutus event-stream tanpa menutup koneksi).
+    pollCloudOnce().then(openCloudStreams);
+    cloudTimer = setInterval(pollCloudOnce, 20000);
   } else if (mode === 'sim'){
     liveRemSec = null; liveWaterMl = null;
     applyTimerConfig();
@@ -1034,6 +1155,7 @@ function fmtClock(ms){
 function fmt(ms){ return ms >= 60000 ? fmtClock(ms) : (ms/1000).toFixed(1) + ' s'; }
 
 function render(){
+  syncModeLabels_();
   const w = weight, st = fsm.stateString;
   const badge = $('badge');
   badge.className = 'badge st-' + fsm.state + (fsm.alertActive ? ' alert' : '');
