@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Build APK debug, terbitkan sebagai GitHub Release, cetak tautan unduh.
+"""Build APK release, terbitkan sebagai GitHub Release, cetak tautan unduh.
 
 Dipakai supaya pembaruan aplikasi tidak perlu menyambung kabel USB: pengguna
-mengunduh APK dari tautan rilis dan memasangnya di atas yang lama. Kunci debug
-dipakai apa adanya (build.gradle.kts masih TODO), jadi tanda tangannya cocok
-dengan yang terpasang dan tidak memaksa uninstall.
+mengunduh APK dari tautan rilis dan memasangnya di atas yang lama.
+
+Build release, bukan debug: debug memuat tiga ABI plus simbol dan mencapai
+178 MB, sementara release 50 MB. Kunci tanda tangannya sama-sama kunci debug
+(build.gradle.kts masih TODO), jadi pemasangan di atas versi lama tetap bisa
+tanpa uninstall.
 
 Token diambil dari Git Credential Manager, tidak disimpan ke berkas.
 
@@ -21,7 +24,7 @@ import urllib.error
 import urllib.request
 
 REPO = 'WindraNatan/Coaster'
-APK = 'app/build/app/outputs/flutter-apk/app-debug.apk'
+APK = 'app/build/app/outputs/flutter-apk/app-release.apk'
 FLUTTER = r'D:\flutter\bin\flutter.bat'
 
 
@@ -63,9 +66,9 @@ def main():
         tag = 'v' + tag
     nama = sys.argv[2] if len(sys.argv) > 2 else f'Coaster {tag}'
 
-    print(f'[1/4] membangun APK debug…')
+    print(f'[1/4] membangun APK release…')
     t0 = time.time()
-    r = sh([FLUTTER, 'build', 'apk', '--debug'], cwd='app')
+    r = sh([FLUTTER, 'build', 'apk', '--release'], cwd='app')
     if r.returncode != 0:
         print(r.stdout[-1500:], r.stderr[-800:])
         raise SystemExit('Build gagal.')
@@ -109,7 +112,7 @@ def main():
 
     print(f'[3/4] mengunggah {ukuran / 1e6:.1f} MB…')
     t0 = time.time()
-    nama_asset = f'smart-coaster-{tag}-debug.apk'
+    nama_asset = f'smart-coaster-{tag}.apk'
     with io.open(APK, 'rb') as f:
         asset = api(tok,
                     f'https://uploads.github.com/repos/{REPO}/releases/{rel["id"]}'
