@@ -1,39 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Lapisan depan adaptive icon. Digambar sebagai vektor, bukan PNG, supaya
-     tajam di semua kerapatan tanpa lima berkas terpisah.
+<!-- Lapisan depan adaptive icon: gelas di atas tatakan, tampak sedikit dari
+     atas. Sumber bentuknya sama dengan brand/logo-mark.svg.
 
-     Air diklip ke bentuk gelas. Tanpa klip, persegi panjang air menonjol keluar
-     dari dinding gelas yang meruncing dan menutupi garis luarnya. -->
+     Air diklip ke bentuk gelas; tanpa klip, persegi panjang air menonjol keluar
+     dari dinding yang meruncing dan menutupi garis luar.
+
+     Isi diperkecil ke area aman 72/108 dp supaya tidak terpotong saat launcher
+     memakai bentuk bulat atau squircle. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="192"
-    android:viewportHeight="192">
+    android:viewportWidth="512"
+    android:viewportHeight="512">
 
-    <!-- Tatakan: benda yang membedakan produk ini, jadi digambar lebih dulu. -->
-    <path
-        android:fillColor="#44C8E6"
-        android:fillAlpha="0.42"
-        android:pathData="M44,126 h104 a11,11 0 0 1 0,22 h-104 a11,11 0 0 1 0,-22 z" />
-
-    <!-- Dinding gelas, bagian dalam diisi warna panel. -->
-    <path
-        android:fillColor="#132B35"
-        android:pathData="M62,46 L130,46 L115,126 Q114,131 109,131 L83,131 Q78,131 77,126 Z" />
-
-    <!-- Air, dipotong tepat oleh bentuk gelas yang sama. -->
-    <group>
-        <clip-path
-            android:pathData="M62,46 L130,46 L115,126 Q114,131 109,131 L83,131 Q78,131 77,126 Z" />
+    <group android:translateX="70" android:translateY="72" android:scaleX="0.72" android:scaleY="0.72">
+        <!-- Tebal tatakan. -->
         <path
-            android:fillColor="#44C8E6"
-            android:pathData="M50,78 h92 v70 h-92 z" />
-    </group>
+            android:fillColor="#071219"
+            android:pathData="M80,404 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
 
-    <!-- Garis luar digambar terakhir agar tetap tegas di atas air. -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#44C8E6"
-        android:strokeWidth="5"
-        android:pathData="M62,46 L130,46 L115,126 Q114,131 109,131 L83,131 Q78,131 77,126 Z" />
+        <!-- Muka tatakan. -->
+        <path
+            android:fillColor="#173743"
+            android:strokeColor="#44C8E6"
+            android:strokeWidth="13"
+            android:pathData="M80,386 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
+
+        <!-- Badan gelas. -->
+        <path
+            android:fillColor="#17414F"
+            android:pathData="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z" />
+
+        <!-- Air, diklip ke bentuk gelas. -->
+        <group>
+            <clip-path android:pathData="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z" />
+            <path
+                android:fillColor="#44C8E6"
+                android:pathData="M160,252 h192 v132 h-192 z" />
+        </group>
+
+        <!-- Permukaan air. -->
+        <path
+            android:fillColor="#7FE3F4"
+            android:pathData="M174,252 a82,27 0 1 0 164,0 a82,27 0 1 0 -164,0 z" />
+
+        <!-- Mulut gelas. -->
+        <path
+            android:fillColor="#17414F"
+            android:strokeColor="#9FC4CE"
+            android:strokeWidth="9"
+            android:pathData="M168,158 a88,30 0 1 0 176,0 a88,30 0 1 0 -176,0 z" />
+    </group>
 </vector>
