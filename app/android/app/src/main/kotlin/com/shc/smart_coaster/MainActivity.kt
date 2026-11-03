@@ -19,19 +19,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val ch = "shc/reminder"
-
     private var pendingPermissionResult: MethodChannel.Result? = null
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != 71) return
-        val granted = grantResults.isNotEmpty() &&
-            grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
-        pendingPermissionResult?.success(granted)
-        pendingPermissionResult = null
-    }
 
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
@@ -48,10 +36,7 @@ class MainActivity : FlutterActivity() {
                     Reminder.cancel(this)
                     result.success(true)
                 }
-                "preview" -> {
-                    val sound = call.argument<String>("sound")
-                    result.success(Reminder.preview(this, sound))
-                }
+                "preview" -> result.success(Reminder.preview(this, call.argument<String>("sound")))
                 "isScheduled" -> result.success(Reminder.timeLeftMs(this))
                 "ensureChannel" -> {
                     Reminder.ensureChannel(this)
@@ -60,9 +45,11 @@ class MainActivity : FlutterActivity() {
                 "canExact" -> result.success(Reminder.canExact(this))
                 "canNotify" -> result.success(Reminder.canNotify(this))
                 "requestNotificationPermission" -> {
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                        result.success(true)
-                    } else if (Reminder.canNotify(this)) {
+                    // Manifest saja tidak cukup di Android 13+: notify() dibuang
+                    // diam-diam tanpa izin runtime.
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        Reminder.canNotify(this)
+                    ) {
                         result.success(true)
                     } else {
                         pendingPermissionResult = result
@@ -75,33 +62,57 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 71) return
+        val granted = grantResults.isNotEmpty() &&
+            grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+        pendingPermissionResult?.success(granted)
+        pendingPermissionResult = null
+    }
 }
 
-/// Menjadwalkan pengingat minum dan memutarnya dengan suara pilihan pengguna.
+/// Menjadwalkan pengingat minum dan menampilkan notifikasinya.
 ///
-/// Kanal notifikasi Android 8+ mengunci suara saat kanal dibuat, jadi file audio
-/// pilihan pengguna tidak bisa dipakai lewat konfigurasi kanal. Karena itu kanal
-/// memakai suara senyap dan audionya diputar sendiri oleh receiver: MediaPlayer
-/// membaca URI file milik pengguna, sementara notifikasi tetap tampil di layar.
+/// Suara pilihan pengguna TIDAK dipasang ke kanal notifikasi: Android 8+ mengunci
+/// konfigurasi kanal saat dibuat, dan setiap ganti audio berarti kanal baru yang
+/// menumpuk di Pengaturan. Audio diputar ReminderSoundService, notifikasi tetap
+/// tampil lewat kanal bersuara senyap.
 object Reminder {
+    // Dua kanal dengan ID stabil: kanal menyimpan setelan getar saat dibuat, jadi
+    // pilihan getar ON/OFF butuh kanal berbeda. ID-nya tetap supaya daftar kanal
+    // di Pengaturan tidak tumbuh setiap pengguna mengubah pilihan.
     private const val CHANNEL_ID = "shc_reminder"
+    private const val CHANNEL_ID_NO_VIB = "shc_reminder_no_vibrate"
     const val NOTIF_ID = 1001
     private const val ALARM_REQ = 2001
-    private const val PREFS = "shc_reminder"
 
     fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
-        // setSound(null): bunyi ditangani MediaPlayer, bukan kanal. Tanpa ini,
-        // notifikasi berbunyi dua kali (kanal + file pengguna).
-        val c = NotificationChannel(CHANNEL_ID, "Pengingat minum", NotificationManager.IMPORTANCE_HIGH).apply {
-            setSound(null, null)
-            enableVibration(true)
-            enableLights(true)
+        val channels = listOf(
+            Triple(CHANNEL_ID, "Pengingat minum", true),
+            Triple(CHANNEL_ID_NO_VIB, "Pengingat minum (tanpa getar)", false)
+        )
+        for ((id, name, vib) in channels) {
+            if (mgr.getNotificationChannel(id) != null) continue
+            val c = NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
+                // Bunyi ditangani service; kanal senyap mencegah bunyi ganda.
+                setSound(null, null)
+                enableVibration(vib)
+                enableLights(true)
+            }
+            mgr.createNotificationChannel(c)
         }
-        mgr.createNotificationChannel(c)
     }
+
+    private fun channelFor(vibrate: Boolean) =
+        if (vibrate) CHANNEL_ID else CHANNEL_ID_NO_VIB
 
     fun canNotify(ctx: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
@@ -122,9 +133,8 @@ object Reminder {
         ensureChannel(ctx)
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = alarmIntent(ctx, sound, vibrate)
-        // setExactAndAllowWhileIdle menembus Doze. Bila izin alarm tepat tidak ada,
-        // jatuh ke setAndAllowWhileIdle: meleset beberapa menit lebih baik daripada
-        // alarm yang tidak pernah berbunyi.
+        // setExactAndAllowWhileIdle menembus Doze. Tanpa izin alarm tepat, turun ke
+        // setAndAllowWhileIdle: meleset beberapa menit lebih baik daripada senyap.
         try {
             if (canExact(ctx)) {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
@@ -138,44 +148,39 @@ object Reminder {
 
     fun cancel(ctx: Context) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        am.cancel(alarmIntent(ctx, null, false))
+        am.cancel(alarmIntent(ctx, null, true))
     }
 
     fun timeLeftMs(ctx: Context): Long {
-        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = ctx.getSharedPreferences("shc_reminder", Context.MODE_PRIVATE)
         val at = prefs.getLong("atMs", 0L)
         return (at - System.currentTimeMillis()).coerceAtLeast(0L)
     }
 
-    fun preview(ctx: Context, sound: String?): Boolean {
-        return try {
-            val mp = player(ctx, sound) ?: return false
-            mp.setOnCompletionListener { it.release() }
-            mp.start()
-            true
-        } catch (_: Exception) {
-            false
-        }
+    /// Memutar cuplikan audio tanpa notifikasi, untuk tombol Uji.
+    fun preview(ctx: Context, sound: String?): Boolean = try {
+        val mp = MediaPlayer()
+        mp.setAudioAttributes(alarmAttributes())
+        mp.setDataSource(ctx, soundUri(ctx, sound))
+        mp.setOnCompletionListener { it.release() }
+        mp.prepare()
+        mp.start()
+        true
+    } catch (_: Exception) {
+        false
     }
 
-    private fun player(ctx: Context, sound: String?): MediaPlayer? {
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        val mp = MediaPlayer()
-        mp.setAudioAttributes(attrs)
+    fun alarmAttributes() = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ALARM)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
+
+    fun soundUri(ctx: Context, sound: String?): Uri =
         if (sound.isNullOrEmpty()) {
-            mp.setDataSource(
-                ctx,
-                Uri.parse("android.resource://${ctx.packageName}/" + R.raw.reminder_default)
-            )
+            Uri.parse("android.resource://${ctx.packageName}/" + R.raw.reminder_default)
         } else {
-            mp.setDataSource(ctx, Uri.parse(sound))
+            Uri.parse(sound)
         }
-        mp.prepare()
-        return mp
-    }
 
     private fun alarmIntent(ctx: Context, sound: String?, vibrate: Boolean): PendingIntent {
         val i = Intent(ctx, ReminderReceiver::class.java).apply {
@@ -188,13 +193,12 @@ object Reminder {
         )
     }
 
-    /// Notifikasi yang sama dipakai service, jadi dibangun di satu tempat.
-    fun buildNotification(ctx: Context): Notification {
+    fun buildNotification(ctx: Context, vibrate: Boolean = true): Notification {
         val open = PendingIntent.getActivity(
             ctx, 0, Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        return Notification.Builder(ctx, CHANNEL_ID)
+        return Notification.Builder(ctx, channelFor(vibrate))
             .setContentTitle("Waktunya minum")
             .setContentText("Angkat gelas dan minum sedikit air.")
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -206,18 +210,8 @@ object Reminder {
 
     fun showNow(ctx: Context, sound: String?, vibrate: Boolean) {
         ensureChannel(ctx)
-        val open = PendingIntent.getActivity(
-            ctx, 0, Intent(ctx, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val n = buildNotification(ctx).let { base ->
-            if (!vibrate) return@let base
-            Notification.Builder.recoverBuilder(ctx, base)
-                .setVibrate(longArrayOf(0, 400, 250, 400))
-                .build()
-        }
         val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        mgr.notify(NOTIF_ID, n)
+        mgr.notify(NOTIF_ID, buildNotification(ctx, vibrate))
 
         // Layar menyala supaya pengingat terlihat tanpa membuka aplikasi.
         try {
@@ -238,9 +232,8 @@ class ReminderReceiver : BroadcastReceiver() {
         val sound = intent.getStringExtra("sound")
         val vibrate = intent.getBooleanExtra("vibrate", true)
         Reminder.showNow(ctx, sound, vibrate)
-        // Audio diputar di FOREGROUND SERVICE, bukan di sini. onReceive kembali
-        // segera setelah metode ini selesai, dan setelah itu proses aplikasi boleh
-        // dimatikan: MediaPlayer lokal akan berhenti di tengah lagu.
+        // Audio diputar di FOREGROUND SERVICE, bukan di sini: onReceive kembali
+        // segera, lalu proses boleh dibunuh dan MediaPlayer berhenti di tengah lagu.
         val svc = Intent(ctx, ReminderSoundService::class.java).putExtra("sound", sound)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -249,8 +242,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 ctx.startService(svc)
             }
         } catch (_: Exception) {
-            // Android 12+ menolak startForegroundService dari background pada
-            // sebagian OEM. Notifikasi sudah tampil, jadi pengingat tidak hilang.
+            // Sebagian OEM menolak startForegroundService dari background.
+            // Notifikasi sudah tampil, jadi pengingat tidak hilang.
         }
     }
 }

@@ -918,13 +918,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                   shape: BoxShape.circle, color: dotColor),
             ),
             const SizedBox(width: 10),
-            Text('Smart Hydration Coaster',
+            Expanded(
+              child: Text('Smart Hydration Coaster',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
                 style: TextStyle(
                     fontFamily: _display,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: _ink,
                     letterSpacing: .2)),
+            ),
           ],
         ),
         actions: [

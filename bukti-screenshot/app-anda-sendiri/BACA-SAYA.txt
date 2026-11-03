@@ -1,0 +1,6 @@
+Simpan tangkapan layar aplikasi Android di folder ini.
+Nama berkas yang disarankan (agar mudah disebut di laporan):
+  06-app-dashboard.png
+  07-app-pengingat.png
+  08-app-akun-klaim.png
+  09-app-konfirmasi-notifikasi.png

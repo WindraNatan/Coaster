@@ -29,7 +29,8 @@ class ReminderSoundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val sound = intent?.getStringExtra("sound")
-        startForegroundWithNotification()
+        val vibrate = intent?.getBooleanExtra("vibrate", true) ?: true
+        startForegroundWithNotification(vibrate)
 
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "shc:reminderAudio").apply {
@@ -38,20 +39,8 @@ class ReminderSoundService : Service() {
 
         try {
             player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                )
-                if (sound.isNullOrEmpty()) {
-                    setDataSource(
-                        this@ReminderSoundService,
-                        Uri.parse("android.resource://${packageName}/" + R.raw.reminder_default)
-                    )
-                } else {
-                    setDataSource(this@ReminderSoundService, Uri.parse(sound))
-                }
+                setAudioAttributes(Reminder.alarmAttributes())
+                setDataSource(this@ReminderSoundService, Reminder.soundUri(this@ReminderSoundService, sound))
                 setOnCompletionListener { stopSelfSafely() }
                 setOnErrorListener { _, _, _ ->
                     stopSelfSafely()
@@ -61,8 +50,7 @@ class ReminderSoundService : Service() {
                 start()
             }
         } catch (e: Exception) {
-            // Berkas hilang atau format tidak didukung: notifikasi tetap tampil,
-            // layanan berhenti tanpa memutar apa pun.
+            // Berkas hilang atau format tidak didukung: notifikasi tetap tampil.
             Log.w("shc", "audio pengingat gagal: ${e.message}")
             stopSelfSafely()
         }
@@ -70,8 +58,8 @@ class ReminderSoundService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun startForegroundWithNotification() {
-        val n = Reminder.buildNotification(this)
+    private fun startForegroundWithNotification(vibrate: Boolean) {
+        val n = Reminder.buildNotification(this, vibrate)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 Reminder.NOTIF_ID, n,
