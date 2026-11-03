@@ -3,7 +3,7 @@
   <rect width="512" height="512" rx="112" fill="#0C1F27"/>
   <defs>
     <clipPath id="cup">
-      <path transform="translate(70 70) scale(0.72)" d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z"/>
+      <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z"/>
     </clipPath>
   </defs>
   <g transform="translate(70 70) scale(0.72)">
@@ -12,6 +12,6 @@
     <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z" fill="#0C1F27"/>
     <rect x="160" y="286" width="192" height="120" fill="#44C8E6" clip-path="url(#cup)"/>
     <ellipse cx="256" cy="286" rx="79" ry="26" fill="#8FE9F7"/>
-    <ellipse cx="256" cy="158" rx="88" ry="30" fill="#0C1F27" stroke="#8FB3BD" stroke-width="11"/>
+    <ellipse cx="256" cy="158" rx="88" ry="30" fill="#0C1F27" stroke="#8FB3BD" stroke-width="9"/>
   </g>
 </svg>

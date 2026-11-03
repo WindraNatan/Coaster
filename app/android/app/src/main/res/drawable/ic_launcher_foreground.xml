@@ -1,53 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Lapisan depan adaptive icon: gelas di atas tatakan, tampak sedikit dari
-     atas. Sumber bentuknya sama dengan brand/logo-mark.svg.
-
-     Air diklip ke bentuk gelas; tanpa klip, persegi panjang air menonjol keluar
-     dari dinding yang meruncing dan menutupi garis luar.
-
-     Isi diperkecil ke area aman 72/108 dp supaya tidak terpotong saat launcher
-     memakai bentuk bulat atau squircle. -->
+<!-- Dihasilkan brand/tools/build-brand.py. Jangan disunting manual: ubah
+     generator agar tanda, ikon web, dan ikon Android tetap satu bentuk. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="512"
     android:viewportHeight="512">
 
-    <group android:translateX="70" android:translateY="72" android:scaleX="0.72" android:scaleY="0.72">
-        <!-- Tebal tatakan. -->
+    <group android:translateX="70" android:translateY="70"
+           android:scaleX="0.72" android:scaleY="0.72">
         <path
-            android:fillColor="#071219"
+            android:fillColor="#0A1920"
             android:pathData="M80,404 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
-
-        <!-- Muka tatakan. -->
         <path
-            android:fillColor="#173743"
-            android:strokeColor="#44C8E6"
+            android:fillColor="#132B35"
+            android:strokeColor="#2FA8C4"
             android:strokeWidth="13"
             android:pathData="M80,386 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
-
-        <!-- Badan gelas. -->
         <path
-            android:fillColor="#17414F"
+            android:fillColor="#0C1F27"
             android:pathData="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z" />
-
-        <!-- Air, diklip ke bentuk gelas. -->
         <group>
             <clip-path android:pathData="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z" />
             <path
                 android:fillColor="#44C8E6"
-                android:pathData="M160,252 h192 v132 h-192 z" />
+                android:pathData="M160,286 h192 v120 h-192 z" />
         </group>
-
-        <!-- Permukaan air. -->
         <path
-            android:fillColor="#7FE3F4"
-            android:pathData="M174,252 a82,27 0 1 0 164,0 a82,27 0 1 0 -164,0 z" />
-
-        <!-- Mulut gelas. -->
+            android:fillColor="#8FE9F7"
+            android:pathData="M177,286 a79,26 0 1 0 158,0 a79,26 0 1 0 -158,0 z" />
         <path
-            android:fillColor="#17414F"
-            android:strokeColor="#9FC4CE"
+            android:fillColor="#0C1F27"
+            android:strokeColor="#8FB3BD"
             android:strokeWidth="9"
             android:pathData="M168,158 a88,30 0 1 0 176,0 a88,30 0 1 0 -176,0 z" />
     </group>

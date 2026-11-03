@@ -21,8 +21,8 @@ PALE = '#E2F1F3'
 TRACK = 0.02
 
 
-def glyphs(text, size, bold=True):
-    font = TTFont(FONT if bold else FONT)
+def glyphs(text, size):
+    font = TTFont(FONT)
     gs = font.getGlyphSet()
     cmap = font.getBestCmap()
     upem = font['head'].unitsPerEm
@@ -75,9 +75,9 @@ def mark(color_mode='dark'):
 def lockup_horizontal(bg):
     """Tanda di kiri, nama produk di kanan."""
     name, w = glyphs('Smart Hydration Coaster', 68)
-    gap, mark_size = 54, 300
-    tx = 88 + mark_size + gap
-    total_w = int(tx + w + 88)
+    margin, gap, mark_size = 96, 54, 300
+    tx = margin + mark_size + gap
+    total_w = int(tx + w + margin)
     height = 320
     mark_y = (height - mark_size) // 2
     baseline = height // 2 + 24
@@ -87,7 +87,7 @@ def lockup_horizontal(bg):
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total_w} {height}" width="{total_w}" height="{height}" role="img" aria-label="Smart Hydration Coaster">
   <title>Smart Hydration Coaster</title>
 {mark_defs()}  <rect width="{total_w}" height="{height}" fill="{background}"/>
-  <g transform="translate(96 {mark_y}) scale({mark_size/512:.4f})">
+  <g transform="translate({margin} {mark_y}) scale({mark_size/512:.4f})">
 {inner}
   </g>
   <g fill="{fill}" transform="translate({tx} {baseline})">
@@ -121,15 +121,18 @@ def lockup_vertical(bg):
 
 
 def icon(scale=0.72, pad=70):
-    """Ikon PWA: tanda di atas bidang tinta, diperkecil ke area aman maskable."""
+    """Ikon PWA: tanda yang sama dengan logo, di atas bidang tinta.
+
+    Isi diperkecil ke area aman maskable (72%) supaya tidak terpotong saat
+    launcher memakai bentuk bulat atau squircle.
+    """
     body = 'M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z'
-    shapes = mark('light')
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Smart Hydration Coaster">
   <title>Smart Hydration Coaster</title>
   <rect width="512" height="512" rx="112" fill="#0C1F27"/>
   <defs>
     <clipPath id="cup">
-      <path transform="translate({pad} {pad}) scale({scale})" d="{body}"/>
+      <path d="{body}"/>
     </clipPath>
   </defs>
   <g transform="translate({pad} {pad}) scale({scale})">
@@ -138,9 +141,59 @@ def icon(scale=0.72, pad=70):
     <path d="{body}" fill="#0C1F27"/>
     <rect x="160" y="286" width="192" height="120" fill="#44C8E6" clip-path="url(#cup)"/>
     <ellipse cx="256" cy="286" rx="79" ry="26" fill="#8FE9F7"/>
-    <ellipse cx="256" cy="158" rx="88" ry="30" fill="#0C1F27" stroke="#8FB3BD" stroke-width="11"/>
+    <ellipse cx="256" cy="158" rx="88" ry="30" fill="#0C1F27" stroke="#8FB3BD" stroke-width="9"/>
   </g>
 </svg>
+'''
+
+
+
+def android_foreground(scale=0.72, pad=70):
+    """Lapisan depan adaptive icon Android, dari bentuk yang sama.
+
+    Android memakai viewport 512 dengan isi diperkecil, jadi koordinatnya
+    identik dengan SVG tanda. Air diklip ke bentuk gelas; tanpa klip, persegi
+    panjang air menonjol keluar dinding yang meruncing.
+    """
+    body = 'M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z'
+    return f'''<?xml version="1.0" encoding="utf-8"?>
+<!-- Dihasilkan brand/tools/build-brand.py. Jangan disunting manual: ubah
+     generator agar tanda, ikon web, dan ikon Android tetap satu bentuk. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <group android:translateX="{pad}" android:translateY="{pad}"
+           android:scaleX="{scale}" android:scaleY="{scale}">
+        <path
+            android:fillColor="#0A1920"
+            android:pathData="M80,404 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
+        <path
+            android:fillColor="#132B35"
+            android:strokeColor="#2FA8C4"
+            android:strokeWidth="13"
+            android:pathData="M80,386 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
+        <path
+            android:fillColor="#0C1F27"
+            android:pathData="{body}" />
+        <group>
+            <clip-path android:pathData="{body}" />
+            <path
+                android:fillColor="#44C8E6"
+                android:pathData="M160,286 h192 v120 h-192 z" />
+        </group>
+        <path
+            android:fillColor="#8FE9F7"
+            android:pathData="M177,286 a79,26 0 1 0 158,0 a79,26 0 1 0 -158,0 z" />
+        <path
+            android:fillColor="#0C1F27"
+            android:strokeColor="#8FB3BD"
+            android:strokeWidth="9"
+            android:pathData="M168,158 a88,30 0 1 0 176,0 a88,30 0 1 0 -176,0 z" />
+    </group>
+</vector>
 '''
 
 def main():
@@ -161,6 +214,7 @@ def main():
         'logo-vertical-dark.svg': lockup_vertical('dark'),
     }
     files['../web/icon.svg'] = icon()
+    files['../app/android/app/src/main/res/drawable/ic_launcher_foreground.xml'] = android_foreground()
     for name, content in files.items():
         io.open(os.path.join(OUT, name), 'w', encoding='utf-8', newline='\n').write(content)
         print('tulis', name, len(content), 'byte')

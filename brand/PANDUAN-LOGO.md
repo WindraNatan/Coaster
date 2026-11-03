@@ -63,8 +63,14 @@ python brand/tools/build-brand.py
 Skrip itu menulis enam SVG di `brand/` dan `web/icon.svg`. Ikon Android
 (`ic_launcher_foreground.xml`) memakai bentuk yang sama dan diperbarui manual.
 
-Untuk memperbarui PNG, buka SVG-nya di browser lalu tangkap pada ukuran yang
-tertera di `brand/tools/export-png.py`.
+Untuk memperbarui PNG, jalankan `python brand/tools/export-png.py`. Skrip itu
+tidak mengekspor sendiri: ia menghitung ukuran target dan memeriksa berkas yang
+sudah ada di disk. Ekspor dijalankan lewat browser dengan viewport 2,4x viewBox
+(tangkapan browser menambah 1,25x, jadi hasilnya 3x). Ukuran akhir yang benar:
+tanda 1536x1536, kuncian horizontal 4183x960, kuncian vertikal 2649x1380.
+
+Semua ukuran itu 300 DPI: kuncian horizontal 4183 px = 354 mm, cukup untuk
+sampul A4 (210 mm) dengan margin.
 
 Font nama produk adalah Space Grotesk Bold dari `app/assets/fonts/`. Nama
 diubah menjadi bentuk (path), bukan teks, supaya berkas logo tampil sama di
