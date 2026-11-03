@@ -1372,7 +1372,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           border: Border.all(color: _line),
           borderRadius: BorderRadius.circular(10),
         ),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: child,
       );
 
@@ -1549,7 +1549,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           excludeSemantics: true,
           child: Container(
             margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
               color: _panel2,
               border: Border.all(color: _line),

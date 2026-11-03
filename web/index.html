@@ -20,19 +20,20 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--disp);min-height:100dvh;overflow-x:hidden}
 button,input{font:inherit;touch-action:manipulation}
-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  padding:10px 24px;border-bottom:1px solid var(--line)}
+b,strong{font-weight:600}
+header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:8px 24px;border-bottom:1px solid var(--line)}
 /* Di bawah 920 px header jadi satu baris: judul boleh terpotong, kontrol tidak. */
-.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0;
+.brand{display:flex;align-items:center;gap:8px;margin-right:auto;min-width:0;
   text-decoration:none;color:inherit}
 .brand-mark{display:block;flex:none;border-radius:8px}
-.brand-name{font-size:16px;font-weight:700;letter-spacing:.2px;
+.brand-name{font-size:16px;font-weight:600;letter-spacing:.2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .slider-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:space-between}
 .slider-row .slider-cap{flex:1 1 200px;min-width:0}
-.sim-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.conn-bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.conn-pill{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;
+.sim-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.conn-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.conn-pill{font-family:var(--mono);font-size:11px;padding:8px 8px;border-radius:6px;
   border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;
   min-height:36px}
 /* Layar sentuh: 44 px adalah ukuran minimum sasaran jari. Di desktop pil boleh
@@ -40,24 +41,24 @@ header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
 .conn-pill.on{border-color:var(--water);color:var(--ink);background:var(--panel2)}
 .conn-pill:focus-visible,.warp button:focus-visible,button.act:focus-visible,input:focus-visible{
   outline:2px solid var(--water);outline-offset:2px}
-.clock{font-family:var(--mono);font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
+.clock{font-family:var(--mono);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
 .clock b{color:var(--ink);font-weight:600}
 .warp{display:flex;gap:4px}
-.warp button{font-family:var(--mono);font-size:11px;padding:5px 9px;background:none;
+.warp button{font-family:var(--mono);font-size:11px;padding:4px 8px;background:none;
   border:1px solid var(--line);color:var(--dim);cursor:pointer;border-radius:4px;min-height:34px}
 .warp button.on{border-color:var(--water);color:var(--water)}
 
 .conn-drawer{background:var(--panel2);border-bottom:1px solid var(--line);padding:12px 24px;
-  display:none;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--dim)}
+  display:none;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--dim)}
 .conn-drawer.show{display:flex}
 .conn-drawer input{flex:1 1 180px;background:var(--bg);border:1px solid var(--line);color:var(--ink);
-  font-family:var(--mono);font-size:12px;padding:7px 10px;border-radius:6px;min-height:36px}
+  font-family:var(--mono);font-size:12px;padding:8px 8px;border-radius:6px;min-height:36px}
 .auth-form{display:contents}
 /* Kontrol nonaktif harus terbaca nonaktif, bukan sekadar tak bisa digeser. */
 input:disabled,.conn-drawer input:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 .adaptive-note{display:none;font-size:11px;color:var(--dim);margin-top:8px;line-height:1.5}
 .adaptive-note.show{display:block}
-.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:6px}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:8px}
 .status-dot.ok{background:var(--ok)}
 .status-dot.err{background:var(--alarm)}
 
@@ -71,54 +72,54 @@ main{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,450px);gap:0;
 .tele{grid-area:tele;padding:0 28px 24px;background:var(--panel2);min-width:0}
 @media(max-width:920px){
   main{grid-template-columns:1fr;grid-template-areas:"status" "stage" "tele";grid-template-rows:auto}
-  .stage{border-right:none;border-bottom:1px solid var(--line);padding:20px 18px}
-  .status{padding:18px 18px 0}
+  .stage{border-right:none;border-bottom:1px solid var(--line);padding:20px 16px}
+  .status{padding:16px 16px 0}
   .tele{padding:0 18px 20px}
-  header{padding:12px 18px}
+  header{padding:12px 16px}
 }
 .stage-top{display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;min-width:0}
 .glass-box{flex:0 0 130px}
-.gram{font-size:38px;font-weight:700;font-family:var(--mono);line-height:1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.gram small{font-size:14px;color:var(--dim);font-weight:400}
-.water-ml{font-family:var(--mono);font-size:13px;color:var(--water);margin-top:4px;font-variant-numeric:tabular-nums}
-.cup-absent{color:var(--dim);font-size:12px;font-family:var(--mono);margin-top:6px;display:none}
+.gram{font-size:38px;font-weight:600;font-family:var(--mono);line-height:1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.gram small{font-size:16px;color:var(--dim);font-weight:400}
+.water-ml{font-family:var(--mono);font-size:12px;color:var(--water);margin-top:4px;font-variant-numeric:tabular-nums}
+.cup-absent{color:var(--dim);font-size:12px;font-family:var(--mono);margin-top:8px;display:none}
 input[type=range]{width:100%;accent-color:var(--water);margin-top:16px;height:28px;cursor:pointer}
 .slider-cap{display:flex;justify-content:space-between;font-family:var(--mono);
   font-size:11px;color:var(--dim)}
 .stab-bar{height:4px;background:var(--line);margin-top:12px;border-radius:2px;overflow:hidden}
 .stab-bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .12s linear}
-.stab-lab{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:5px;font-variant-numeric:tabular-nums}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.stab-lab{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 button.act,a.act{font-family:var(--mono);font-size:12px;padding:8px 12px;border-radius:6px;
   border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;min-height:38px;
   text-decoration:none;display:inline-flex;align-items:center}
 button.act:hover,a.act:hover{border-color:var(--water);color:var(--ink)}
 button.act.active-btn{border-color:var(--water);color:var(--water)}
 button.act:disabled{opacity:.45;cursor:not-allowed}
-.fold{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
+.fold{margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
 .fold summary{font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;list-style:none;
-  display:flex;align-items:center;gap:7px;min-height:36px;letter-spacing:.3px}
+  display:flex;align-items:center;gap:8px;min-height:36px;letter-spacing:.3px}
 .fold summary::-webkit-details-marker{display:none}
-.fold summary::before{content:"+";font-size:13px;color:var(--water);width:9px;text-align:center}
+.fold summary::before{content:"+";font-size:12px;color:var(--water);width:9px;text-align:center}
 .fold[open] summary::before{content:"\2212"}
 .fold summary:hover{color:var(--ink)}
 .fold summary:focus-visible{outline:2px solid var(--water);outline-offset:2px;border-radius:4px}
-.fold[open] summary{margin-bottom:10px}
-.log-tools{display:flex;justify-content:flex-end;margin-bottom:6px}
+.fold[open] summary{margin-bottom:8px}
+.log-tools{display:flex;justify-content:flex-end;margin-bottom:8px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
   overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
 .scen{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}
-.scen button{text-align:left;width:100%;padding:9px 11px;font-size:12px;line-height:1.35}
+.scen button{text-align:left;width:100%;padding:8px 12px;font-size:12px;line-height:1.35}
 .scen small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
 
-.hist-box{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.hist-box{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px}
 .hist-head{display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:8px}
-.hist-list{display:grid;gap:5px;font-family:var(--mono);font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums}
+.hist-list{display:grid;gap:4px;font-family:var(--mono);font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums}
 .hist-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)}
 .hist-row:last-child{border-bottom:none}
 
-.badge{border:2px solid var(--line);border-radius:8px;padding:16px 18px;background:var(--panel)}
-.badge .nm{font-size:28px;font-weight:700;letter-spacing:.4px;font-family:var(--disp)}
+.badge{border:2px solid var(--line);border-radius:8px;padding:16px 16px;background:var(--panel)}
+.badge .nm{font-size:28px;font-weight:600;letter-spacing:.4px;font-family:var(--disp)}
 .badge .why{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:4px;min-height:16px}
 .badge.st-IDLE .nm{color:var(--dim)}
 .badge.st-STABLE .nm{color:var(--ok)}
@@ -129,34 +130,34 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 .badge.st-ALERT_REFILL .nm{color:var(--warn)}
 .badge.alert{animation:pulse var(--pulse,500ms) steps(2,jump-none) infinite}
 @keyframes pulse{50%{border-color:currentColor}}
-.count{font-family:var(--mono);font-size:14px;margin-top:10px;color:var(--dim);font-variant-numeric:tabular-nums}
-.count b{color:var(--ink);font-size:22px}
+.count{font-family:var(--mono);font-size:16px;margin-top:8px;color:var(--dim);font-variant-numeric:tabular-nums}
+.count b{color:var(--ink);font-size:24px}
 
-.goal-box{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.goal-box{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px}
 .goal-head{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
 .goal-head b{color:var(--ink)}
 .goal-bar{height:8px;background:var(--panel2);border-radius:4px;margin-top:8px;overflow:hidden;border:1px solid var(--line)}
 .goal-bar i{display:block;height:100%;width:0;background:var(--water);transition:width .25s ease}
 
-.counts{display:grid;grid-template-columns:repeat(4,1fr);margin-top:14px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
-.counts div{padding:10px 6px;text-align:center;font-variant-numeric:tabular-nums}
+.counts{display:grid;grid-template-columns:repeat(4,1fr);margin-top:16px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.counts div{padding:8px 8px;text-align:center;font-variant-numeric:tabular-nums}
 .counts div+div{border-left:1px solid var(--line)}
-.counts b{display:block;font-family:var(--mono);font-size:18px;color:var(--ink)}
+.counts b{display:block;font-family:var(--mono);font-size:20px;color:var(--ink)}
 .counts span{font-size:11px;color:var(--dim)}
 
-.adaptive{margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
-.adaptive b{color:var(--water);font-size:15px;font-variant-numeric:tabular-nums}
-.adaptive label{display:flex;justify-content:space-between;margin:10px 0 2px;color:var(--ink)}
+.adaptive{margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px}
+.adaptive b{color:var(--water);font-size:16px;font-variant-numeric:tabular-nums}
+.adaptive label{display:flex;justify-content:space-between;margin:8px 0 2px;color:var(--ink)}
 .adaptive input[type=range]{margin-top:4px}
 
-.cfg-grid{margin-top:14px;display:grid;gap:10px}
+.cfg-grid{margin-top:16px;display:grid;gap:8px}
 .cfg-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--dim)}
 .cfg-row label{min-width:128px;color:var(--ink)}
 .cfg-row input{width:84px;background:var(--panel);border:1px solid var(--line);color:var(--ink);
-  font-family:var(--mono);padding:6px 8px;border-radius:6px;min-height:36px;font-variant-numeric:tabular-nums}
+  font-family:var(--mono);padding:8px 8px;border-radius:6px;min-height:36px;font-variant-numeric:tabular-nums}
 
-.log{margin-top:6px;background:var(--panel);border:1px solid var(--line);border-radius:8px;
-  font-family:var(--mono);font-size:11px;line-height:1.65;padding:10px 12px;height:175px;
+.log{margin-top:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  font-family:var(--mono);font-size:11px;line-height:1.65;padding:8px 12px;height:175px;
   overflow-y:auto;color:var(--dim);font-variant-numeric:tabular-nums}
 .log .t{color:var(--dim);opacity:.85}
 .log .ev-STABLE{color:var(--ok)}
@@ -166,7 +167,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 .log .ev-ALERT_CHEAT{color:var(--alarm)}
 .log .ev-ALERT_REFILL{color:var(--warn)}
 .hist-head h2{font-size:11px;font-weight:400;color:var(--dim);letter-spacing:0;margin:0}
-.foot{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:14px;line-height:1.55}
+.foot{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:16px;line-height:1.55}
 .foot a{color:var(--water);text-decoration:underline;text-underline-offset:2px;
   display:inline-block;padding-block:4px}
 @media (prefers-reduced-motion: reduce){.badge.alert{animation:none}}
@@ -233,9 +234,9 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 </div>
 
 <main>
-  <h1 class="sr-only">Smart Hydration Coaster — status dan kendali</h1>
+  <h1 class="sr-only" style="font-size:20px;font-weight:600">Smart Hydration Coaster — status dan kendali</h1>
   <section class="status" aria-labelledby="hStatus">
-    <h2 class="sr-only" id="hStatus">Status alat</h2>
+    <h2 class="sr-only" id="hStatus" style="font-size:16px;font-weight:600">Status alat</h2>
     <div class="badge st-IDLE" id="badge" role="status" aria-live="polite" aria-atomic="true">
       <div class="nm" id="stName">IDLE</div>
       <div class="why" id="stWhy"></div>
@@ -259,7 +260,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
   </section>
 
   <section class="stage" aria-labelledby="hUkur">
-    <h2 class="sr-only" id="hUkur">Pengukuran</h2>
+    <h2 class="sr-only" id="hUkur" style="font-size:16px;font-weight:600">Pengukuran</h2>
     <div class="stage-top">
       <div class="glass-box">
         <svg id="glassSvg" width="130" height="170" viewBox="0 0 120 158" aria-hidden="true">
@@ -333,7 +334,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
   </section>
 
   <aside class="tele" aria-labelledby="hAtur">
-    <h2 class="sr-only" id="hAtur">Pengaturan dan target</h2>
+    <h2 class="sr-only" id="hAtur" style="font-size:16px;font-weight:600">Pengaturan dan target</h2>
     <div class="adaptive">
       <div>Target interval: <b id="interval">--</b></div>
       <div id="intervalWhy" style="margin-top:2px"></div>
