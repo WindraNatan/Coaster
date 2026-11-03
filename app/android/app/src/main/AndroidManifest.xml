@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Foreground service pemutar audio pengingat (Android 14+ mewajibkan tipe). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <application
         android:label="Smart Hydration Coaster"
         android:name="${applicationName}"
@@ -41,6 +44,12 @@
              aplikasi sedang tidak berjalan. -->
         <receiver
             android:name=".ReminderReceiver"
+            android:exported="false" />
+
+        <!-- Pemutar audio pengingat. Tipe mediaPlayback wajib di Android 14+. -->
+        <service
+            android:name=".ReminderSoundService"
+            android:foregroundServiceType="mediaPlayback"
             android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:

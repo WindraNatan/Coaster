@@ -85,7 +85,7 @@ class MainActivity : FlutterActivity() {
 /// membaca URI file milik pengguna, sementara notifikasi tetap tampil di layar.
 object Reminder {
     private const val CHANNEL_ID = "shc_reminder"
-    private const val NOTIF_ID = 1001
+    const val NOTIF_ID = 1001
     private const val ALARM_REQ = 2001
     private const val PREFS = "shc_reminder"
 
@@ -188,26 +188,34 @@ object Reminder {
         )
     }
 
-    fun showNow(ctx: Context, sound: String?, vibrate: Boolean) {
-        ensureChannel(ctx)
+    /// Notifikasi yang sama dipakai service, jadi dibangun di satu tempat.
+    fun buildNotification(ctx: Context): Notification {
         val open = PendingIntent.getActivity(
             ctx, 0, Intent(ctx, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val n = Notification.Builder(ctx, CHANNEL_ID)
+        return Notification.Builder(ctx, CHANNEL_ID)
             .setContentTitle("Waktunya minum")
             .setContentText("Angkat gelas dan minum sedikit air.")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(open)
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_ALARM)
-            .apply {
-                if (vibrate) {
-                    val pattern = longArrayOf(0, 400, 250, 400)
-                    setVibrate(pattern)
-                }
-            }
             .build()
+    }
+
+    fun showNow(ctx: Context, sound: String?, vibrate: Boolean) {
+        ensureChannel(ctx)
+        val open = PendingIntent.getActivity(
+            ctx, 0, Intent(ctx, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val n = buildNotification(ctx).let { base ->
+            if (!vibrate) return@let base
+            Notification.Builder.recoverBuilder(ctx, base)
+                .setVibrate(longArrayOf(0, 400, 250, 400))
+                .build()
+        }
         val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         mgr.notify(NOTIF_ID, n)
 
@@ -230,44 +238,19 @@ class ReminderReceiver : BroadcastReceiver() {
         val sound = intent.getStringExtra("sound")
         val vibrate = intent.getBooleanExtra("vibrate", true)
         Reminder.showNow(ctx, sound, vibrate)
-        // Audio diputar di sini, bukan di kanal: file pengguna tidak bisa
-        // dipasang ke kanal notifikasi yang sudah dibuat.
-        // PARTIAL_WAKE_LOCK menahan CPU sampai pemutaran selesai. Tanpa ini,
-        // onReceive kembali dan proses cached boleh dibunuh: suara mati di tengah.
-        var wake: PowerManager.WakeLock? = null
+        // Audio diputar di FOREGROUND SERVICE, bukan di sini. onReceive kembali
+        // segera setelah metode ini selesai, dan setelah itu proses aplikasi boleh
+        // dimatikan: MediaPlayer lokal akan berhenti di tengah lagu.
+        val svc = Intent(ctx, ReminderSoundService::class.java).putExtra("sound", sound)
         try {
-            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
-            wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "shc:reminderAudio")
-            wake.acquire(60000)
-        } catch (_: Exception) {
-        }
-        val lock = wake
-        try {
-            val mp = MediaPlayer()
-            mp.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            if (sound.isNullOrEmpty()) {
-                mp.setDataSource(ctx, Uri.parse("android.resource://${ctx.packageName}/" + R.raw.reminder_default))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(svc)
             } else {
-                mp.setDataSource(ctx, Uri.parse(sound))
+                ctx.startService(svc)
             }
-            mp.prepare()
-            mp.setOnCompletionListener {
-                it.release()
-                lock?.takeIf { l -> l.isHeld }?.release()
-            }
-            mp.setOnErrorListener { _, _, _ ->
-                lock?.takeIf { l -> l.isHeld }?.release()
-                true
-            }
-            mp.start()
         } catch (_: Exception) {
-            // File hilang atau format tidak didukung: notifikasi tetap tampil.
-            lock?.takeIf { l -> l.isHeld }?.release()
+            // Android 12+ menolak startForegroundService dari background pada
+            // sebagian OEM. Notifikasi sudah tampil, jadi pengingat tidak hilang.
         }
     }
 }
