@@ -33,7 +33,10 @@ header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
 .sim-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .conn-bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .conn-pill{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:6px;
-  border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;min-height:36px}
+  border:1px solid var(--line);background:var(--panel);color:var(--dim);cursor:pointer;
+  min-height:36px}
+/* Layar sentuh: 44 px adalah ukuran minimum sasaran jari. Di desktop pil boleh
+   lebih pendek supaya baris alat tidak memakan ruang. */
 .conn-pill.on{border-color:var(--water);color:var(--ink);background:var(--panel2)}
 .conn-pill:focus-visible,.warp button:focus-visible,button.act:focus-visible,input:focus-visible{
   outline:2px solid var(--water);outline-offset:2px}
@@ -162,6 +165,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 .log .ev-ALERT_DRINK{color:var(--warn)}
 .log .ev-ALERT_CHEAT{color:var(--alarm)}
 .log .ev-ALERT_REFILL{color:var(--warn)}
+.hist-head h2{font-size:11px;font-weight:400;color:var(--dim);letter-spacing:0;margin:0}
 .foot{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:14px;line-height:1.55}
 .foot a{color:var(--water);text-decoration:underline;text-underline-offset:2px;
   display:inline-block;padding-block:4px}
@@ -176,6 +180,19 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
   .fold summary{display:flex;align-items:center}
   .foot a{display:inline-flex;align-items:center;padding-block:8px}
   input[type=range]{height:44px;padding-block:8px}
+}
+/* Sasaran jari minimum 44 px pada layar sempit. Dipicu lebar, bukan
+   (pointer: coarse): sebagian browser melaporkan pointer halus walau dibuka di
+   ponsel, dan aturan berbasis pointer jadi tidak pernah berlaku. */
+@media (max-width: 760px){
+  .conn-pill,button.act,a.act,.warp button{min-height:44px}
+  /* Tombol warp (1x, 10x, …) hanya 33 px lebar: tambah padding horizontal
+     supaya sasaran jari tidak lebih sempit dari petunjuk 44 px. */
+  .warp button{min-width:44px}
+  .foot a{min-height:44px;display:inline-flex;align-items:center}
+  input[type=number],input[type=email],input[type=password],input[type=text]{min-height:44px}
+  input[type=range]{height:44px}
+  .brand{min-height:44px}
 }
 </style>
 </head>
@@ -216,7 +233,9 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 </div>
 
 <main>
-  <section class="status" aria-label="Status alat">
+  <h1 class="sr-only">Smart Hydration Coaster — status dan kendali</h1>
+  <section class="status" aria-labelledby="hStatus">
+    <h2 class="sr-only" id="hStatus">Status alat</h2>
     <div class="badge st-IDLE" id="badge" role="status" aria-live="polite" aria-atomic="true">
       <div class="nm" id="stName">IDLE</div>
       <div class="why" id="stWhy"></div>
@@ -239,7 +258,8 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
     </div>
   </section>
 
-  <section class="stage">
+  <section class="stage" aria-labelledby="hUkur">
+    <h2 class="sr-only" id="hUkur">Pengukuran</h2>
     <div class="stage-top">
       <div class="glass-box">
         <svg id="glassSvg" width="130" height="170" viewBox="0 0 120 158" aria-hidden="true">
@@ -303,7 +323,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 
     <div class="hist-box">
       <div class="hist-head">
-        <span>Riwayat harian</span>
+        <h2>Riwayat harian</h2>
         <span id="todayKeyLab"></span>
       </div>
       <div class="hist-list" id="histList"></div>
@@ -312,7 +332,8 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
     <p class="foot">Simulator, USB, atau cloud. <a href="casing_3d.html">Model casing 3D</a></p>
   </section>
 
-  <aside class="tele">
+  <aside class="tele" aria-labelledby="hAtur">
+    <h2 class="sr-only" id="hAtur">Pengaturan dan target</h2>
     <div class="adaptive">
       <div>Target interval: <b id="interval">--</b></div>
       <div id="intervalWhy" style="margin-top:2px"></div>

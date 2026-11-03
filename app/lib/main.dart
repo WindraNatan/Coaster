@@ -413,7 +413,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
                     labelText: 'Web API Key proyek Firebase',
                     labelStyle: _monoStyle(12),
                     helperText: 'Project settings → General → Web API Key',
-                    helperStyle: _monoStyle(10, color: _dim),
+                    helperStyle: _monoStyle(11, color: _dim),
                     enabledBorder: const OutlineInputBorder(
                         borderSide: BorderSide(color: _line)),
                     focusedBorder: const OutlineInputBorder(
@@ -1020,10 +1020,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: _envChip('SUHU', t.tempC, ' °C')),
+                      Expanded(child: _envChip('Suhu', t.tempC, ' °C')),
                       const SizedBox(width: 12),
                       Expanded(
-                          child: _envChip('KELEMBABAN', t.humidityPct, ' %')),
+                          child: _envChip('Kelembapan', t.humidityPct, ' %')),
                     ],
                   ),
                 ),
@@ -1036,7 +1036,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Text(
                   'RTDB: ${Uri.parse(_base).host} · stream langsung · '
                   'skala gelas tampilan ${_glassDisplayMl.toInt()} ml.',
-                  style: _monoStyle(10, color: _dim),
+                  style: _monoStyle(11, color: _dim),
                 ),
               ],
             ],
@@ -1196,7 +1196,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           children: [
             Row(
               children: [
-                Text('PENGINGAT MINUM', style: _monoStyle(10)),
+                Text('Pengingat minum', style: _monoStyle(11)),
                 const Spacer(),
                 Switch(value: _remindOn, onChanged: _toggleRemind),
               ],
@@ -1257,7 +1257,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: Text(
                     'Izin alarm tepat waktu belum aktif. Pengingat bisa meleset beberapa menit; '
                     'aktifkan di Pengaturan › Aplikasi › Alarm & pengingat.',
-                    style: _monoStyle(10, color: _warn),
+                    style: _monoStyle(11, color: _warn),
                   ),
                 ),
             ],
@@ -1403,14 +1403,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('BERAT', style: _monoStyle(10)),
+                    Text('Berat', style: _monoStyle(11)),
                     const SizedBox(height: 4),
                     Text(t.weightG.toStringAsFixed(1),
                         style: _monoStyle(34,
                             color: _ink, weight: FontWeight.w600)),
                     Text('gram', style: _monoStyle(11)),
                     const SizedBox(height: 14),
-                    Text('AIR TERDETEKSI', style: _monoStyle(10)),
+                    Text('Air terdeteksi', style: _monoStyle(11)),
                     const SizedBox(height: 4),
                     Text('${t.waterMl.toStringAsFixed(0)} ml',
                         style: _monoStyle(15, color: _water)),
@@ -1425,7 +1425,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           const SizedBox(height: 10),
           Text('Skala gelas tampilan: ${_glassDisplayMl.toInt()} ml',
-              style: _monoStyle(10)),
+              style: _monoStyle(11)),
         ],
       ),
     );
@@ -1478,7 +1478,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('SISA WAKTU', style: _monoStyle(10)),
+              Text('Sisa waktu', style: _monoStyle(11)),
               const Spacer(),
               Text('target ${t.targetIntervalMin.toStringAsFixed(1)} menit',
                   style: _monoStyle(11)),
@@ -1506,7 +1506,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: _monoStyle(10)),
+            Text(label, style: _monoStyle(11)),
             const SizedBox(height: 6),
             Text('${value.toStringAsFixed(1)}$unit',
                 style: _monoStyle(20, color: _ink, weight: FontWeight.w600)),
@@ -1523,7 +1523,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               children: [
                 // Firmware tidak punya jam (CLAUDE.md §4: tanpa NTP), jadi angkanya
                 // kumulatif sejak reset manual, bukan per hari kalender.
-                Text('TOTAL SEJAK RESET', style: _monoStyle(10)),
+                Text('Total sejak reset', style: _monoStyle(11)),
                 const Spacer(),
                 Text('${t.totalMl.toStringAsFixed(1)} ml',
                     style: _monoStyle(20, color: _water, weight: FontWeight.w600)),
@@ -1532,31 +1532,37 @@ class _DashboardScreenState extends State<DashboardScreen>
             const SizedBox(height: 12),
             Row(
               children: [
-                _countCell('MINUM', '${t.drinkCount}', _ok),
-                _countCell('ISI ULANG', '${t.refillCount}', _water),
-                _countCell('CURANG', '${t.cheatCount}', _alarm),
+                _countCell('Minum', '${t.drinkCount}', _ok),
+                _countCell('Isi ulang', '${t.refillCount}', _water),
+                _countCell('Curang', '${t.cheatCount}', _alarm),
               ],
             ),
           ],
         ),
       );
 
+  // Tanpa Semantics, pembaca layar membacakan angka dan label sebagai dua teks
+  // lepas tanpa hubungan. Label gabungan membuat satu sel terbaca utuh.
   Widget _countCell(String label, String value, Color color) => Expanded(
-        child: Container(
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: _panel2,
-            border: Border.all(color: _line),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            children: [
-              Text(value,
-                  style: _monoStyle(18, color: color, weight: FontWeight.w600)),
-              const SizedBox(height: 2),
-              Text(label, style: _monoStyle(10)),
-            ],
+        child: Semantics(
+          label: '$label: $value',
+          excludeSemantics: true,
+          child: Container(
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: _panel2,
+              border: Border.all(color: _line),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                Text(value,
+                    style: _monoStyle(18, color: color, weight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(label, style: _monoStyle(11)),
+              ],
+            ),
           ),
         ),
       );
@@ -1569,7 +1575,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('KONTROL', style: _monoStyle(10, color: _water)),
+          Text('Kontrol', style: _monoStyle(11, color: _water)),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -1639,7 +1645,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           ],
           const SizedBox(height: 12),
           Text('Kalibrasi gelas kosong dan tare lewat USB.',
-              style: _monoStyle(10, color: _dim)),
+              style: _monoStyle(11, color: _dim)),
           if (widget.onClaimDevice != null) ...[
             const Divider(color: _line, height: 20),
             Text('Node alat', style: _monoStyle(12, color: _ink)),
@@ -1648,7 +1654,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               _session.hasDevice
                   ? 'tertaut: ${_session.deviceUid}'
                   : 'belum tertaut, memakai node akun',
-              style: _monoStyle(10, color: _session.hasDevice ? _ok : _warn),
+              style: _monoStyle(11, color: _session.hasDevice ? _ok : _warn),
             ),
             const SizedBox(height: 10),
             Align(
@@ -1759,7 +1765,7 @@ class _ClaimScreenState extends State<ClaimScreen> {
               ),
               const SizedBox(height: 16),
               Text('Sudah ditautkan di perangkat lain? Cukup masukkan kodenya sekali lagi.',
-                  style: _monoStyle(10, color: _dim)),
+                  style: _monoStyle(11, color: _dim)),
               if (widget.onCancel != null) ...[
                 const SizedBox(height: 24),
                 TextButton(
