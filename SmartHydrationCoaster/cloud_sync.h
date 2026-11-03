@@ -490,46 +490,86 @@ static void wifiOnSaveParams() {
     Serial.printf("[WIFI] Portal menyimpan SSID \"%s\"\n", wifiPortalSsid.c_str());
 }
 
+// Portal dibuka tanpa memblokir: autoConnect() menahan core 1 sampai 180 dtk,
+// dan selama itu sampling 10 Hz serta gerbang stabilitas 1,5 dtk berhenti.
+// handleWifiPortal() dipanggil dari loop() dan hanya memproses satu putaran
+// server, jadi alat tetap mengukur sambil menunggu kredensial.
+static WiFiManager wifiMgr;
+static bool portalActive = false;
+static uint32_t portalStartedMs = 0;
+
 inline void startWifiPortal(bool force) {
-    WiFiManager wm;
-    wm.setConfigPortalTimeout(180);
-    wm.setConnectTimeout(20);
-    WiFiManagerParameter pSsid("ssid", "Nama Wi-Fi (2.4 GHz)", "", 33);
-    WiFiManagerParameter pPass("pass", "Kata sandi", "", 65);
-    wm.addParameter(&pSsid);
-    wm.addParameter(&pPass);
-    wm.setSaveParamsCallback([&]() {
+    if (portalActive) return;
+    wifiMgr.setConfigPortalBlocking(false);
+    // Batas waktu tidak berlaku di mode non-blocking; batasnya dijaga sendiri
+    // lewat portalStartedMs di handleWifiPortal().
+    wifiMgr.setConnectTimeout(20);
+    static WiFiManagerParameter pSsid("ssid", "Nama Wi-Fi (2.4 GHz)", "", 33);
+    static WiFiManagerParameter pPass("pass", "Kata sandi", "", 65);
+    wifiMgr.addParameter(&pSsid);
+    wifiMgr.addParameter(&pPass);
+    wifiMgr.setSaveParamsCallback([&]() {
         wifiPortalSsid = pSsid.getValue();
         wifiPortalPass = pPass.getValue();
         wifiOnSaveParams();
     });
-    Serial.println(F("[WIFI] Portal dibuka. Sambungkan ponsel ke Wi-Fi \"Coaster-Setup\" "
-                     "(sandi: coaster123), lalu isi nama dan sandi jaringan rumah."));
-    if (!wm.autoConnect("Coaster-Setup", "coaster123")) {
-        Serial.println(F("[WIFI] Portal berakhir tanpa kredensial. Alat berjalan luring; "
-                         "kirim 'w<SSID>|<sandi>' lewat serial atau nyalakan ulang."));
-        WiFi.mode(WIFI_STA);
+    Serial.printf("[WIFI] Portal dibuka. Sambungkan ponsel ke Wi-Fi \"%s\" "
+                  "(sandi: %s), lalu isi nama dan sandi jaringan rumah.\n",
+                  PORTAL_AP_NAME, PORTAL_AP_PASS);
+    wifiMgr.startConfigPortal(PORTAL_AP_NAME, PORTAL_AP_PASS);
+    portalActive = true;
+    portalStartedMs = millis();
+}
+
+// Dipanggil dari loop() core 1. Mengembalikan true bila portal masih terbuka.
+// Bila kredensial tersimpan tidak lagi berlaku (router pindah atau sandi
+// berganti), alat akan diam tanpa portal sampai dicolok USB. Deteksi lewat
+// waktu, bukan lewat penantian yang memblokir: setelah 30 dtk gagal konek,
+// portal dibuka dan pengguna bisa memperbaiki dari ponsel.
+static uint32_t wifiAttemptMs = 0;
+
+inline void checkWifiStale() {
+    if (portalActive) return;
+    if (activeWifiSsid.length() == 0) return;
+    if (WiFi.status() == WL_CONNECTED) { wifiAttemptMs = 0; return; }
+    if (wifiAttemptMs == 0) { wifiAttemptMs = millis(); return; }
+    if (millis() - wifiAttemptMs > 30000UL) {
+        Serial.println(F("[WIFI] Gagal tersambung 30 dtk: membuka portal."));
+        wifiAttemptMs = 0;
+        startWifiPortal(true);
     }
 }
 
+inline bool handleWifiPortal() {
+    if (!portalActive) return false;
+    wifiMgr.process();
+    if (WiFi.status() == WL_CONNECTED && activeWifiSsid.length() > 0) {
+        portalActive = false;
+        Serial.printf("[WIFI] Tersambung ke \"%s\"\n", activeWifiSsid.c_str());
+        return false;
+    }
+    if (millis() - portalStartedMs > 180000UL) {
+        portalActive = false;
+        wifiMgr.stopConfigPortal();
+        WiFi.mode(WIFI_STA);
+        Serial.println(F("[WIFI] Portal ditutup tanpa kredensial. Kirim 'w<SSID>|<sandi>' "
+                         "lewat serial atau nyalakan ulang."));
+        return false;
+    }
+    return true;
+}
+
+inline bool wifiPortalIsOpen() { return portalActive; }
+
 inline void startCloudIfNeeded() {
     if (activeWifiSsid.length() == 0) {
-        Serial.println(F("[CLOUD] SSID kosong: menyiapkan portal Wi-Fi."));
+        Serial.println(F("[CLOUD] SSID kosong: membuka portal Wi-Fi."));
         startWifiPortal(true);
-    } else {
+    } else if (!portalActive) {
         WiFi.mode(WIFI_STA);
         WiFi.begin(activeWifiSsid.c_str(), activeWifiPass.c_str());
+        wifiAttemptMs = millis();
         Serial.printf("[CLOUD] Menghubungkan Wi-Fi \"%s\"...\n", activeWifiSsid.c_str());
-        // Kredensial tersimpan bisa sudah tidak berlaku (router pindah/ganti sandi).
-        // Tanpa portal di sini, alat mati diam sampai dicolok USB.
-        uint32_t t0 = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000UL) {
-            delay(200);
-        }
-        if (WiFi.status() != WL_CONNECTED) {
-            Serial.println(F("[WIFI] Gagal tersambung 20 dtk: membuka portal."));
-            startWifiPortal(true);
-        }
     }
     if (activeFirebaseUrl.length() == 0) {
         Serial.println(F("[CLOUD] URL Firebase kosong: cloud tidak dijalankan. "

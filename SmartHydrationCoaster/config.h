@@ -14,6 +14,15 @@
                              // supaya board yang punya LED tetap punya indikator.
 #define DHT_TYPE       11
 
+// Portal WiFi: nama dan sandi AP sementara saat alat belum punya kredensial.
+// Sandi bisa diganti lewat secrets.h (PORTAL_AP_PASS) tanpa menyentuh logika.
+#ifndef PORTAL_AP_NAME
+#define PORTAL_AP_NAME "Coaster-Setup"
+#endif
+#ifndef PORTAL_AP_PASS
+#define PORTAL_AP_PASS "coaster123"
+#endif
+
 // Polaritas aktuator (terverifikasi modul 2026-10-05)
 #define BUZZER_ACTIVE_LOW 1   // modul PNP S8550: LOW = bunyi (VCC wajib 3V3)
 #define MOTOR_ACTIVE_LOW  0   // modul NPN S8050: HIGH = getar (VCC 5V)

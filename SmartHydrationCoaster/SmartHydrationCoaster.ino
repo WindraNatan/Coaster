@@ -281,7 +281,6 @@ void handleSerialCommands(float currentFilteredWeight) {
 void setup() {
     Serial.begin(115200);
     Serial.setTimeout(30);
-    delay(500);
 
     pinMode(PIN_BUZZER, OUTPUT);
     pinMode(PIN_MOTOR, OUTPUT);
@@ -306,6 +305,11 @@ void setup() {
 void loop() {
     uint32_t nowMs = millis();
     float filteredWeight = weightFilter.getAverage();
+
+    // Portal WiFi diproses di sini, bukan di dalam autoConnect(): alat tetap
+    // mengukur 10 Hz dan gerbang stabilitas tetap jalan saat portal terbuka.
+    handleWifiPortal();
+    checkWifiStale();
 
     handleSerialCommands(filteredWeight);
 
