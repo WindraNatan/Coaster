@@ -1,12 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth.dart';
 import 'project_config.dart';
+import 'reminder.dart';
 import 'telemetry.dart';
 
 // Palet & tipografi mengikuti identitas web PWA (web/index.html :root):
@@ -564,6 +569,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   CloudConfig? _cfg;
   String? _error;
   bool _loading = true;
+  bool _remindOn = false;
+  String? _remindSound;      // URI audio pilihan pengguna; null = nada bawaan
+  bool _remindVibrate = true;
+  Duration? _remindLeft;
+  bool _exactOk = true;
+  Timer? _remindTick;
   bool _polling = false;
   DateTime? _lastSync;
   Timer? _timer;
@@ -583,6 +594,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _pulse = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
     WidgetsBinding.instance.addObserver(this);
+    _loadReminder();
     _poll();
     _startPolling();
   }
@@ -648,6 +660,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       _loading = false;
       _lastSync = DateTime.now();
     });
+    _syncReminderOnData();
   }
 
   void _restartStream() {
@@ -683,6 +696,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopPolling();
+    _remindTick?.cancel();
+    _remindTick = null;
     _streamRetry?.cancel();
     _streamRetry = null;
     _client.close();
@@ -730,6 +745,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           _loading = false;
           _lastSync = DateTime.now();
         });
+        _syncReminderOnData();
       } else {
         // Node kosong / telemetry belum pernah ditulis firmware.
         if (!mounted) return;
@@ -776,11 +792,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _setMuted(bool v) {
+    HapticFeedback.selectionClick();
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(muted: v));
     _patchConfig({'muted': v});
   }
 
   void _setMode(String mode) {
+    HapticFeedback.selectionClick();
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(timerMode: mode));
     _patchConfig({'timer_mode': mode});
   }
@@ -872,7 +890,15 @@ class _DashboardScreenState extends State<DashboardScreen>
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: RefreshIndicator(
+          color: _water,
+          backgroundColor: _panel,
+          onRefresh: () async {
+            await _poll();
+            await _syncReminder();
+          },
+          child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -936,6 +962,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 12),
                 _countdownCard(t),
                 const SizedBox(height: 12),
+                _reminderCard(),
+                const SizedBox(height: 12),
                 IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -953,17 +981,219 @@ class _DashboardScreenState extends State<DashboardScreen>
                 _controlsCard(),
                 const SizedBox(height: 12),
                 Text(
-                  'RTDB: ${Uri.parse(_base).host} · poll 2,5 s · '
-                  'angka dari firmware, bukan simulasi. '
-                  'Skala gelas tampilan: ${_glassDisplayMl.toInt()} ml.',
+                  'RTDB: ${Uri.parse(_base).host} · stream langsung · '
+                  'skala gelas tampilan ${_glassDisplayMl.toInt()} ml.',
                   style: _monoStyle(10, color: _dim),
                 ),
               ],
             ],
           ),
+          ),
         ),
       ),
     );
+  }
+
+
+  // ── Pengingat minum ───────────────────────────────────────────────────────
+  // Pengingat dijadwalkan ulang setiap kali sisa waktu dari alat berubah, supaya
+  // alarm di ponsel mengikuti jadwal alat — bukan tebakan jam sendiri. Nilai
+  // disimpan di SharedPreferences agar tetap berlaku setelah aplikasi ditutup.
+  Future<void> _loadReminder() async {
+    final prefs = await SharedPreferences.getInstance();
+    _remindOn = prefs.getBool('remind_on') ?? false;
+    _remindSound = prefs.getString('remind_sound');
+    _remindVibrate = prefs.getBool('remind_vibrate') ?? true;
+    _exactOk = await ReminderService.canExact();
+    await ReminderService.ensureChannel();
+    if (_remindOn) _syncReminder();
+    if (!mounted) return;
+    setState(() {});
+    _startRemindTick();
+  }
+
+  void _startRemindTick() {
+    _remindTick?.cancel();
+    _remindTick = Timer.periodic(const Duration(seconds: 1), (_) async {
+      final left = await ReminderService.timeLeft();
+      if (!mounted) return;
+      if (left != _remindLeft) setState(() => _remindLeft = left);
+    });
+  }
+
+  Future<void> _saveReminderPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('remind_on', _remindOn);
+    await prefs.setBool('remind_vibrate', _remindVibrate);
+    if (_remindSound == null) {
+      await prefs.remove('remind_sound');
+    } else {
+      await prefs.setString('remind_sound', _remindSound!);
+    }
+  }
+
+  /// Menjadwalkan alarm mengikuti sisa waktu yang dilaporkan alat. Dipanggil saat
+  /// data masuk dan saat pengguna menyalakan pengingat.
+
+  // Alarm hanya dijadwalkan ulang saat sisa waktu berubah lebih dari 20 dtk.
+  // Menjadwalkan setiap event SSE akan membatalkan-pasang alarm puluhan kali per
+  // menit tanpa manfaat.
+  int _lastScheduledSec = -1;
+  void _syncReminderOnData() {
+    if (!_remindOn) return;
+    final t = _t;
+    if (t == null) return;
+    if (t.remainingSec <= 0 && _lastScheduledSec == 0) return;
+    if ((t.remainingSec - _lastScheduledSec).abs() < 20 && _lastScheduledSec >= 0) return;
+    _lastScheduledSec = t.remainingSec;
+    _syncReminder();
+  }
+
+  Future<void> _syncReminder() async {
+    if (!_remindOn) {
+      await ReminderService.cancel();
+      return;
+    }
+    final t = _t;
+    if (t == null) return;
+    // Hanya alarm saat alat menunggu minum; alert lain (isi ulang, curang) punya
+    // arti berbeda, jadi tidak boleh berbunyi dengan pesan yang salah.
+    if (t.canonicalState != 'ALERT_DRINK' && t.remainingSec <= 0) return;
+    if (t.remainingSec <= 0) return;
+    await ReminderService.schedule(
+      lead: Duration(seconds: t.remainingSec),
+      sound: _remindSound,
+      vibrate: _remindVibrate,
+    );
+  }
+
+  Future<void> _toggleRemind(bool on) async {
+    HapticFeedback.selectionClick();
+    setState(() => _remindOn = on);
+    await _saveReminderPrefs();
+    if (on) {
+      _exactOk = await ReminderService.canExact();
+      await _syncReminder();
+      await ReminderService.preview(_remindSound);
+    } else {
+      await ReminderService.cancel();
+      setState(() => _remindLeft = null);
+    }
+  }
+
+  Future<void> _pickSound() async {
+    final files = await FilePicker.pickFiles(type: FileType.audio);
+    final picked = files.isEmpty ? null : files.first.path;
+    if (picked == null) return;
+    // URI content:// dari pemilih Android hanya bisa dibaca selama izin sementara
+    // berlaku; alarm berbunyi berjam-jam kemudian, jadi berkasnya disalin dulu ke
+    // penyimpanan aplikasi. Tanpa salinan, alarm akan senyap.
+    final dir = await getApplicationDocumentsDirectory();
+    final ext = picked.contains('.') ? picked.split('.').last : 'audio';
+    final dest = File('${dir.path}/remind_sound.$ext');
+    try {
+      await File(picked).copy(dest.path);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tidak bisa membaca berkas audio itu.')));
+      return;
+    }
+    setState(() => _remindSound = 'file://${dest.path}');
+    await _saveReminderPrefs();
+    await ReminderService.preview(_remindSound);
+  }
+
+  Future<void> _useDefaultSound() async {
+    setState(() => _remindSound = null);
+    await _saveReminderPrefs();
+    await ReminderService.preview(null);
+  }
+
+  Widget _reminderCard() => _card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('PENGINGAT MINUM', style: _monoStyle(10)),
+                const Spacer(),
+                Switch(value: _remindOn, onChanged: _toggleRemind),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _remindOn
+                  ? (_remindLeft != null
+                      ? 'Berbunyi dalam ${Telemetry.mmss(_remindLeft!.inSeconds)}'
+                      : 'Menunggu jadwal dari alat…')
+                  : 'Nonaktif',
+              style: _monoStyle(12, color: _remindOn ? _water : _dim),
+            ),
+            if (_remindOn) ...[
+              const SizedBox(height: 10),
+              Text(_remindSound == null
+                      ? 'Nada: bawaan'
+                      : 'Nada: ${_shortPath(_remindSound!)}',
+                  style: _monoStyle(11), overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: _pickSound,
+                    style: _reminderBtn(),
+                    child: Text('Pilih audio', style: _monoStyle(11, color: _water)),
+                  ),
+                  OutlinedButton(
+                    onPressed: _useDefaultSound,
+                    style: _reminderBtn(),
+                    child: Text('Nada bawaan', style: _monoStyle(11, color: _water)),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => ReminderService.preview(_remindSound),
+                    style: _reminderBtn(),
+                    child: Text('Uji', style: _monoStyle(11, color: _water)),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Text('Getar', style: _monoStyle(11)),
+                  Switch(
+                    value: _remindVibrate,
+                    onChanged: (v) async {
+                      setState(() => _remindVibrate = v);
+                      await _saveReminderPrefs();
+                      await _syncReminder();
+                    },
+                  ),
+                ],
+              ),
+              if (!_exactOk)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Izin alarm tepat waktu belum aktif. Pengingat bisa meleset beberapa menit; '
+                    'aktifkan di Pengaturan › Aplikasi › Alarm & pengingat.',
+                    style: _monoStyle(10, color: _warn),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      );
+
+  ButtonStyle _reminderBtn() => OutlinedButton.styleFrom(
+        side: const BorderSide(color: _line),
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+      );
+
+  String _shortPath(String uri) {
+    final name = uri.split('/').last;
+    return name.length > 28 ? '…${name.substring(name.length - 26)}' : name;
   }
 
   Widget _syncLine() => Row(

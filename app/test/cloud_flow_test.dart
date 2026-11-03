@@ -131,9 +131,14 @@ void main() {
     await tester.pump();
     expect(find.text('ON'), findsOneWidget);
 
-    await tester.ensureVisible(find.byType(Switch));
+    // Kartu pengingat juga punya Switch, jadi cari yang satu baris dengan 'Buzzer'.
+    final buzzerSwitch = find.descendant(
+        of: find.ancestor(
+            of: find.text('Buzzer'), matching: find.byType(Row)).first,
+        matching: find.byType(Switch));
+    await tester.ensureVisible(buzzerSwitch);
     await tester.pump();
-    await tester.tap(find.byType(Switch));
+    await tester.tap(buzzerSwitch);
     await tester.pump();
 
     expect(patches, ['/users/uid-test/smart_coaster/config.json {"muted":true}']);
@@ -165,7 +170,10 @@ void main() {
     // terisi dari body config (timer_mode MANUAL). Hilang -> mock/path bermasalah;
     // muncul tapi switch false -> presedensi muted yang rusak.
     expect(find.text('Interval dasar (menit)'), findsOneWidget);
-    final sw = tester.widget<Switch>(find.byType(Switch));
+    final sw = tester.widget<Switch>(find.descendant(
+        of: find.ancestor(
+            of: find.text('Buzzer'), matching: find.byType(Row)).first,
+        matching: find.byType(Switch)));
     expect(sw.value, isTrue,
         reason: 'config.muted=true harus menang atas telemetry.muted=false yang basi');
   });
