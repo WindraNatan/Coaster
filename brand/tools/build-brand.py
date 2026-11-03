@@ -124,28 +124,22 @@ def icon(scale=0.72, pad=70):
     """Ikon PWA: tanda yang sama dengan logo, di atas bidang tinta.
 
     Isi diperkecil ke area aman maskable (72%) supaya tidak terpotong saat
-    launcher memakai bentuk bulat atau squircle.
+    launcher memakai bentuk bulat atau squircle. Geometrinya tidak disalin:
+    mark() dipakai apa adanya, jadi ikon tidak bisa menyimpang dari logo.
     """
-    body = 'M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z'
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Smart Hydration Coaster">
   <title>Smart Hydration Coaster</title>
-  <rect width="512" height="512" rx="112" fill="#0C1F27"/>
+  <rect width="512" height="512" rx="112" fill="#071219"/>
   <defs>
-    <clipPath id="cup">
-      <path d="{body}"/>
+    <clipPath id="body">
+      <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z"/>
     </clipPath>
   </defs>
   <g transform="translate({pad} {pad}) scale({scale})">
-    <ellipse cx="256" cy="404" rx="176" ry="54" fill="#0A1920"/>
-    <ellipse cx="256" cy="386" rx="176" ry="54" fill="#132B35" stroke="#2FA8C4" stroke-width="13"/>
-    <path d="{body}" fill="#0C1F27"/>
-    <rect x="160" y="286" width="192" height="120" fill="#44C8E6" clip-path="url(#cup)"/>
-    <ellipse cx="256" cy="286" rx="79" ry="26" fill="#8FE9F7"/>
-    <ellipse cx="256" cy="158" rx="88" ry="30" fill="#0C1F27" stroke="#8FB3BD" stroke-width="9"/>
+{mark('dark')}
   </g>
 </svg>
 '''
-
 
 
 def android_foreground(scale=0.72, pad=70):
@@ -157,8 +151,9 @@ def android_foreground(scale=0.72, pad=70):
     """
     body = 'M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z'
     return f'''<?xml version="1.0" encoding="utf-8"?>
-<!-- Dihasilkan brand/tools/build-brand.py. Jangan disunting manual: ubah
-     generator agar tanda, ikon web, dan ikon Android tetap satu bentuk. -->
+<!-- Dihasilkan android_foreground() di brand/tools/build-brand.py.
+     Jangan disunting manual: ubah generator agar tanda, ikon web, dan ikon
+     Android tetap satu bentuk. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -168,15 +163,15 @@ def android_foreground(scale=0.72, pad=70):
     <group android:translateX="{pad}" android:translateY="{pad}"
            android:scaleX="{scale}" android:scaleY="{scale}">
         <path
-            android:fillColor="#0A1920"
+            android:fillColor="#071219"
             android:pathData="M80,404 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
         <path
-            android:fillColor="#132B35"
-            android:strokeColor="#2FA8C4"
+            android:fillColor="#173743"
+            android:strokeColor="#44C8E6"
             android:strokeWidth="13"
             android:pathData="M80,386 a176,54 0 1 0 352,0 a176,54 0 1 0 -352,0 z" />
         <path
-            android:fillColor="#0C1F27"
+            android:fillColor="#143440"
             android:pathData="{body}" />
         <group>
             <clip-path android:pathData="{body}" />
@@ -185,11 +180,11 @@ def android_foreground(scale=0.72, pad=70):
                 android:pathData="M160,286 h192 v120 h-192 z" />
         </group>
         <path
-            android:fillColor="#8FE9F7"
+            android:fillColor="#7FE3F4"
             android:pathData="M177,286 a79,26 0 1 0 158,0 a79,26 0 1 0 -158,0 z" />
         <path
-            android:fillColor="#0C1F27"
-            android:strokeColor="#8FB3BD"
+            android:fillColor="#143440"
+            android:strokeColor="#9FC4CE"
             android:strokeWidth="9"
             android:pathData="M168,158 a88,30 0 1 0 176,0 a88,30 0 1 0 -176,0 z" />
     </group>
