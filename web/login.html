@@ -263,7 +263,14 @@ if (new URLSearchParams(location.search).get('next') === 'dashboard'
   location.replace('index.html?mode=cloud');
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (sessionStorage.getItem('shc_sw_reloaded')) return;
+    sessionStorage.setItem('shc_sw_reloaded', '1');
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

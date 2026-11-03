@@ -227,6 +227,62 @@ void main() {
     expect(st.json['timer_mode'], 'MANUAL');
   });
 
+  // Regresi penjadwalan pengingat. Dua bug nyata yang pernah terjadi:
+  // (1) ambang pada sisa detik membuat siklus demo 15->0->15 selalu terlewat,
+  //     sehingga alarm hanya berbunyi sekali;
+  // (2) alarm alert lain (isi ulang/curang) dibiarkan menggantung.
+  group('penjadwalan pengingat', () {
+    final t0 = DateTime(2026, 11, 3, 10);
+
+    test('siklus demo kedua tetap dijadwalkan', () {
+      final first = t0.add(const Duration(seconds: 15));
+      expect(shouldScheduleReminder(state: 'TIMING', target: first), isTrue);
+
+      // Siklus berikutnya: target baru 15 dtk lagi, dan sebelumnya sudah lewat.
+      final second = t0.add(const Duration(seconds: 30));
+      expect(
+          shouldScheduleReminder(
+              state: 'TIMING',
+              target: second,
+              current: ReminderPlan('TIMING', first)),
+          isTrue,
+          reason: 'jarak 15 dtk harus lolos; ambang 20 dtk dulu memblokirnya');
+    });
+
+    test('event stream berulang tidak memasang ulang alarm', () {
+      final target = t0.add(const Duration(minutes: 5));
+      expect(
+          shouldScheduleReminder(
+              state: 'TIMING',
+              target: target.add(const Duration(seconds: 3)),
+              current: ReminderPlan('TIMING', target)),
+          isFalse,
+          reason: 'geseran 3 dtk masih dalam toleransi');
+      expect(
+          shouldScheduleReminder(
+              state: 'ALERT_DRINK',
+              target: target,
+              current: ReminderPlan('TIMING', target)),
+          isTrue,
+          reason: 'perubahan state wajib menjadwalkan ulang');
+    });
+
+    test('alert selain waktu minum tidak memicu alarm', () {
+      expect(stateAllowsReminder('ALERT_REFILL'), isFalse);
+      expect(stateAllowsReminder('ALERT_CHEAT'), isFalse);
+      expect(stateAllowsReminder('LIFTED'), isFalse);
+      expect(stateAllowsReminder('ALERT_DRINK'), isTrue);
+      expect(stateAllowsReminder('TIMING'), isTrue);
+    });
+
+    test('lead 15 dtk tidak dibulatkan ke satu menit', () {
+      expect(ReminderService.clampLead(const Duration(seconds: 15)),
+          const Duration(seconds: 15));
+      expect(ReminderService.clampLead(const Duration(seconds: 1)),
+          const Duration(seconds: 5));
+    });
+  });
+
   testWidgets('mode MANUAL memperlihatkan field interval', (tester) async {
     final client = MockClient((req) async => Response(
         req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200));

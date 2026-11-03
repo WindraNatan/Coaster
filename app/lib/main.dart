@@ -1081,17 +1081,28 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// Menjadwalkan alarm mengikuti sisa waktu yang dilaporkan alat. Dipanggil saat
   /// data masuk dan saat pengguna menyalakan pengingat.
 
-  // Alarm hanya dijadwalkan ulang saat sisa waktu berubah lebih dari 20 dtk.
-  // Menjadwalkan setiap event SSE akan membatalkan-pasang alarm puluhan kali per
-  // menit tanpa manfaat.
-  int _lastScheduledSec = -1;
+  // Jadwal alarm dibandingkan lewat deadline absolut; aturannya ada di
+  // ReminderPlan/shouldScheduleReminder agar bisa diuji tanpa widget.
+  ReminderPlan? _plan;
+
   void _syncReminderOnData() {
     if (!_remindOn) return;
     final t = _t;
     if (t == null) return;
-    if (t.remainingSec <= 0 && _lastScheduledSec == 0) return;
-    if ((t.remainingSec - _lastScheduledSec).abs() < 20 && _lastScheduledSec >= 0) return;
-    _lastScheduledSec = t.remainingSec;
+    if (!stateAllowsReminder(t.canonicalState)) {
+      if (_plan != null) {
+        _plan = null;
+        ReminderService.cancel();
+      }
+      return;
+    }
+    if (t.remainingSec <= 0) return;
+    final target = DateTime.now().add(Duration(seconds: t.remainingSec));
+    if (!shouldScheduleReminder(
+        state: t.canonicalState, target: target, current: _plan)) {
+      return;
+    }
+    _plan = ReminderPlan(t.canonicalState, target);
     _syncReminder();
   }
 
@@ -1102,10 +1113,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     final t = _t;
     if (t == null) return;
-    // Hanya alarm saat alat menunggu minum; alert lain (isi ulang, curang) punya
-    // arti berbeda, jadi tidak boleh berbunyi dengan pesan yang salah.
-    if (t.canonicalState != 'ALERT_DRINK' && t.remainingSec <= 0) return;
-    if (t.remainingSec <= 0) return;
+    // Tanpa sisa waktu tidak ada yang bisa dijadwalkan; alarm yang sudah ada
+    // dibatalkan supaya tidak berbunyi di waktu yang tidak lagi berlaku.
+    if (t.remainingSec <= 0) {
+      await ReminderService.cancel();
+      _plan = null;
+      return;
+    }
     await ReminderService.schedule(
       lead: Duration(seconds: t.remainingSec),
       sound: _remindSound,

@@ -538,6 +538,14 @@ $('bInstall').addEventListener('click', async () => {
   $('bInstall').style.display = 'none';
 });
 if ('serviceWorker' in navigator){
+  // Worker lama bisa menyajikan HTML baru bersama JS lama, sehingga halaman
+  // memanggil fungsi yang belum ada di berkas yang tersaji. Saat worker baru
+  // mengambil alih, muat ulang SEKALI (dijaga sessionStorage agar tidak berputar).
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (sessionStorage.getItem('shc_sw_reloaded')) return;
+    sessionStorage.setItem('shc_sw_reloaded', '1');
+    location.reload();
+  });
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 

@@ -105,3 +105,43 @@ class ReminderService {
     }
   }
 }
+
+/// Jadwal alarm yang sedang terpasang, dipakai untuk memutuskan apakah perlu
+/// dipasang ulang.
+class ReminderPlan {
+  final String state;
+  final DateTime target;
+  const ReminderPlan(this.state, this.target);
+
+  @override
+  bool operator ==(Object other) =>
+      other is ReminderPlan && other.state == state && other.target == target;
+
+  @override
+  int get hashCode => Object.hash(state, target);
+}
+
+/// State yang boleh memicu pengingat. Alert isi ulang atau curang punya arti
+/// berbeda; membiarkan alarmnya berbunyi berarti berbohong soal sebabnya.
+bool stateAllowsReminder(String canonicalState) =>
+    canonicalState == 'ALERT_DRINK' ||
+    canonicalState == 'TIMING' ||
+    canonicalState == 'STABLE';
+
+/// Apakah jadwal perlu dipasang ulang.
+///
+/// Perbandingan memakai deadline absolut, bukan sisa detik. Ambang pada sisa
+/// detik membuat siklus demo 15->0->15 selalu terlewat (selisih 15 kurang dari
+/// ambang 20), sehingga alarm hanya berbunyi sekali. Toleransi [tolerance]
+/// mencegah pemasangan ulang pada setiap event stream.
+bool shouldScheduleReminder({
+  required String state,
+  required DateTime target,
+  ReminderPlan? current,
+  Duration tolerance = const Duration(seconds: 10),
+}) {
+  if (current == null) return true;
+  if (current.state != state) return true;
+  final drift = target.difference(current.target).abs();
+  return drift > tolerance;
+}
