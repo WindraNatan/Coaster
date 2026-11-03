@@ -1283,7 +1283,8 @@ render();
 
 // login.html menautkan ke ?mode=cloud supaya pengguna yang baru masuk langsung
 // melihat data cloud, bukan Simulator.
-if (new URLSearchParams(location.search).get('mode') === 'cloud') setConnMode('cloud');
+const _startMode = new URLSearchParams(location.search).get('mode');
+if (_startMode === 'cloud' || _startMode === 'usb') setConnMode(_startMode);
 log('Smart Hydration Coaster siap. Pilih Simulator, USB Live, atau Cloud Firebase.', '');
 </script>
 </body>

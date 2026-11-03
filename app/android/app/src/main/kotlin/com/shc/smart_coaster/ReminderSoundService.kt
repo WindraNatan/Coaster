@@ -28,6 +28,10 @@ class ReminderSoundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Lepas pasangan sebelumnya lebih dulu: alarm yang datang saat audio
+        // masih berjalan tidak boleh menumpuk pemutar, dan callback lama tidak
+        // boleh melepas pemutar baru.
+        releasePlayer()
         val sound = intent?.getStringExtra("sound")
         val vibrate = intent?.getBooleanExtra("vibrate", true) ?: true
         startForegroundWithNotification(vibrate)
@@ -70,7 +74,7 @@ class ReminderSoundService : Service() {
         }
     }
 
-    private fun stopSelfSafely() {
+    private fun releasePlayer() {
         try {
             player?.release()
         } catch (_: Exception) {
@@ -78,6 +82,10 @@ class ReminderSoundService : Service() {
         player = null
         wake?.takeIf { it.isHeld }?.release()
         wake = null
+    }
+
+    private fun stopSelfSafely() {
+        releasePlayer()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_DETACH)
         } else {
@@ -88,13 +96,7 @@ class ReminderSoundService : Service() {
     }
 
     override fun onDestroy() {
-        try {
-            player?.release()
-        } catch (_: Exception) {
-        }
-        player = null
-        wake?.takeIf { it.isHeld }?.release()
-        wake = null
+        releasePlayer()
         super.onDestroy()
     }
 }
