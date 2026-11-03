@@ -68,7 +68,7 @@ void main() {
     expect(find.text('185 ml'), findsOneWidget); // air terdeteksi
     expect(find.text('07:03'), findsOneWidget); // mmss(423)
     expect(find.text('TIMING'), findsOneWidget); // badge state
-    expect(find.text('750 ml'), findsOneWidget); // total harian
+    expect(find.text('750.0 ml'), findsOneWidget); // total harian
     expect(find.text('27.0 °C'), findsOneWidget);
     expect(find.text('60.0 %'), findsOneWidget);
     expect(find.text('Gelas tidak di tatakan'), findsNothing);

@@ -32,7 +32,9 @@ const renderHistoryList = () => {};
 const todayKey = () => '2026-10-25';
 // eslint-disable-next-line no-new-func
 new Function('fsm', 'renderHistoryList', 'todayKey', 'localStorage',
-  extract('loadDailyHistory') + '\n' + extract('saveTodayStatsToHistory') +
+  extract('dayBaseline') + '\n' + extract('ensureDayBaseline') + '\n' +
+  extract('todayDelta') + '\n' + extract('loadDailyHistory') + '\n' +
+  extract('saveTodayStatsToHistory') +
   '\nglobal.loadDailyHistory = loadDailyHistory; global.saveTodayStatsToHistory = saveTodayStatsToHistory;'
 )(fsm, renderHistoryList, todayKey, global.localStorage);
 
@@ -41,11 +43,18 @@ const { loadDailyHistory, saveTodayStatsToHistory } = global;
 // 1. Simpan-dulu-baru-reset mempertahankan catatan hari ini (precedent bReset).
 fsm.totalDrank = 420; fsm.drinkCount = 3;
 saveTodayStatsToHistory();
-assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 420,
-  'angka pra-reset harus tersimpan');
+// Penyimpanan pertama memasang baseline tanggal, jadi harian = 0. Angka
+// kumulatif alat tidak lagi ditulis sebagai angka harian.
+assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 0,
+  'baseline dipasang pada penyimpanan pertama');
+
+fsm.totalDrank = 620; fsm.drinkCount = 4;
+saveTodayStatsToHistory();
+assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 200,
+  'selisih terhadap baseline dicatat sebagai harian');
 
 fsm.totalDrank = 0; fsm.drinkCount = 0;
-assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 420,
+assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 200,
   'reset setelah simpan tidak boleh menimpa riwayat yang sudah ada');
 
 // 2. Urutan terbalik (reset dulu, simpan kemudian) memang merusak riwayat:
@@ -84,4 +93,40 @@ assert(resetBody.indexOf('return;') > iGuard && resetBody.indexOf('return;') < i
   'guard cloud wajib return, bukan lanjut ke reset');
 
 console.log('[PASS] Guard Reset mode cloud urut sebelum resetStats');
+// Logika harian: alat tidak punya jam, jadi "hari ini" dihitung dari selisih
+// terhadap baseline tanggal. Tiga kasus yang pernah salah: ganti hari, reset
+// di alat, dan simulator yang menulis baseline.
+const store2 = {};
+const ls2 = {
+  getItem: k => (k in store2 ? store2[k] : null),
+  setItem: (k, v) => { store2[k] = String(v); },
+};
+
+let FAKE_TODAY = '2026-11-03';
+const dayKey = () => FAKE_TODAY;
+
+// eslint-disable-next-line no-new-func
+const dayApi = new Function('localStorage', 'todayKey',
+  extract('dayBaseline') + '\n' + extract('ensureDayBaseline') + '\n' +
+  extract('todayDelta') +
+  '\nreturn { dayBaseline, ensureDayBaseline, todayDelta };'
+)(ls2, dayKey);
+
+assert.strictEqual(dayApi.todayDelta(500, 2, 1, 0).total_ml, 0,
+  'baseline pertama = 0 ml hari ini');
+assert.strictEqual(dayApi.todayDelta(700, 3, 1, 0).total_ml, 200, 'selisih dari baseline');
+assert.strictEqual(dayApi.todayDelta(700, 3, 1, 0).drink_count, 1);
+
+// Ganti hari: baseline baru, bukan mewarisi kemarin.
+FAKE_TODAY = '2026-11-04';
+assert.strictEqual(dayApi.todayDelta(700, 3, 1, 0).total_ml, 0, 'hari baru mulai dari nol');
+assert.strictEqual(dayApi.todayDelta(850, 4, 1, 0).total_ml, 150, 'hari baru dihitung dari awal');
+
+// Reset di alat: total turun, baseline dipasang ulang agar tidak negatif.
+assert.strictEqual(dayApi.todayDelta(0, 0, 0, 0).total_ml, 0,
+  'reset alat tidak menghasilkan angka negatif');
+assert.strictEqual(dayApi.todayDelta(120, 1, 0, 0).total_ml, 120,
+  'minum setelah reset tetap terhitung');
+
+console.log('[PASS] Hitungan harian: baseline, ganti hari, reset alat');
 console.log('SEMUA LULUS (daily-history.test.js)');

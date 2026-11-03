@@ -25,7 +25,7 @@ void main() {
       expect(t.tempC, 27.0);
       expect(t.remainingSec, 423);
       expect(t.targetIntervalMin, 45.0);
-      expect(t.totalMl, 750);
+      expect(t.totalMl, 750.0);
       expect(t.drinkCount, 3);
       expect(t.refillCount, 1);
       expect(t.cheatCount, 2);

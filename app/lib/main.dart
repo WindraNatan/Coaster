@@ -595,6 +595,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         vsync: this, duration: const Duration(milliseconds: 500));
     WidgetsBinding.instance.addObserver(this);
     _loadReminder();
+    _loadHistory();
     _poll();
     _startPolling();
   }
@@ -705,6 +706,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       _loading = false;
       _lastSync = DateTime.now();
     });
+    _trackHeartbeat(_t!);
     _syncReminderOnData();
   }
 
@@ -1028,6 +1030,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 12),
                 _dailyCard(t),
                 const SizedBox(height: 12),
+                _historyCard(),
                 _controlsCard(),
                 const SizedBox(height: 12),
                 Text(
@@ -1273,20 +1276,95 @@ class _DashboardScreenState extends State<DashboardScreen>
     return name.length > 28 ? '…${name.substring(name.length - 26)}' : name;
   }
 
-  Widget _syncLine() => Row(
+  // Firmware menaikkan `hb` tiap push. Angka berat dan suhu bisa identik
+  // antar-kiriman, jadi hanya counter ini yang membedakan alat diam dari mati.
+  int? _lastHb;
+  DateTime? _lastHbAt;
+
+  void _trackHeartbeat(Telemetry t) {
+    if (t.heartbeat == 0) return; // firmware lama: belum mengirim hb
+    if (t.heartbeat != _lastHb) {
+      _lastHb = t.heartbeat;
+      _lastHbAt = DateTime.now();
+    }
+  }
+
+
+  // Riwayat harian: web menulis /daily/<tanggal> saat statistik berubah. App
+  // membacanya sekali saat dashboard dibuka, bukan tiap poll — node ini tumbuh
+  // dan app tidak butuh real-time untuk data kemarin.
+  List<MapEntry<String, Map<String, dynamic>>> _history = const [];
+  bool _historyLoaded = false;
+
+  Future<void> _loadHistory() async {
+    if (_historyLoaded) return;
+    _historyLoaded = true;
+    try {
+      final url = '${_session.coasterUrl(_base)}/daily.json${_session.suffix}';
+      final res = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return;
+      final raw = jsonDecode(res.body);
+      if (raw is! Map) return;
+      final entries = raw.entries
+          .where((e) => e.value is Map)
+          .map((e) => MapEntry(e.key as String,
+              Map<String, dynamic>.from(e.value as Map)))
+          .toList()
+        ..sort((a, b) => b.key.compareTo(a.key));
+      if (!mounted) return;
+      setState(() => _history = entries.take(7).toList());
+    } catch (_) {
+      // Riwayat tidak wajib: dashboard tetap jalan tanpa node ini.
+    }
+  }
+
+  Widget _historyCard() {
+    if (_history.isEmpty) return const SizedBox.shrink();
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('CLOUD', style: _monoStyle(11, color: _water)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _lastSync == null
-                  ? 'menunggu sinkron pertama…'
-                  : 'sinkron ${TimeOfDay.fromDateTime(_lastSync!).format(context)}',
-              style: _monoStyle(11),
+          Text('Riwayat', style: _monoStyle(11, color: _dim)),
+          const SizedBox(height: 8),
+          for (final e in _history)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(child: Text(e.key, style: _monoStyle(12, color: _ink))),
+                  Text(
+                    '${(e.value['total_ml'] as num? ?? 0).toStringAsFixed(1)} ml',
+                    style: _monoStyle(12, color: _water),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
-      );
+      ),
+    );
+  }
+
+  Widget _syncLine() {
+    final stale = _lastHbAt != null &&
+        DateTime.now().difference(_lastHbAt!).inSeconds > 90;
+    return Row(
+      children: [
+        Text('CLOUD',
+            style: _monoStyle(11, color: stale ? _alarm : _water)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            stale
+                ? 'Alat tidak mengirim data (${DateTime.now().difference(_lastHbAt!).inSeconds} detik)'
+                : _lastSync == null
+                    ? 'menunggu sinkron pertama…'
+                    : 'sinkron ${TimeOfDay.fromDateTime(_lastSync!).format(context)}',
+            style: _monoStyle(11, color: stale ? _alarm : _ink),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _card({required Widget child}) => Container(
         decoration: BoxDecoration(
@@ -1447,7 +1525,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 // kumulatif sejak reset manual, bukan per hari kalender.
                 Text('TOTAL SEJAK RESET', style: _monoStyle(10)),
                 const Spacer(),
-                Text('${t.totalMl} ml',
+                Text('${t.totalMl.toStringAsFixed(1)} ml',
                     style: _monoStyle(20, color: _water, weight: FontWeight.w600)),
               ],
             ),

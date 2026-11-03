@@ -16,7 +16,7 @@ class Telemetry {
   final double humidityPct;
   final int remainingSec;
   final double targetIntervalMin;
-  final int totalMl;
+  final double totalMl;
   final int drinkCount;
   final int refillCount;
   final int cheatCount;
@@ -25,6 +25,11 @@ class Telemetry {
   /// State mentah dari firmware: salah satu dari 7 state FSM, atau string
   /// turunan ALERT_EMPTY_CUP / ALERT_MISSING_CUP.
   final String rawState;
+
+  /// Nomor urut kiriman firmware. Naik setiap push, termasuk saat angkanya
+  /// tidak berubah. Dipakai untuk membedakan "alat diam" dari "alat mati":
+  /// berat dan suhu bisa identik antar-kiriman, counter tidak.
+  final int heartbeat;
 
   const Telemetry({
     required this.weightG,
@@ -39,6 +44,7 @@ class Telemetry {
     required this.cheatCount,
     required this.muted,
     required this.rawState,
+    required this.heartbeat,
   });
 
   factory Telemetry.fromJson(Map<String, dynamic> t) => Telemetry(
@@ -48,12 +54,13 @@ class Telemetry {
         humidityPct: _num(t['humidity_pct']),
         remainingSec: _int(t['remaining_sec']),
         targetIntervalMin: _num(t['target_interval_min']),
-        totalMl: _int(t['total_ml']),
+        totalMl: _num(t['total_ml']),
         drinkCount: _int(t['drink_count']),
         refillCount: _int(t['refill_count']),
         cheatCount: _int(t['cheat_count']),
         muted: t['muted'] == true,
         rawState: (t['fsm_state'] as String?) ?? 'IDLE',
+        heartbeat: _int(t['hb']),
       );
 
   bool get cupPresent => weightG >= kCupOffThresholdG;

@@ -225,7 +225,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 
     <div class="goal-box">
       <div class="goal-head">
-        <span>Progres target harian</span>
+        <span>Hari ini</span>
         <b><span id="goalPct">0</span>% (<span id="goalCur">0</span> / <span id="goalMax">2000</span> ml)</b>
       </div>
       <div class="goal-bar" aria-hidden="true"><i id="goalFill"></i></div>
@@ -235,7 +235,7 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
       <div><b id="cDrink">0</b><span>minum (x)</span></div>
       <div><b id="cCheat">0</b><span>curang</span></div>
       <div><b id="cRefill">0</b><span>isi ulang</span></div>
-      <div><b id="cTotal">0</b><span>total ml</span></div>
+      <div><b id="cTotal">0</b><span>total sejak reset</span></div>
     </div>
   </section>
 
@@ -388,14 +388,44 @@ function todayKey(){
 function loadDailyHistory(){
   try { return JSON.parse(localStorage.getItem('shc_daily_history') || '{}'); } catch(_){ return {}; }
 }
+// Alat tidak punya jam (tanpa NTP), jadi angka dari alat selalu kumulatif sejak
+// reset manual. "Harian" dihitung di sini: selisih terhadap nilai saat tanggal
+// berganti. Tanpa baseline, ganti hari akan membuat hari baru langsung terisi
+// semua air yang diminum kemarin.
+function dayBaseline(){
+  try { return JSON.parse(localStorage.getItem('shc_day_base') || 'null'); } catch(_){ return null; }
+}
+function ensureDayBaseline(totMl, drink, refill, cheat){
+  const k = todayKey();
+  const b = dayBaseline();
+  // Baseline ulang bila tanggal berganti ATAU hitungan alat turun: tombol reset
+  // di alat menolkan total, dan selisih terhadap baseline lama akan negatif
+  // sehingga semua minum sesudahnya hilang.
+  const turun = b && (totMl < b.total_ml || drink < b.drink_count);
+  if (b && b.date === k && !turun) return b;
+  const next = { date: k, total_ml: totMl, drink_count: drink, refill_count: refill, cheat_count: cheat };
+  localStorage.setItem('shc_day_base', JSON.stringify(next));
+  return next;
+}
+function todayDelta(totMl, drink, refill, cheat){
+  const b = ensureDayBaseline(totMl, drink, refill, cheat);
+  return {
+    total_ml: Math.max(0, totMl - b.total_ml),
+    drink_count: Math.max(0, drink - b.drink_count),
+    refill_count: Math.max(0, refill - b.refill_count),
+    cheat_count: Math.max(0, cheat - b.cheat_count)
+  };
+}
+
 function saveTodayStatsToHistory(){
   const hist = loadDailyHistory();
   const k = todayKey();
+  const d = todayDelta(Math.round(fsm.totalDrank), fsm.drinkCount, fsm.refillCount, fsm.cheatCount);
   hist[k] = {
-    total_ml: Math.round(fsm.totalDrank),
-    drink_count: fsm.drinkCount,
-    refill_count: fsm.refillCount,
-    cheat_count: fsm.cheatCount
+    total_ml: d.total_ml,
+    drink_count: d.drink_count,
+    refill_count: d.refill_count,
+    cheat_count: d.cheat_count
   };
   // localStorage dibatasi ~5 MB; satu kunci per hari tanpa batas atas akan
   // menumpuk selamanya. Yang ditampilkan hanya 5 hari terakhir.
@@ -851,6 +881,10 @@ function handleSerialLine(line){
 }
 
 let cloudTimer = null, lastCloudPushMs = 0;
+// Heartbeat: firmware menaikkan `hb` setiap push. Angka berat dan suhu bisa
+// identik antar-kiriman, jadi hanya counter yang bisa membedakan "alat diam"
+// dari "alat mati". 90 dtk = tiga kali siklus push normal + kelonggaran.
+let lastHb = null, lastHbAt = 0;
 
 // Akun sekarang dikelola di login.html. Di sini hanya ditampilkan statusnya,
 // supaya dashboard tidak menampung form email/password/API key.
@@ -911,11 +945,14 @@ async function pushCloudTelemetry(){
   if (now - lastCloudPushMs < 3000) return;
   lastCloudPushMs = now;
   const rem = connMode === 'sim' ? Math.round((fsm.remaining(simMs) || 0) / 1000) : (liveRemSec || 0);
+  // Angka harian, bukan kumulatif: app membaca node ini untuk riwayat, dan
+  // angka kumulatif akan membuat setiap hari terlihat sama besar.
+  const dd = todayDelta(Math.round(fsm.totalDrank), fsm.drinkCount, fsm.refillCount, fsm.cheatCount);
   const dailyObj = {
-    total_ml: +fsm.totalDrank.toFixed(1),
-    drink_count: fsm.drinkCount,
-    refill_count: fsm.refillCount,
-    cheat_count: fsm.cheatCount
+    total_ml: +dd.total_ml.toFixed(1),
+    drink_count: dd.drink_count,
+    refill_count: dd.refill_count,
+    cheat_count: dd.cheat_count
   };
   const payload = Object.assign({
     weight_g: +weight.toFixed(1),
@@ -978,6 +1015,14 @@ function applyCloudData(t, cfgRemote){
     else syncModeLabels_();
   }
   if (!t) return;
+  if (typeof t.hb === 'number'){
+    if (t.hb !== lastHb){ lastHb = t.hb; lastHbAt = Date.now(); }
+    else if (lastHbAt && Date.now() - lastHbAt > 90000){
+      $('cloudDot').className = 'status-dot err';
+      $('cloudStatus').textContent = 'Alat tidak mengirim data (' +
+        Math.round((Date.now() - lastHbAt) / 1000) + ' detik)';
+    }
+  }
   const prevSt = fsm.stateString;
   weight = +(t.weight_g || 0);
   liveWaterMl = +(t.water_ml || 0);
@@ -1205,9 +1250,18 @@ function render(){
   const totMl = Math.round(fsm.totalDrank);
   $('cTotal').textContent = totMl;
 
-  const pct = Math.min(100, Math.round((totMl / dailyGoalMl) * 100));
-  $('goalPct').textContent = Math.round((totMl / dailyGoalMl) * 100);
-  $('goalCur').textContent = totMl;
+  // Target harian memakai angka harian (selisih dari baseline tanggal ini),
+  // bukan total kumulatif alat: angka kumulatif tidak pernah kembali ke nol
+  // saat tengah malam karena alat tidak punya jam.
+  // Simulator memakai angkanya sendiri apa adanya: baseline harian hanya
+  // bermakna untuk data alat nyata, dan menulisnya dari sim akan menggeser
+  // hitungan hari ini di jalur cloud.
+  const dayMl = connMode === 'cloud'
+    ? todayDelta(totMl, fsm.drinkCount, fsm.refillCount, fsm.cheatCount).total_ml
+    : totMl;
+  const pct = Math.min(100, Math.round((dayMl / dailyGoalMl) * 100));
+  $('goalPct').textContent = pct;
+  $('goalCur').textContent = dayMl;
   $('goalMax').textContent = dailyGoalMl;
   $('goalFill').style.width = pct + '%';
 
