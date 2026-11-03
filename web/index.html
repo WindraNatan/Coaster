@@ -906,7 +906,7 @@ let cloudTimer = null, lastCloudPushMs = 0;
 // Heartbeat: firmware menaikkan `hb` setiap push. Angka berat dan suhu bisa
 // identik antar-kiriman, jadi hanya counter yang bisa membedakan "alat diam"
 // dari "alat mati". 90 dtk = tiga kali siklus push normal + kelonggaran.
-let lastHb = null, lastHbAt = 0;
+let lastHb = null, lastHbAt = 0, hbKnown = false;
 
 // Akun sekarang dikelola di login.html. Di sini hanya ditampilkan statusnya,
 // supaya dashboard tidak menampung form email/password/API key.
@@ -1037,13 +1037,23 @@ function applyCloudData(t, cfgRemote){
     else syncModeLabels_();
   }
   if (!t) return;
-  if (typeof t.hb === 'number'){
-    if (t.hb !== lastHb){ lastHb = t.hb; lastHbAt = Date.now(); }
+  // Alat versi firmware lama belum mengirim hb. Menandainya "mati" akan salah,
+  // jadi hanya firmware yang benar-benar mengirim counter yang diperiksa.
+  const hbNum = typeof t.hb === 'number' ? t.hb : null;
+  hbKnown = hbNum !== null;
+  if (hbNum === null) lastHbAt = Date.now();  // firmware lama: data tetap datang
+  if (hbNum !== null){
+    if (hbNum !== lastHb){ lastHb = hbNum; lastHbAt = Date.now(); }
     else if (lastHbAt && Date.now() - lastHbAt > 90000){
       $('cloudDot').className = 'status-dot err';
       $('cloudStatus').textContent = 'Alat tidak mengirim data (' +
         Math.round((Date.now() - lastHbAt) / 1000) + ' detik)';
     }
+  } else if (lastHbAt && Date.now() - lastHbAt > 90000){
+    // Firmware lama: tidak ada counter, tapi setidaknya data berhenti datang.
+    $('cloudDot').className = 'status-dot err';
+    $('cloudStatus').textContent = 'Data berhenti masuk (' +
+      Math.round((Date.now() - lastHbAt) / 1000) + ' detik)';
   }
   const prevSt = fsm.stateString;
   weight = +(t.weight_g || 0);
@@ -1054,6 +1064,7 @@ function applyCloudData(t, cfgRemote){
   $('sHum').value = roomHum; $('tHum').textContent = roomHum + ' %';
   liveRemSec = +(t.remaining_sec || 0);
   if (t.target_interval_min) fsm.interval = Math.round(t.target_interval_min * 60000);
+  const beforeCounts = [fsm.drinkCount, fsm.refillCount, fsm.cheatCount].join(',');
   fsm.totalDrank = +(t.total_ml || 0);
   fsm.drinkCount = +(t.drink_count || 0);
   fsm.refillCount = +(t.refill_count || 0);
@@ -1062,7 +1073,12 @@ function applyCloudData(t, cfgRemote){
   if (st === 'ALERT_MISSING_CUP'){ fsm.state = 'ALERT_REFILL'; fsm.missing = true; }
   else if (st === 'ALERT_EMPTY_CUP'){ fsm.state = 'ALERT_REFILL'; fsm.missing = false; }
   else { fsm.state = st; fsm.missing = false; }
-  saveTodayStatsToHistory();
+  // Event SSE datang tiap push (detak 60 dtk, atau tiap perubahan). Menulis
+  // localStorage dan membangun ulang daftar riwayat pada setiap event membuat
+  // daftar berkedip dan menulis tanpa perubahan isi.
+  if ([fsm.drinkCount, fsm.refillCount, fsm.cheatCount].join(',') !== beforeCounts){
+    saveTodayStatsToHistory();
+  }
   if (fsm.stateString !== prevSt){
     log('[CLOUD] ' + prevSt + ' -> ' + fsm.stateString, evCls(fsm.stateString));
     notifyAlertTransition(fsm.stateString);

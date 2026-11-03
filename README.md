@@ -65,6 +65,9 @@ dan `web/fsm.js`. Setiap perubahan disalin ke ketiganya.
 
 - Alat tidak punya jam (tanpa NTP). Angka dari alat kumulatif sejak reset
   manual; "hari ini" dihitung di klien dari selisih terhadap baseline tanggal.
+- Field `ts` di node telemetry tidak ditulis kode di repo ini. Jangan pakai
+  sebagai penanda kesegaran data: nilainya bisa berhari-hari lama sementara
+  data lain baru. Kesegaran ditentukan heartbeat `hb`.
 - Firmware mengirim `hb` yang naik setiap push. Klien memakainya untuk
   membedakan alat diam dari alat mati, karena berat dan suhu bisa identik.
 - Pengingat minum di Android memakai foreground service untuk audio: kanal
