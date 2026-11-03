@@ -283,6 +283,30 @@ void main() {
     });
   });
 
+  // Regresi target harian app: angka dari alat kumulatif, jadi "hari ini" adalah
+  // selisih terhadap baseline tanggal. Dua kasus yang pernah salah di web dan
+  // bisa terulang di sini: hari baru mewarisi kemarin, dan reset alat membuat
+  // selisih negatif.
+  testWidgets('target harian memakai selisih, bukan total kumulatif',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'goal_ml': 2000,
+      'day_base_date': '${DateTime.now().year}-'
+          '${DateTime.now().month.toString().padLeft(2, '0')}-'
+          '${DateTime.now().day.toString().padLeft(2, '0')}',
+      'day_base_ml': 600.0,
+      'day_base_drink': 2,
+    });
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200));
+    await _pumpApp(tester, client);
+    for (var i = 0; i < 4; i++) { await tester.pump(); }
+    // _telemetryBody: total_ml 750, drink_count 3, baseline 600/2 -> 150 ml
+    expect(find.text('Hari ini'), findsOneWidget);
+    expect(find.textContaining('150 / 2000 ml'), findsOneWidget,
+        reason: 'selisih terhadap baseline, bukan 750 kumulatif');
+  });
+
   testWidgets('mode MANUAL memperlihatkan field interval', (tester) async {
     final client = MockClient((req) async => Response(
         req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200));

@@ -598,6 +598,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         vsync: this, duration: const Duration(milliseconds: 500));
     WidgetsBinding.instance.addObserver(this);
     _loadReminder();
+    _loadGoal();
     _loadHistory();
     _poll();
     _startPolling();
@@ -710,6 +711,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       _lastSync = DateTime.now();
     });
     _trackHeartbeat(_t!);
+    _dayMl = _computeDayMl(_t!);
     _syncReminderOnData();
   }
 
@@ -796,6 +798,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           _loading = false;
           _lastSync = DateTime.now();
         });
+        _trackHeartbeat(t);
+        _dayMl = _computeDayMl(t);
         _syncReminderOnData();
       } else {
         // Node kosong / telemetry belum pernah ditulis firmware.
@@ -1016,6 +1020,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 _badgeCard(t, reduceMotion),
                 const SizedBox(height: 12),
                 _countdownCard(t),
+                const SizedBox(height: 12),
+                _goalCard(t),
                 const SizedBox(height: 12),
                 _reminderCard(),
                 const SizedBox(height: 12),
@@ -1319,6 +1325,91 @@ class _DashboardScreenState extends State<DashboardScreen>
     } catch (_) {
       // Riwayat tidak wajib: dashboard tetap jalan tanpa node ini.
     }
+  }
+
+
+  // ── Target harian ─────────────────────────────────────────────────────────
+  // Alat tidak punya jam (tanpa NTP): angka dari alat kumulatif sejak reset
+  // manual. "Hari ini" = selisih terhadap nilai saat tanggal berganti, disimpan
+  // di perangkat. Tanpa baseline, hari baru langsung terisi semua air kemarin.
+  int _goalMl = 2000;
+  DateTime? _dayKey;
+  double _dayBaseMl = 0;
+  int _dayBaseDrink = 0;
+
+  String _todayKey() =>
+      '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-'
+      '${DateTime.now().day.toString().padLeft(2, '0')}';
+
+  Future<void> _loadGoal() async {
+    final prefs = await SharedPreferences.getInstance();
+    _goalMl = prefs.getInt('goal_ml') ?? 2000;
+    final key = prefs.getString('day_base_date') ?? '';
+    if (key == _todayKey()) {
+      _dayBaseMl = prefs.getDouble('day_base_ml') ?? 0;
+      _dayBaseDrink = prefs.getInt('day_base_drink') ?? 0;
+      _dayKey = DateTime.now();
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _saveDayBase(double ml, int drink) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('day_base_date', _todayKey());
+    await prefs.setDouble('day_base_ml', ml);
+    await prefs.setInt('day_base_drink', drink);
+    _dayKey = DateTime.now();
+    _dayBaseMl = ml;
+    _dayBaseDrink = drink;
+  }
+
+  /// Angka harian. Baseline dipasang ulang saat tanggal berganti atau saat
+  /// hitungan alat turun (tombol reset di alat), supaya selisih tidak negatif.
+  double _computeDayMl(Telemetry t) {
+    final turun = t.totalMl < _dayBaseMl || t.drinkCount < _dayBaseDrink;
+    if (_dayKey == null || turun) {
+      // Baseline baru dipasang pada nilai saat ini, jadi hari ini dimulai dari
+      // nol. Mengembalikan totalMl di sini akan mengklaim semua air yang diminum
+      // berhari-hari lalu sebagai milik hari ini.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _saveDayBase(t.totalMl, t.drinkCount);
+      });
+      return 0;
+    }
+    return (t.totalMl - _dayBaseMl).clamp(0, double.infinity).toDouble();
+  }
+
+  double _dayMl = 0;
+
+  Widget _goalCard(Telemetry t) {
+    final ml = _dayMl;
+    final pct = _goalMl > 0 ? (ml / _goalMl).clamp(0.0, 1.0) : 0.0;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Hari ini', style: _monoStyle(11)),
+              const Spacer(),
+              Text('${(pct * 100).round()}%  ${ml.toStringAsFixed(0)} / $_goalMl ml',
+                  style: _monoStyle(11, color: _water)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 8,
+              backgroundColor: _panel2,
+              valueColor: const AlwaysStoppedAnimation(_water),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _historyCard() {
