@@ -10,9 +10,14 @@ import 'package:flutter/services.dart';
 class ReminderService {
   static const _ch = MethodChannel('shc/reminder');
 
-  /// Batas minimum pengingat: satu menit, supaya salah ketik tidak membuat
-  /// alarm berbunyi berulang kali tanpa henti.
-  static const minLead = Duration(minutes: 1);
+  /// Batas bawah hanya untuk mencegah alarm di masa lalu. Nilai ini TIDAK boleh
+  /// membulatkan jadwal alat: mode demo memakai interval 15 dtk, dan clamp satu
+  /// menit dulu membuat alarm berbunyi setelah minum sudah lewat.
+  static const minLead = Duration(seconds: 5);
+
+  /// Menaikkan lead hanya bila alarm jatuh di masa lalu. Dipisah supaya bisa
+  /// diuji tanpa Android.
+  static Duration clampLead(Duration lead) => lead < minLead ? minLead : lead;
 
   static Future<bool> ensureChannel() async {
     if (!Platform.isAndroid) return false;
@@ -29,7 +34,7 @@ class ReminderService {
     bool vibrate = true,
   }) async {
     if (!Platform.isAndroid) return false;
-    final at = DateTime.now().add(lead < minLead ? minLead : lead);
+    final at = DateTime.now().add(clampLead(lead));
     try {
       return await _ch.invokeMethod<bool>('schedule', {
         'atMs': at.millisecondsSinceEpoch,
@@ -61,6 +66,26 @@ class ReminderService {
 
   /// Izin alarm tepat waktu (Android 12+). Tanpa izin, pengingat masih jalan
   /// tetapi bisa meleset beberapa menit.
+  /// Android 13+ mewajibkan izin runtime; deklarasi manifest saja tidak cukup.
+  static Future<bool> canNotify() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _ch.invokeMethod<bool>('canNotify') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Meminta izin notifikasi. Mengembalikan true bila sudah/boleh.
+  static Future<bool> requestNotificationPermission() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _ch.invokeMethod<bool>('requestNotificationPermission') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<bool> canExact() async {
     if (!Platform.isAndroid) return false;
     try {

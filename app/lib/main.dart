@@ -612,6 +612,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     _timer = null;
     _streamSub?.cancel();
     _streamSub = null;
+    _cfgSub?.cancel();
+    _cfgSub = null;
     _streamRetry?.cancel();
     _streamRetry = null;
   }
@@ -634,6 +636,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           .transform(const LineSplitter())
           .listen(_onStreamLine, onError: (_) => _restartStream(),
               onDone: _restartStream, cancelOnError: true);
+      _openCfgStream();
     } catch (_) {
       _restartStream();
     }
@@ -642,7 +645,49 @@ class _DashboardScreenState extends State<DashboardScreen>
 
 
   final TlmStreamState _stream = TlmStreamState();
+  final TlmStreamState _cfgState = TlmStreamState();
   String _streamBuf = '';
+
+
+  StreamSubscription<String>? _cfgSub;
+  final Map<String, dynamic> _cfgCache = {};
+  String _cfgBuf = '';
+
+  /// Stream config terpisah: mute dan mode berasal dari sini, dan UI
+  /// mendahulukan _cfg, jadi tanpa stream ini tombol dari web terlihat basi.
+  Future<void> _openCfgStream() async {
+    await _cfgSub?.cancel();
+    _cfgSub = null;
+    if (!mounted) return;
+    final url = '${_session.coasterUrl(_base)}/config.json${_session.suffix}';
+    try {
+      final req = http.Request('GET', Uri.parse(url))
+        ..headers['Accept'] = 'text/event-stream';
+      final res = await _client.send(req).timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return;
+      _cfgSub = res.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(_onCfgLine, cancelOnError: true);
+    } catch (_) {
+      // Poll GET tetap menjadi cadangan.
+    }
+  }
+
+  void _onCfgLine(String line) {
+    if (line.isNotEmpty) {
+      _cfgBuf += '$line\n';
+      return;
+    }
+    if (_cfgBuf.isEmpty) return;
+    final changed = _cfgState.apply(_cfgBuf);
+    _cfgBuf = '';
+    if (!changed || !mounted) return;
+    _cfgCache
+      ..clear()
+      ..addAll(_cfgState.json);
+    setState(() => _cfg = CloudConfig.fromJson(Map<String, dynamic>.from(_cfgCache)));
+  }
 
   void _onStreamLine(String line) {
     // Blok SSE dipisah baris kosong; event: dan data: bisa lebih dari satu baris.
@@ -696,6 +741,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopPolling();
+    _cfgSub?.cancel();
     _remindTick?.cancel();
     _remindTick = null;
     _streamRetry?.cancel();
@@ -1069,6 +1115,17 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _toggleRemind(bool on) async {
     HapticFeedback.selectionClick();
+    if (on) {
+      // Izin notifikasi diminta di sini, saat pengguna jelas meminta pengingat.
+      // Tanpa izin, alarm berbunyi tanpa apa pun yang terlihat di layar.
+      final allowed = await ReminderService.requestNotificationPermission();
+      if (!allowed && mounted) {
+        setState(() => _remindOn = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Izin notifikasi ditolak. Pengingat tidak bisa berbunyi.')));
+        return;
+      }
+    }
     setState(() => _remindOn = on);
     await _saveReminderPrefs();
     if (on) {
@@ -1101,12 +1158,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     setState(() => _remindSound = 'file://${dest.path}');
     await _saveReminderPrefs();
+    await _syncReminder();
     await ReminderService.preview(_remindSound);
   }
 
   Future<void> _useDefaultSound() async {
     setState(() => _remindSound = null);
     await _saveReminderPrefs();
+    await _syncReminder();
     await ReminderService.preview(null);
   }
 

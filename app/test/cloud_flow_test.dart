@@ -8,6 +8,7 @@ import 'package:http/http.dart';
 import 'package:http/testing.dart';
 import 'package:smart_coaster/auth.dart';
 import 'package:smart_coaster/main.dart';
+import 'package:smart_coaster/reminder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _url = 'https://proyek-rtdb.asia-southeast1.firebasedatabase.app';
@@ -202,6 +203,28 @@ void main() {
 
     state.apply('event: patch\ndata: {"path":"/weight_g","data":340}\n\n');
     expect(state.json['weight_g'], 340);
+  });
+
+  // Regresi: sisa waktu alat tidak boleh dibulatkan. Mode demo memakai interval
+  // 15 dtk, dan clamp satu menit dulu membuat alarm berbunyi setelah minum lewat.
+  testWidgets('lead pengingat mengikuti sisa waktu alat, bukan clamp 1 menit', (tester) async {
+    expect(ReminderService.clampLead(const Duration(seconds: 15)),
+        const Duration(seconds: 15));
+    expect(ReminderService.clampLead(const Duration(seconds: 1)),
+        const Duration(seconds: 5), reason: 'hanya alarm di masa lalu yang dinaikkan');
+    expect(ReminderService.clampLead(const Duration(minutes: 30)),
+        const Duration(minutes: 30));
+  });
+
+  // Regresi: PATCH config dari web harus sampai lewat stream, bukan menunggu
+  // poll. UI mendahulukan _cfg, jadi perubahan mute terlihat basi tanpa ini.
+  testWidgets('stream config menerapkan mute dan mode', (tester) async {
+    final st = TlmStreamState();
+    st.apply('event: put\ndata: {"path":"/","data":{"timer_mode":"AUTO_DHT","muted":false}}\n\n');
+    expect(st.json['muted'], false);
+    st.apply('event: patch\ndata: {"path":"/","data":{"muted":true,"timer_mode":"MANUAL"}}\n\n');
+    expect(st.json['muted'], true);
+    expect(st.json['timer_mode'], 'MANUAL');
   });
 
   testWidgets('mode MANUAL memperlihatkan field interval', (tester) async {

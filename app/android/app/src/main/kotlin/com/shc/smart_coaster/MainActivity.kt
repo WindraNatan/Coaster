@@ -20,6 +20,19 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val ch = "shc/reminder"
 
+    private var pendingPermissionResult: MethodChannel.Result? = null
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 71) return
+        val granted = grantResults.isNotEmpty() &&
+            grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+        pendingPermissionResult?.success(granted)
+        pendingPermissionResult = null
+    }
+
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
         MethodChannel(engine.dartExecutor.binaryMessenger, ch).setMethodCallHandler { call, result ->
@@ -45,6 +58,19 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
                 "canExact" -> result.success(Reminder.canExact(this))
+                "canNotify" -> result.success(Reminder.canNotify(this))
+                "requestNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        result.success(true)
+                    } else if (Reminder.canNotify(this)) {
+                        result.success(true)
+                    } else {
+                        pendingPermissionResult = result
+                        requestPermissions(
+                            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 71
+                        )
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -75,6 +101,15 @@ object Reminder {
             enableLights(true)
         }
         mgr.createNotificationChannel(c)
+    }
+
+    fun canNotify(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            return mgr.areNotificationsEnabled()
+        }
+        return ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     fun canExact(ctx: Context): Boolean {
@@ -197,6 +232,16 @@ class ReminderReceiver : BroadcastReceiver() {
         Reminder.showNow(ctx, sound, vibrate)
         // Audio diputar di sini, bukan di kanal: file pengguna tidak bisa
         // dipasang ke kanal notifikasi yang sudah dibuat.
+        // PARTIAL_WAKE_LOCK menahan CPU sampai pemutaran selesai. Tanpa ini,
+        // onReceive kembali dan proses cached boleh dibunuh: suara mati di tengah.
+        var wake: PowerManager.WakeLock? = null
+        try {
+            val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+            wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "shc:reminderAudio")
+            wake.acquire(60000)
+        } catch (_: Exception) {
+        }
+        val lock = wake
         try {
             val mp = MediaPlayer()
             mp.setAudioAttributes(
@@ -211,10 +256,18 @@ class ReminderReceiver : BroadcastReceiver() {
                 mp.setDataSource(ctx, Uri.parse(sound))
             }
             mp.prepare()
-            mp.setOnCompletionListener { it.release() }
+            mp.setOnCompletionListener {
+                it.release()
+                lock?.takeIf { l -> l.isHeld }?.release()
+            }
+            mp.setOnErrorListener { _, _, _ ->
+                lock?.takeIf { l -> l.isHeld }?.release()
+                true
+            }
             mp.start()
         } catch (_: Exception) {
             // File hilang atau format tidak didukung: notifikasi tetap tampil.
+            lock?.takeIf { l -> l.isHeld }?.release()
         }
     }
 }
