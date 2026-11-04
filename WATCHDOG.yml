@@ -1,0 +1,27 @@
+advisors:
+  - name: Deepseek Unrestricted
+    model: 9router/je/deepseek-unrestricted
+    tools:
+      - read
+      - glob
+      - grep
+      - web_search
+      - manage_skill
+  - name: Step 5 Unrestricted
+    model: 9router/je/step-5-unrestricted
+    tools:
+      - read
+      - glob
+      - grep
+      - web_search
+      - manage_skill
+  - name: astra
+    model: 9router/je/gpt-6-astra
+    tools:
+      - read
+      - glob
+      - grep
+      - web_search
+      - manage_skill
+  - name: gemini 4 argon
+    model: 9router/zd/gemini-4-argon

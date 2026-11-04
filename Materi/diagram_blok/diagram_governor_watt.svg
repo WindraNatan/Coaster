@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" width="100%" height="100%" style="background:#ffffff; font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1e293b"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-10%" width="110%" height="130%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="460" y="28" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">DIAGRAM BLOK SISTEM REGULATOR KECEPATAN MESIN UAP JAMES WATT (FLYBALL GOVERNOR)</text>
+
+  <!-- Input Arrow -->
+  <line x1="30" y1="100" x2="130" y2="100" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="80" y="83" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Kecepatan Target</text>
+  <text x="80" y="122" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">&#969;_ref / Setpoint</text>
+
+  <!-- Summing Junction (Mechanical Linkage) -->
+  <circle cx="150" cy="100" r="18" fill="#f8fafc" stroke="#1e293b" stroke-width="2.2" filter="url(#shadow)"/>
+  <line x1="137" y1="87" x2="163" y2="113" stroke="#64748b" stroke-width="1.2"/>
+  <line x1="137" y1="113" x2="163" y2="87" stroke="#64748b" stroke-width="1.2"/>
+  <text x="124" y="95" font-size="15" font-weight="700" fill="#15803d">+</text>
+  <text x="155" y="133" font-size="17" font-weight="700" fill="#b91c1c">-</text>
+
+  <!-- Error Arrow -->
+  <line x1="168" y1="100" x2="250" y2="100" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="208" y="83" text-anchor="middle" font-size="11" font-weight="600" fill="#b91c1c">Selisih Posisi Tuas</text>
+  <text x="208" y="122" text-anchor="middle" font-size="10" fill="#b91c1c" font-style="italic">&#916;x = x_ref - x_fb</text>
+
+  <!-- Valve Block -->
+  <rect x="250" y="65" width="160" height="70" rx="6" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" filter="url(#shadow)"/>
+  <text x="330" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#15803d">AKTUATOR / KATUP</text>
+  <text x="330" y="110" text-anchor="middle" font-size="11" fill="#166534">Bukaan Katup Uap</text>
+  <text x="330" y="124" text-anchor="middle" font-size="10" fill="#166534" font-style="italic">(Steam Valve)</text>
+
+  <!-- Steam Flow Arrow -->
+  <line x1="410" y1="100" x2="500" y2="100" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="455" y="83" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Debit Aliran Uap</text>
+  <text x="455" y="122" text-anchor="middle" font-size="10" fill="#64748b" font-style="italic">q_steam (kg/s)</text>
+
+  <!-- Engine/Plant Block -->
+  <rect x="500" y="65" width="175" height="70" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="2" filter="url(#shadow)"/>
+  <text x="587" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#1d4ed8">KENDALIAN / PLANT</text>
+  <text x="587" y="110" text-anchor="middle" font-size="11" fill="#1e40af">Silinder Mesin Uap,</text>
+  <text x="587" y="124" text-anchor="middle" font-size="11" fill="#1e40af">Torak, &amp; Poros Beban</text>
+
+  <!-- Disturbance (Load) Arrow -->
+  <line x1="587" y1="10" x2="587" y2="63" stroke="#dc2626" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="597" y="32" font-size="11" font-weight="600" fill="#dc2626">Gangguan Beban Mekanik Pabrik T_load(t)</text>
+
+  <!-- Output Arrow & Pickoff -->
+  <line x1="675" y1="100" x2="880" y2="100" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <circle cx="800" cy="100" r="4.5" fill="#1e293b"/>
+  <text x="840" y="83" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Kecepatan Putar Poros</text>
+  <text x="840" y="122" text-anchor="middle" font-size="11" fill="#64748b" font-style="italic">&#969;(t) Aktual [RPM]</text>
+
+  <!-- Feedback Path (Down, Left, Up) -->
+  <line x1="800" y1="100" x2="800" y2="240" stroke="#1e293b" stroke-width="2.2"/>
+  <line x1="800" y1="240" x2="630" y2="240" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrow)"/>
+
+  <!-- Sensor Block: Flyball Governor -->
+  <rect x="440" y="205" width="190" height="70" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2" filter="url(#shadow)"/>
+  <text x="535" y="232" text-anchor="middle" font-size="12" font-weight="700" fill="#b45309">SENSOR / UMPAN BALIK</text>
+  <text x="535" y="250" text-anchor="middle" font-size="11" fill="#92400e">Flyball Governor</text>
+  <text x="535" y="264" text-anchor="middle" font-size="10" fill="#92400e" font-style="italic">(Gaya Sentrifugal Bola Putar)</text>
+
+  <!-- Feedback Line to Junction -->
+  <line x1="440" y1="240" x2="150" y2="240" stroke="#1e293b" stroke-width="2.2"/>
+  <line x1="150" y1="240" x2="150" y2="120" stroke="#1e293b" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="290" y="227" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">Posisi Selongsong Umpan Balik</text>
+  <text x="290" y="260" text-anchor="middle" font-size="10" fill="#64748b" font-style="italic">x_fb proportional to &#969;^2</text>
+</svg>
