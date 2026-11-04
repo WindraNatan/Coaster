@@ -11,6 +11,7 @@
 #include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
+#include <ESPmDNS.h>
 
 // ponytail: satu transport cloud saja (HTTPS REST ke Firebase RTDB). MQTT sengaja
 // dilewat: RTDB sudah push realtime + last-known state, dan konsumen tambahan
@@ -520,6 +521,28 @@ static WiFiManager wifiMgr;
 static bool portalActive = false;
 static uint32_t portalStartedMs = 0;
 
+// mDNS: alat mengumumkan dirinya sendiri di LAN sebagai "<Kode>._shc._tcp"
+// beserta teks "code=<Kode>". Aplikasi Firebase Android (NsdManager) atau
+// iOS (NWBrowser) menemukannya tanpa Serial Monitor dan tanpa mengetik
+// apa pun. Didaftarkan sekali sejak boot, jadi namanya tetap sama meski
+// portal dibuka berulang kali.
+
+inline void startClaimBeacon() {
+    if (claimCode.length() == 0) return;
+    if (!MDNS.begin(claimCode.c_str())) {
+        Serial.println(F("[MDNS] Gagal mulai; klaim lewat portal tetap jalan."));
+        return;
+    }
+    MDNS.addService("shc", "tcp", 80);
+    MDNS.addServiceTxt("shc", "tcp", "code", claimCode);
+    Serial.printf("[MDNS] Dapat ditemukan di LAN: %s._shc._tcp, code=%s\n",
+                  claimCode.c_str(), claimCode.c_str());
+}
+
+inline void stopClaimBeacon() {
+    MDNS.end();
+}
+
 inline void startWifiPortal(bool force) {
     if (portalActive) return;
     wifiMgr.setConfigPortalBlocking(false);
@@ -547,6 +570,7 @@ inline void startWifiPortal(bool force) {
     wifiMgr.startConfigPortal(PORTAL_AP_NAME, PORTAL_AP_PASS);
     portalActive = true;
     portalStartedMs = millis();
+    startClaimBeacon();
 }
 
 // Dipanggil dari loop() core 1. Mengembalikan true bila portal masih terbuka.
@@ -574,11 +598,13 @@ inline bool handleWifiPortal() {
     wifiMgr.process();
     if (WiFi.status() == WL_CONNECTED && activeWifiSsid.length() > 0) {
         portalActive = false;
+        stopClaimBeacon();
         Serial.printf("[WIFI] Tersambung ke \"%s\"\n", activeWifiSsid.c_str());
         return false;
     }
     if (millis() - portalStartedMs > 180000UL) {
         portalActive = false;
+        stopClaimBeacon();
         wifiMgr.stopConfigPortal();
         WiFi.mode(WIFI_STA);
         Serial.println(F("[WIFI] Portal ditutup tanpa kredensial. Kirim 'w<SSID>|<sandi>' "

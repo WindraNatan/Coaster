@@ -8,6 +8,9 @@
     <!-- Foreground service pemutar audio pengingat (Android 14+ mewajibkan tipe). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- Menemukan alat di jaringan lokal (mDNS) untuk klaim tanpa Serial Monitor. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
         android:label="Smart Hydration Coaster"
         android:name="${applicationName}"
