@@ -486,6 +486,13 @@ static void cloudTask(void*) {
 // kunci yang sama seperti perintah serial `w`, supaya kedua jalur tidak menimpa.
 static String wifiPortalSsid, wifiPortalPass;
 
+// Bila kredensial tersimpan tidak lagi berlaku (router pindah atau sandi
+// berganti), alat akan diam tanpa portal sampai dicolok USB. Deteksi lewat
+// waktu, bukan lewat penantian yang memblokir: setelah 30 dtk gagal konek,
+// portal dibuka dan pengguna bisa memperbaiki dari ponsel.
+static uint32_t wifiAttemptMs = 0;
+static bool portalConnected = false;
+
 static void wifiOnSaveParams() {
     if (wifiPortalSsid.length() == 0) return;
     activeWifiSsid = wifiPortalSsid;
@@ -496,6 +503,13 @@ static void wifiOnSaveParams() {
     p.putString("wifiPass", wifiPortalPass);
     p.end();
     Serial.printf("[WIFI] Portal menyimpan SSID \"%s\"\n", wifiPortalSsid.c_str());
+    // Portal tidak memanggil WiFi.begin() sendiri di mode non-blocking. Tanpa
+    // baris ini, portal hanya ditutup lalu dibuka lagi: alat tidak pernah
+    // mencoba kredensial yang baru disimpan.
+    portalConnected = true;
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(activeWifiSsid.c_str(), activeWifiPass.c_str());
+    wifiAttemptMs = millis();
 }
 
 // Portal dibuka tanpa memblokir: autoConnect() menahan core 1 sampai 180 dtk,
@@ -514,8 +528,14 @@ inline void startWifiPortal(bool force) {
     wifiMgr.setConnectTimeout(20);
     static WiFiManagerParameter pSsid("ssid", "Nama Wi-Fi (2.4 GHz)", "", 33);
     static WiFiManagerParameter pPass("pass", "Kata sandi", "", 65);
-    wifiMgr.addParameter(&pSsid);
-    wifiMgr.addParameter(&pPass);
+    // Didaftarkan sekali saja: addParameter menumpuk, dan portal yang dibuka
+    // berulang kali akan menampilkan field ganda.
+    static bool paramsAdded = false;
+    if (!paramsAdded) {
+        paramsAdded = true;
+        wifiMgr.addParameter(&pSsid);
+        wifiMgr.addParameter(&pPass);
+    }
     wifiMgr.setSaveParamsCallback([&]() {
         wifiPortalSsid = pSsid.getValue();
         wifiPortalPass = pPass.getValue();
@@ -530,14 +550,15 @@ inline void startWifiPortal(bool force) {
 }
 
 // Dipanggil dari loop() core 1. Mengembalikan true bila portal masih terbuka.
-// Bila kredensial tersimpan tidak lagi berlaku (router pindah atau sandi
-// berganti), alat akan diam tanpa portal sampai dicolok USB. Deteksi lewat
-// waktu, bukan lewat penantian yang memblokir: setelah 30 dtk gagal konek,
-// portal dibuka dan pengguna bisa memperbaiki dari ponsel.
-static uint32_t wifiAttemptMs = 0;
 
 inline void checkWifiStale() {
     if (portalActive) return;
+    // Kredensial baru dari portal masih dicoba: beri waktu sebelum menilai gagal.
+    if (portalConnected) {
+        if (WiFi.status() == WL_CONNECTED) { portalConnected = false; wifiAttemptMs = 0; return; }
+        if (millis() - wifiAttemptMs < 30000UL) return;
+        portalConnected = false;
+    }
     if (activeWifiSsid.length() == 0) return;
     if (WiFi.status() == WL_CONNECTED) { wifiAttemptMs = 0; return; }
     if (wifiAttemptMs == 0) { wifiAttemptMs = millis(); return; }
