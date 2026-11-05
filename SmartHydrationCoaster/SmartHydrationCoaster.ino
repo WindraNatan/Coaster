@@ -134,7 +134,12 @@ void handleActuators(CoasterState state, uint32_t nowMs) {
 
 void updateAdaptiveInterval() {
     uint32_t baseMs = demoMode ? DEMO_INTERVAL_MS : customBaseIntervalMs;
-    if (autoDhtTimerMode) {
+    // Mode demo tidak dikompensasi. DHT11 menempel di board dan membaca panas
+    // ESP32 sendiri (27 -> 31,8 C setelah boot), sehingga 15 detik tampil
+    // sebagai 9 detik dan label "demo 15 s" berbohong. Mode normal tetap
+    // adaptif; di sana faktor 0,64 memotong 30 menit jadi 19 menit, dan itu
+    // soal penempatan sensor, bukan rumus.
+    if (autoDhtTimerMode && !demoMode) {
         fsm.setInterval(computeAdaptiveIntervalMs(baseMs, roomTempC, roomHumidity));
     } else {
         fsm.setInterval(baseMs);

@@ -68,6 +68,7 @@ class CoasterFSM:
         self.timer_start_ms = 0
         self.lift_start_ms = 0
         self.target_interval_ms = target_interval_ms
+        self.cycle_target_ms = target_interval_ms
         self.max_lift_duration_ms = 10000
         self.stable_candidate_weight = 0.0
         self.stable_start_ms = 0
@@ -82,6 +83,7 @@ class CoasterFSM:
         self.calibration_align = False
         self.pre_refill_state = "IDLE"
         self.pre_refill_timer_start = 0
+        self.pre_refill_cycle_target = target_interval_ms
 
     @property
     def state_string(self):
@@ -98,6 +100,15 @@ class CoasterFSM:
         self.state = next_state
         self.stable_candidate_weight = w
         self.stable_start_ms = now_ms
+
+    def set_interval(self, ms):
+        self.target_interval_ms = ms
+
+    def start_cycle(self, now_ms):
+        # Interval dikunci saat siklus mulai. Target yang menyusut di tengah
+        # siklus tidak boleh mempercepat alarm; nilai baru berlaku berikutnya.
+        self.timer_start_ms = now_ms
+        self.cycle_target_ms = self.target_interval_ms
 
     def is_stable(self, w, now_ms):
         # Fix C1: berbasis waktu, bukan hitungan pemanggilan
@@ -133,8 +144,9 @@ class CoasterFSM:
         # bisa memulihkannya — lihat cancel_pending_refill.
         self.pre_refill_state = self.state
         self.pre_refill_timer_start = self.timer_start_ms
+        self.pre_refill_cycle_target = self.cycle_target_ms
         self.baseline_weight = w
-        self.timer_start_ms = now_ms
+        self.start_cycle(now_ms)
         self.refill_count += 1
         self.refill_pending = True
         self.pre_refill_baseline = old_baseline
@@ -153,8 +165,9 @@ class CoasterFSM:
         if self.pre_refill_state in ("TIMING", "ALERT_DRINK", "ALERT_CHEAT"):
             self.state = self.pre_refill_state
             self.timer_start_ms = self.pre_refill_timer_start
+            self.cycle_target_ms = self.pre_refill_cycle_target
         else:
-            self.timer_start_ms = now_ms
+            self.start_cycle(now_ms)
 
     def record_drink(self, grams, w, now_ms):
         # False = minum dibatalkan karena pola tekan-lepas
@@ -194,7 +207,7 @@ class CoasterFSM:
             # K1: false = tekan-lepas, isi ulang pending sudah dibatalkan
             self.record_drink(decreased, w, now_ms)
             self.baseline_weight = w
-            self.timer_start_ms = now_ms
+            self.start_cycle(now_ms)
             self.enter_state("TIMING", w, now_ms)
             return
 
@@ -218,7 +231,7 @@ class CoasterFSM:
                     self.missing_cup_alert = False
                     self.enter_state("ALERT_REFILL", w, now_ms)
                 else:
-                    self.timer_start_ms = now_ms
+                    self.start_cycle(now_ms)
                     self.enter_state("TIMING", w, now_ms)
 
         elif self.state == "TIMING":
@@ -242,8 +255,8 @@ class CoasterFSM:
                             self.missing_cup_alert = False
                             self.enter_state("ALERT_REFILL", w, now_ms)
                         else:
-                            self.timer_start_ms = now_ms
-            elif (now_ms - self.timer_start_ms) >= self.target_interval_ms:
+                            self.start_cycle(now_ms)
+            elif (now_ms - self.timer_start_ms) >= self.cycle_target_ms:
                 self.enter_state("ALERT_DRINK", w, now_ms)
 
         elif self.state == "LIFTED":
@@ -274,7 +287,7 @@ class CoasterFSM:
                             self.missing_cup_alert = False
                             self.enter_state("ALERT_REFILL", w, now_ms)
                         else:
-                            self.timer_start_ms = now_ms
+                            self.start_cycle(now_ms)
                             self.enter_state("TIMING", w, now_ms)
 
         elif self.state == "ALERT_REFILL":
@@ -298,7 +311,7 @@ class CoasterFSM:
                     self.calibration_align = False
                     if w > el:
                         self.baseline_weight = w
-                        self.timer_start_ms = now_ms
+                        self.start_cycle(now_ms)
                         self.enter_state("TIMING", w, now_ms)
             elif w > el and self.is_stable(w, now_ms):
                 self.register_refill(self.baseline_weight, w, now_ms)
@@ -518,6 +531,27 @@ def test_all_scenarios():
     # drink_count == 1 di atas adalah quirk baseline kalibrasi (sudah ada sebelum fix).
     assert k.refill_count == 1 and k.state == "TIMING" and k.baseline_weight == 400.0
     print("[PASS] 21. Flag kalibrasi tidak basi: isi ulang cepat setelah lift tetap terhitung")
+
+    # 22. Target menyusut di tengah siklus tidak boleh mempercepat alarm.
+    o = CoasterFSM(empty_cup_weight=130.0, target_interval_ms=15000)
+    settle(o, 380.0, 1000)              # stabil di 2500, siklus mulai
+    assert o.state == "TIMING"
+    o.update(380.0, 5000)
+    o.set_interval(5000)                # target turun di bawah elapsed
+    o.update(380.0, 5200)
+    assert o.state == "TIMING", o.state
+    o.update(380.0, 17400)
+    assert o.state == "TIMING"
+    o.update(380.0, 17600)
+    assert o.state == "ALERT_DRINK", o.state
+    print("[PASS] 22. Target menyusut di tengah siklus tidak memicu alarm lebih awal")
+
+    # 23. Siklus baru memakai target baru.
+    q = CoasterFSM(empty_cup_weight=130.0, target_interval_ms=15000)
+    q.set_interval(5000)
+    settle(q, 380.0, 1000)
+    assert q.cycle_target_ms == 5000
+    print("[PASS] 23. Siklus yang dimulai setelah set_interval memakai target baru")
 
     print("\nSEMUA SKENARIO LULUS")
 

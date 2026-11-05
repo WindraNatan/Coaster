@@ -43,7 +43,7 @@ class CoasterFSM {
     this.state = 'IDLE';
     this.baseline = 0; this.emptyCup = emptyCup;
     this.timerStart = 0; this.liftStart = 0;
-    this.interval = interval; this.maxLift = CFG.DEMO_MAX_LIFT;
+    this.interval = interval; this.cycleTarget = interval; this.maxLift = CFG.DEMO_MAX_LIFT;
     this.stableCand = 0; this.stableStart = 0;
     this.totalDrank = 0; this.drinkCount = 0;
     this.cheatCount = 0; this.refillCount = 0;
@@ -53,7 +53,7 @@ class CoasterFSM {
     this.lastRefill = 0;
     this.calibrationAlign = false;
     this.preRefillState = 'IDLE';
-    this.preRefillTimerStart = 0;
+    this.preRefillTimerStart = 0; this.preRefillCycleTarget = interval;
   }
   get emptyLimit(){ return this.emptyCup + CFG.EMPTY_TOL; }
   get stateString(){
@@ -68,6 +68,9 @@ class CoasterFSM {
     return (now - this.stableStart) >= CFG.STAB_MS;
   }
   setInterval_(ms){ this.interval = ms; }
+  // Interval dikunci saat siklus mulai. Menyusutnya target di tengah siklus
+  // tidak boleh mempercepat alarm; target baru berlaku di siklus berikutnya.
+  startCycle(now){ this.timerStart = now; this.cycleTarget = this.interval; }
   setMaxLift(ms){ this.maxLift = ms; }
   setEmptyCup(g){
     if (g >= CFG.CUP_ON && g <= CFG.MAX_EMPTY){
@@ -97,8 +100,10 @@ class CoasterFSM {
   }
   remaining(now){
     if (this.state !== 'TIMING') return null;
-    return Math.max(0, this.interval - (now - this.timerStart));
+    return Math.max(0, this.cycleTarget - (now - this.timerStart));
   }
+  // Target yang sedang berlaku: siklus berjalan memakai nilai terkunci.
+  targetIntervalMs(){ return this.state === 'TIMING' ? this.cycleTarget : this.interval; }
   waterMl(w){ return w <= this.emptyCup ? 0 : w - this.emptyCup; }
 
   // K1: heuristik pembalik. Menekan lebih lama dari CONFIRM_MS tetap lolos;
@@ -113,8 +118,8 @@ class CoasterFSM {
     // K1: simpan state & timer pra-isi-ulang supaya pembatalan (tekan-lepas)
     // bisa memulihkannya — lihat cancelPendingRefill.
     this.preRefillState = this.state;
-    this.preRefillTimerStart = this.timerStart;
-    this.baseline = w; this.timerStart = now; this.refillCount++;
+    this.preRefillTimerStart = this.timerStart; this.preRefillCycleTarget = this.cycleTarget;
+    this.baseline = w; this.startCycle(now); this.refillCount++;
     this.refillPending = true; this.preRefillBaseline = oldBase; this.lastRefill = now;
   }
   cancelPendingRefill(now){
@@ -128,9 +133,9 @@ class CoasterFSM {
     // menyangkutkan gelas penuh di alarm kosong.
     if (this.preRefillState === 'TIMING' || this.preRefillState === 'ALERT_DRINK' || this.preRefillState === 'ALERT_CHEAT'){
       this.state = this.preRefillState;
-      this.timerStart = this.preRefillTimerStart;
+      this.timerStart = this.preRefillTimerStart; this.cycleTarget = this.preRefillCycleTarget;
     } else {
-      this.timerStart = now;
+      this.startCycle(now);
     }
   }
   // false = minum dibatalkan karena pola tekan-lepas
@@ -153,7 +158,7 @@ class CoasterFSM {
         if (this.isStable(w, now)){
           this.baseline = w;
           if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
-          else { this.timerStart = now; this.setState('TIMING', w, now); }
+          else { this.startCycle(now); this.setState('TIMING', w, now); }
         }
         break;
       case 'TIMING':
@@ -169,12 +174,12 @@ class CoasterFSM {
             if (this.recordDrink(this.baseline - w, w, now)){
               this.baseline = w;
               if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
-              else this.timerStart = now;
+              else this.startCycle(now);
             }
           }
           break;
         }
-        if (now - this.timerStart >= this.interval) this.setState('ALERT_DRINK', w, now);
+        if (now - this.timerStart >= this.cycleTarget) this.setState('ALERT_DRINK', w, now);
         break;
       case 'LIFTED':
         if (w >= CFG.CUP_ON){
@@ -199,7 +204,7 @@ class CoasterFSM {
             if (this.recordDrink(this.baseline - w, w, now)){
               this.baseline = w;
               if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
-              else { this.timerStart = now; this.setState('TIMING', w, now); }
+              else { this.startCycle(now); this.setState('TIMING', w, now); }
             }
           }
           break;
@@ -224,7 +229,7 @@ class CoasterFSM {
           // aktual, jangan hitung isi ulang.
           if (this.isStable(w, now)){
             this.calibrationAlign = false;
-            if (w > el){ this.baseline = w; this.timerStart = now; this.setState('TIMING', w, now); }
+            if (w > el){ this.baseline = w; this.startCycle(now); this.setState('TIMING', w, now); }
           }
           break;
         }
@@ -250,7 +255,7 @@ class CoasterFSM {
     if (dec >= CFG.MIN_DRINK){
       // K1: false = tekan-lepas, isi ulang pending sudah dibatalkan
       this.recordDrink(dec, w, now);
-      this.baseline = w; this.timerStart = now;
+      this.baseline = w; this.startCycle(now);
       this.setState('TIMING', w, now); return;
     }
     this.cheatCount++; this.setState('ALERT_CHEAT', w, now);

@@ -4,7 +4,7 @@
 // ponytail: hanya regresi K1/K3 di JS; mirror penuh 21 skenario Python/C++
 // belum ada — tambahkan bila web jadi sumber kebenaran kedua.
 const assert = require('assert');
-const { CoasterFSM, mutedFrom } = require('./fsm.js');
+const { CFG, computeAdaptiveIntervalMs, CoasterFSM, mutedFrom } = require('./fsm.js');
 
 function settle(f, w, t0){
   f.update(w, t0);
@@ -100,4 +100,20 @@ assert.strictEqual(mutedFrom(null, null), null,
 assert.strictEqual(mutedFrom({muted: true}, null), true,
   'config saja sudah cukup');
 console.log('[PASS] 22. muted dari config, bukan echo telemetry');
+// 23. Paritas rumus adaptif dengan uji_fsm.cpp dan test_simulation.py.
+//     Angka harapan diambil dari uji_fsm.cpp skenario 1.
+assert.strictEqual(computeAdaptiveIntervalMs(CFG.DEMO_INTERVAL, 34.0, 55.0), 7500,
+  '34C/55% -> 15 detik jadi 7,5 detik');
+assert.strictEqual(computeAdaptiveIntervalMs(1800000, 30.0, 55.0), 1350000,
+  '30C/55% -> 22,5 menit');
+assert.strictEqual(computeAdaptiveIntervalMs(1800000, 22.0, 75.0), 1980000,
+  '22C/75% -> 33 menit');
+assert.strictEqual(computeAdaptiveIntervalMs(1800000, 26.0, 30.0), 1530000,
+  '26C/30% -> 25,5 menit');
+assert.strictEqual(computeAdaptiveIntervalMs(60000, NaN, 50.0), 60000,
+  'NaN -> interval dasar');
+assert.strictEqual(computeAdaptiveIntervalMs(1000, 40.0, 10.0), CFG.FLOOR,
+  'lantai 5 detik berlaku');
+console.log('[PASS] 23. rumus adaptif JS sama dengan C++ dan Python');
+
 console.log('\nSEMUA LULUS (fsm.test.js)');

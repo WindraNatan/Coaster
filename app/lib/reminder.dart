@@ -131,9 +131,11 @@ bool stateAllowsReminder(String canonicalState) =>
 /// Apakah jadwal perlu dipasang ulang.
 ///
 /// Perbandingan memakai deadline absolut, bukan sisa detik. Ambang pada sisa
-/// detik membuat siklus demo 15->0->15 selalu terlewat (selisih 15 kurang dari
-/// ambang 20), sehingga alarm hanya berbunyi sekali. Toleransi [tolerance]
-/// mencegah pemasangan ulang pada setiap event stream.
+/// detik membuat siklus demo 15->0->15 selalu terlewat, sehingga alarm hanya
+/// berbunyi sekali. Toleransi [tolerance] mencegah pemasangan ulang pada setiap
+/// event stream; dengan poll 20 detik nilainya 10 detik, jadi tiap poll memang
+/// memasang ulang, dan itu disengaja karena tiap pemasangan memakai deadline
+/// baru dari sisa waktu yang baru dihitung.
 bool shouldScheduleReminder({
   required String state,
   required DateTime target,

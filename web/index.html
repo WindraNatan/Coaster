@@ -393,6 +393,10 @@ let dailyGoalMl = +(localStorage.getItem('shc_goal_ml') || 2000);
 let roomT = 27, roomHum = 60;
 let notifEnabled = false, lastNotifiedState = 'IDLE';
 let liveRemSec = null, liveTargetSec = 15, liveWaterMl = null;
+// Waktu snapshot terakhir diterima. Countdown dihitung dari sini, bukan
+// menunggu push berikutnya: alat hanya mengirim saat field lain berubah
+// atau heartbeat 60 detik, jadi angka mentah selalu membeku lalu melompat.
+let liveRemAt = 0;
 let csvRows = [];
 let fsm = new CoasterFSM(+(localStorage.getItem('shc_empty_cup') || CFG.DEFAULT_EMPTY), CFG.DEMO_INTERVAL);
 
@@ -624,7 +628,7 @@ function currentBaseMs(){
 }
 function recomputeAdaptive(){
   const base = currentBaseMs();
-  const target = autoDht ? computeAdaptiveIntervalMs(base, roomT, roomHum) : base;
+  const target = (autoDht && !demo) ? computeAdaptiveIntervalMs(base, roomT, roomHum) : base;
   fsm.setInterval_(target);
 }
 function applyTimerConfig(){
@@ -874,7 +878,7 @@ function handleSerialLine(line){
   if (mWater) liveWaterMl = Math.max(0, +mWater[1]);
   if (mTemp){ roomT = +mTemp[1]; $('sTemp').value = roomT; $('tVal').textContent = roomT.toFixed(1) + ' °C'; }
   if (mHum){ roomHum = +mHum[1]; $('sHum').value = roomHum; $('tHum').textContent = roomHum + ' %'; }
-  if (mRem) liveRemSec = +mRem[1];
+  if (mRem) { liveRemSec = +mRem[1]; liveRemAt = performance.now(); }
   if (mDrank) fsm.totalDrank = +mDrank[1];
   if (mDrinkCnt) fsm.drinkCount = +mDrinkCnt[1];
   if (mCheatCnt) fsm.cheatCount = +mCheatCnt[1];
@@ -919,6 +923,10 @@ function renderAuthState(){
   $('bAccountLink').textContent = ok ? 'Ganti akun' : 'Masuk / daftar';
 }
 renderAuthState();
+// Dashboard bisa dipulihkan dari cache saat pengguna menekan Back setelah
+// keluar di halaman Akun; tanpa ini teksnya tetap "Masuk sebagai ...".
+addEventListener('pageshow', renderAuthState);
+addEventListener('storage', renderAuthState);
 
 // Sesi bergiliran. Perangkat me-reset statistiknya saat nilai owner berubah, jadi
 // mulai dan akhiri sesi cukup menulis satu field.
@@ -1063,6 +1071,7 @@ function applyCloudData(t, cfgRemote){
   $('sTemp').value = roomT; $('tVal').textContent = roomT.toFixed(1) + ' °C';
   $('sHum').value = roomHum; $('tHum').textContent = roomHum + ' %';
   liveRemSec = +(t.remaining_sec || 0);
+  liveRemAt = performance.now();
   if (t.target_interval_min) fsm.interval = Math.round(t.target_interval_min * 60000);
   const beforeCounts = [fsm.drinkCount, fsm.refillCount, fsm.cheatCount].join(',');
   fsm.totalDrank = +(t.total_ml || 0);
@@ -1192,15 +1201,19 @@ async function pollCloudOnce(){
   // Tiga sebab berbeda, tiga pesan berbeda. Dulu semuanya "Masuk dulu",
   // sehingga pengguna yang sudah masuk tapi belum menautkan alat diberi
   // petunjuk yang salah.
+  // Sesi diperiksa lebih dulu. Sebelumnya uid dicek duluan, dan logout
+  // menghapus shc_device_uid, jadi pengguna yang belum masuk mendapat
+  // petunjuk menautkan alat padahal yang kurang adalah login.
+  if (!await shcEnsureToken()){
+    $('cloudDot').className = 'status-dot err';
+    $('cloudStatus').innerHTML =
+      'Belum masuk. <a href="login.html" style="color:var(--water);">Buka halaman Akun</a> untuk masuk.';
+    return;
+  }
   if (!shcDeviceUid()){
     $('cloudDot').className = 'status-dot err';
     $('cloudStatus').innerHTML =
       'Alat belum ditautkan. <a href="login.html" style="color:var(--water);">Buka halaman Akun</a> untuk memasukkan kode alat.';
-    return;
-  }
-  if (!await shcEnsureToken()){
-    $('cloudDot').className = 'status-dot err';
-    $('cloudStatus').textContent = 'Sesi berakhir. Masuk lagi lewat halaman Akun.';
     return;
   }
   try {
@@ -1279,7 +1292,10 @@ function render(){
     const rem = fsm.remaining(simMs);
     $('cd').textContent = rem === null ? '--:--' : fmt(rem);
   } else {
-    $('cd').textContent = (fsm.state === 'TIMING' && liveRemSec !== null) ? fmtClock(liveRemSec * 1000) : '--:--';
+    const remLive = liveRemSec === null ? null
+      : Math.max(0, liveRemSec - (performance.now() - liveRemAt) / 1000);
+    $('cd').textContent = (fsm.state === 'TIMING' && remLive !== null)
+      ? fmtClock(remLive * 1000) : '--:--';
   }
 
   $('cDrink').textContent = fsm.drinkCount;
@@ -1323,21 +1339,20 @@ function render(){
     : prog >= 1 ? 'stabil (1,5 s terpenuhi)' : 'stabilitas: ' + Math.round(prog * 100) + '%';
 
   $('simClock').textContent = fmtClock(simMs);
-  const base = currentBaseMs();
-  const targetMs = connMode === 'sim'
-    ? (autoDht ? computeAdaptiveIntervalMs(base, roomT, roomHum) : base)
-    : fsm.interval;
+  const targetMs = connMode === 'sim' ? fsm.targetIntervalMs() : fsm.interval;
   $('interval').textContent = fmt(targetMs);
   const baseLabel = demo ? 'demo 15 s' : ('basis ' + customBaseMin + ' mnt');
-  $('intervalWhy').textContent = autoDht
-    ? (baseLabel + ' x faktor kontinu DHT11')
-    : (baseLabel + ' (mode manual tetap)');
+  $('intervalWhy').textContent = demo
+    ? 'demo 15 s (tetap, tanpa faktor DHT)'
+    : (autoDht ? (baseLabel + ' x faktor kontinu DHT11')
+               : (baseLabel + ' (mode manual tetap)'));
 }
 
 setInterval(() => {
   simMs += 100 * warp;
   if (connMode !== 'sim') {
     $('simClock').textContent = fmtClock(simMs);
+    render();   // countdown ikut berdetak tanpa menunggu push berikutnya
     return;
   }
   if (sc){

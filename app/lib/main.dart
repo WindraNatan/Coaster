@@ -1074,12 +1074,24 @@ class _DashboardScreenState extends State<DashboardScreen>
     _startRemindTick();
   }
 
+  /// Sisa waktu yang benar-benar berjalan. Alat hanya mengirim snapshot
+  /// saat ada perubahan lain atau heartbeat, jadi angka mentah membeku lalu
+  /// melompat. Kurangi sendiri dengan waktu sejak snapshot tiba.
+  int _liveRemaining(Telemetry t) {
+    final at = _lastSync;
+    if (at == null) return t.remainingSec;
+    final rem = t.remainingSec - DateTime.now().difference(at).inSeconds;
+    return rem < 0 ? 0 : rem;
+  }
+
   void _startRemindTick() {
     _remindTick?.cancel();
     _remindTick = Timer.periodic(const Duration(seconds: 1), (_) async {
       final left = await ReminderService.timeLeft();
       if (!mounted) return;
-      if (left != _remindLeft) setState(() => _remindLeft = left);
+      // Digambar ulang tiap detik: kartu sisa waktu menghitung sendiri dari
+      // snapshot terakhir, jadi angkanya harus ikut berjalan.
+      setState(() => _remindLeft = left);
     });
   }
 
@@ -1112,8 +1124,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
       return;
     }
-    if (t.remainingSec <= 0) return;
-    final target = DateTime.now().add(Duration(seconds: t.remainingSec));
+    final rem = _liveRemaining(t);
+    if (rem <= 0) return;
+    final target = DateTime.now().add(Duration(seconds: rem));
     if (!shouldScheduleReminder(
         state: t.canonicalState, target: target, current: _plan)) {
       return;
@@ -1131,13 +1144,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (t == null) return;
     // Tanpa sisa waktu tidak ada yang bisa dijadwalkan; alarm yang sudah ada
     // dibatalkan supaya tidak berbunyi di waktu yang tidak lagi berlaku.
-    if (t.remainingSec <= 0) {
+    final rem = _liveRemaining(t);
+    if (rem <= 0) {
       await ReminderService.cancel();
       _plan = null;
       return;
     }
     await ReminderService.schedule(
-      lead: Duration(seconds: t.remainingSec),
+      lead: Duration(seconds: rem),
       sound: _remindSound,
       vibrate: _remindVibrate,
     );
@@ -1562,8 +1576,12 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _countdownCard(Telemetry t) {
     final targetSec = (t.targetIntervalMin * 60).round();
-    final progress = targetSec > 0
-        ? (1 - t.remainingSec / targetSec).clamp(0.0, 1.0)
+    final timing = t.canonicalState == 'TIMING';
+    final rem = _liveRemaining(t);
+    // Sisa 0 saat timer belum mulai bukan berarti waktunya habis: tanpa
+    // gerbang ini bar terlihat penuh dan seolah alarm sudah lewat.
+    final progress = (timing && targetSec > 0)
+        ? (1 - rem / targetSec).clamp(0.0, 1.0)
         : 0.0;
     return _card(
       child: Column(
@@ -1579,7 +1597,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
           const SizedBox(height: 6),
-          Text(Telemetry.mmss(t.remainingSec),
+          Text(timing ? Telemetry.mmss(rem) : '--:--',
               style: _monoStyle(34, color: _ink, weight: FontWeight.w600)),
           const SizedBox(height: 12),
           ClipRRect(

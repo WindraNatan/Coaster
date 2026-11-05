@@ -28,6 +28,7 @@ public:
           timerStartMs(0),
           liftStartMs(0),
           monitorIntervalMs(BASE_INTERVAL_MS),
+          cycleTargetMs(BASE_INTERVAL_MS),
           maxLiftDurationMs(MAX_LIFT_DURATION_MS),
           stableCandidateWeight(0.0f),
           stableStartMs(0),
@@ -41,9 +42,19 @@ public:
           lastRefillMs(0),
           calibrationAlign(false),
           preRefillState(STATE_IDLE),
-          preRefillTimerStartMs(0) {}
+          preRefillTimerStartMs(0),
+          preRefillCycleTargetMs(0) {}
 
     void setInterval(uint32_t intervalMs) { monitorIntervalMs = intervalMs; }
+
+    // Interval dikunci saat siklus mulai. Tanpa ini, target yang menyusut
+    // karena suhu berubah bisa langsung memenuhi elapsed >= target dan alarm
+    // berbunyi lebih awal dari yang dirancang. Target baru berlaku di siklus
+    // berikutnya, jadi hitungan tetap utuh sekali dimulai.
+    void startCycle(uint32_t nowMs) {
+        timerStartMs = nowMs;
+        cycleTargetMs = monitorIntervalMs;
+    }
 
     void setMaxLiftDuration(uint32_t maxLiftMs) { maxLiftDurationMs = maxLiftMs; }
 
@@ -102,7 +113,7 @@ public:
                         missingCupAlert = false;
                         enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
                     } else {
-                        timerStartMs = nowMs;
+                        startCycle(nowMs);
                         enterState(STATE_TIMING, currentWeight, nowMs);
                     }
                 }
@@ -141,13 +152,13 @@ public:
                                 missingCupAlert = false;
                                 enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
                             } else {
-                                timerStartMs = nowMs;
+                                startCycle(nowMs);
                             }
                         }
                     }
                     break;
                 }
-                if (nowMs - timerStartMs >= monitorIntervalMs) {
+                if (nowMs - timerStartMs >= cycleTargetMs) {
                     enterState(STATE_ALERT_DRINK, currentWeight, nowMs);
                 }
                 break;
@@ -191,7 +202,7 @@ public:
                                 missingCupAlert = false;
                                 enterState(STATE_ALERT_REFILL, currentWeight, nowMs);
                             } else {
-                                timerStartMs = nowMs;
+                                startCycle(nowMs);
                                 enterState(STATE_TIMING, currentWeight, nowMs);
                             }
                         }
@@ -230,7 +241,7 @@ public:
                         calibrationAlign = false;
                         if (currentWeight > emptyLimit) {
                             baselineWeight = currentWeight;
-                            timerStartMs = nowMs;
+                            startCycle(nowMs);
                             enterState(STATE_TIMING, currentWeight, nowMs);
                         }
                     }
@@ -250,7 +261,11 @@ public:
     uint16_t getDrinkCount() const { return drinkCount; }
     uint16_t getCheatCount() const { return cheatCount; }
     uint16_t getRefillCount() const { return refillCount; }
-    uint32_t getTargetIntervalMs() const { return monitorIntervalMs; }
+    // Siklus berjalan memakai target yang dikunci; di luar itu yang berlaku
+    // adalah target berikutnya, supaya angka di layar tidak melompat sendiri.
+    uint32_t getTargetIntervalMs() const {
+        return currentState == STATE_TIMING ? cycleTargetMs : monitorIntervalMs;
+    }
     bool isMissingCup() const { return missingCupAlert; }
 
     float getWaterVolumeMl(float currentWeight) const {
@@ -267,8 +282,8 @@ public:
     uint32_t getRemainingTimeMs(uint32_t nowMs) const {
         if (currentState != STATE_TIMING) return 0;
         uint32_t elapsed = nowMs - timerStartMs;
-        if (elapsed >= monitorIntervalMs) return 0;
-        return monitorIntervalMs - elapsed;
+        if (elapsed >= cycleTargetMs) return 0;
+        return cycleTargetMs - elapsed;
     }
 
     const char* getStateString() const {
@@ -320,8 +335,9 @@ private:
         // bisa memulihkannya — lihat cancelPendingRefill.
         preRefillState = currentState;
         preRefillTimerStartMs = timerStartMs;
+        preRefillCycleTargetMs = cycleTargetMs;
         baselineWeight = newWeight;
-        timerStartMs = nowMs;
+        startCycle(nowMs);
         refillCount++;
         refillPending = true;
         preRefillBaseline = oldBaseline;
@@ -343,8 +359,9 @@ private:
             preRefillState == STATE_ALERT_CHEAT) {
             currentState = preRefillState;
             timerStartMs = preRefillTimerStartMs;
+            cycleTargetMs = preRefillCycleTargetMs;
         } else {
-            timerStartMs = nowMs;
+            startCycle(nowMs);
         }
     }
 
@@ -387,7 +404,7 @@ private:
             // pra-tekanan, minum tidak dicatat.
             recordDrink(decreased, currentWeight, nowMs);
             baselineWeight = currentWeight;
-            timerStartMs = nowMs;
+            startCycle(nowMs);
             enterState(STATE_TIMING, currentWeight, nowMs);
             return;
         }
@@ -402,6 +419,7 @@ private:
     uint32_t timerStartMs;
     uint32_t liftStartMs;
     uint32_t monitorIntervalMs;
+    uint32_t cycleTargetMs;
     uint32_t maxLiftDurationMs;
     float stableCandidateWeight;
     uint32_t stableStartMs;
@@ -416,6 +434,7 @@ private:
     bool calibrationAlign;
     CoasterState preRefillState;
     uint32_t preRefillTimerStartMs;
+    uint32_t preRefillCycleTargetMs;
 };
 
 #endif

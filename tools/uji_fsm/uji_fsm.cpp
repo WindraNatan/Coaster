@@ -166,6 +166,30 @@ int main(){
     CHECK(n.getRefillCount() == 1 && n.getState() == STATE_TIMING && fabs(n.getBaselineWeight() - 400.0f) < 0.01f,
           "21e. isi ulang cepat setelah lift tetap terhitung");
 
+    // 22. Target berubah di tengah siklus tidak boleh mempercepat alarm.
+    CoasterFSM o;
+    o.setInterval(15000);
+    o.setMaxLiftDuration(10000);
+    settle(o, 380, 1000);
+    o.update(380, 5000);
+    o.setInterval(5000);   // target menyusut di bawah elapsed
+    o.update(380, 5200);
+    CHECK(o.getState() == STATE_TIMING, "22a. target menyusut tidak memicu ALERT_DRINK lebih awal");
+    CHECK(o.getRemainingTimeMs(5200) > 0, "22b. sisa waktu tetap dihitung dari target siklus");
+    // Siklus mulai di 2500 (stabil 1,5 dtk), target 15000 -> alarm di 17500.
+    o.update(380, 17400);
+    CHECK(o.getState() == STATE_TIMING, "22c. sebelum 17500 masih TIMING");
+    o.update(380, 17600);
+    CHECK(o.getState() == STATE_ALERT_DRINK, "22d. alarm berbunyi di target awal, bukan di 7500");
+
+    // 23. Siklus yang dimulai setelah setInterval memakai target baru.
+    CoasterFSM q;
+    q.setInterval(5000);
+    q.setMaxLiftDuration(10000);
+    settle(q, 380, 1000);
+    CHECK(q.getTargetIntervalMs() == 5000, "23a. siklus baru memakai target baru");
+    CHECK(q.getRemainingTimeMs(3500) == 4000, "23b. sisa waktu mengikuti target 5000");
+
     printf("\n%s (%d gagal)\n", fails ? "ADA YANG GAGAL" : "SEMUA LULUS", fails);
     return fails ? 1 : 0;
 }
