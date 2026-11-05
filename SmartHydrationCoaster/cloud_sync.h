@@ -319,11 +319,13 @@ static void cloudTask(void*) {
             (int32_t)(now - mirrorRetryAfterMs) >= 0) {
             String cek = activeFirebaseUrl + "/users/" + activeUid +
                          "/smart_coaster/claimCode.json" + authSuffix();
+            bool cekOk = false;
             if (rtdb.begin(tls, cek)) {
                 int cekCode = rtdb.GET();
                 String isi = (cekCode == 200) ? rtdb.getString() : String();
                 rtdb.end();
                 if (cekCode == 200) {
+                    cekOk = true;
                     claimMirrorChecked = true;
                     if (isi.indexOf(claimCode) < 0) {
                         // Node dihapus, atau akun berganti sementara NVS masih
@@ -337,6 +339,8 @@ static void cloudTask(void*) {
                     }
                 }
             }
+            // Gagal baca jangan diulang tiap 250 ms; mundur satu jam seperti PUT.
+            if (!cekOk) mirrorRetryAfterMs = now + 3600000UL;
         }
 
         if (!claimMirrored && (int32_t)(now - mirrorRetryAfterMs) >= 0) {
