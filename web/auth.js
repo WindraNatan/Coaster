@@ -61,6 +61,21 @@ function shcCoasterUrl(base){
   return base + '/users/' + encodeURIComponent(uid) + '/smart_coaster';
 }
 
+// Kode alat yang ditemukan dari akun sendiri. Firmware menulis salinannya ke
+// node ini karena /claims hanya bisa dibaca setelah kodenya diketahui.
+// Kembalian kosong berarti belum ada alat yang pernah terhubung ke akun ini.
+async function shcFindOwnDevice(base){
+  if (!shcToken()) throw new Error('Masuk dulu sebelum mencari alat.');
+  if (!shcUid()) throw new Error('Akun belum dikenal. Masuk ulang.');
+  const url = base + '/users/' + encodeURIComponent(shcUid()) +
+              '/smart_coaster/claimCode.json' + shcAuthSuffix();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Gagal mencari alat (HTTP ' + res.status + ').');
+  const value = await res.json();
+  if ('object' === typeof value || !value) return '';
+  return String(value).trim().toUpperCase();
+}
+
 // Klaim kode alat: baca /claims/<kode>, lalu tulis tautan milik sendiri. Rules menolak
 // tautan kalau kode tidak menunjuk ke perangkat yang dimaksud.
 async function shcClaimDevice(base, code){

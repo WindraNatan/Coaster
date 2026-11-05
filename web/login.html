@@ -130,6 +130,7 @@ a.pill.off{opacity:.55}
              autocomplete="off" style="text-transform:uppercase">
       <div class="actions">
         <button type="button" id="bClaim">Klaim alat</button>
+        <button type="button" id="bFindDevice">Cari alat</button>
       </div>
     </form>
   </section>
@@ -213,6 +214,29 @@ async function doAuth(kind){
 
 $('authForm').addEventListener('submit', e => { e.preventDefault(); doAuth('login'); });
 $('bAuthRegister').addEventListener('click', () => doAuth('register'));
+
+$('bFindDevice').addEventListener('click', async () => {
+  const base = cleanUrl($('authUrlIn').value) || shcBaseUrl();
+  const btn = $('bFindDevice');
+  btn.disabled = true;
+  setStatus($('claimStatus'), $('claimDot'), 'Mencari alat...', '');
+  try {
+    const code = await shcFindOwnDevice(base);
+    if (!code) {
+      setStatus($('claimStatus'), $('claimDot'),
+        'Belum ada alat yang pernah terhubung ke akun ini. Nyalakan alat, sambungkan ke Wi-Fi lewat portal Coaster-Setup, lalu coba lagi.', 'err');
+      return;
+    }
+    $('deviceCodeIn').value = code;
+    setStatus($('claimStatus'), $('claimDot'),
+      'Alat ditemukan: ' + code + '. Tekan Klaim alat.', 'ok');
+  } catch (e) {
+    setStatus($('claimStatus'), $('claimDot'),
+      'Gagal mencari alat: ' + (e.message || e), 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 $('bClaim').addEventListener('click', async () => {
   const base = cleanUrl($('authUrlIn').value) || shcBaseUrl();
