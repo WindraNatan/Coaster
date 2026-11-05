@@ -321,6 +321,9 @@ static void cloudTask(void*) {
                 rtdb.end();
                 if (mirrorCode == 200) {
                     claimMirrored = true;
+                    // Bukti yang bisa dibaca dari Serial. Tanpa ini, berhasil dan
+                    // belum-dicoba terlihat sama.
+                    Serial.printf("[CLOUD] Salinan kode klaim tersimpan (HTTP 200).\n");
                     Preferences mp;
                     mp.begin("shc", false);
                     mp.putBool("claimMirrorDone", true);
