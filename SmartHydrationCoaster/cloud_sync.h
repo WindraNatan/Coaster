@@ -232,6 +232,24 @@ static bool publishClaimCode() {
     http.end();
     if (code == 200) {
         Serial.printf("[CLOUD] Kode klaim: %s\n", claimCode.c_str());
+
+        // Salinan di akun pemilik. /claims hanya boleh dibaca pemilik, jadi
+        // halaman Akun tidak bisa mencari alat lewat node itu. Node ini bisa
+        // dibaca pemiliknya sendiri, dan dipakai tombol "Cari alat".
+        String mine = activeFirebaseUrl + "/users/" + activeUid +
+                      "/smart_coaster/claimCode.json" + authSuffix();
+        if (http.begin(tls, mine)) {
+            http.addHeader("Content-Type", "application/json");
+            int mirrorCode = http.PUT("\"" + claimCode + "\"");
+            http.end();
+            // Tulis sekali saja (gerbang claimDone): gagal di sini tidak
+            // diulang, jadi statusnya harus tercetak. 401 berarti aturan
+            // claimCode belum dipasang di konsol Firebase.
+            if (mirrorCode != 200) {
+                Serial.printf("[CLOUD] Salinan kode klaim gagal (HTTP %d). Pasang aturan claimCode, atau baca kode dari sini.\n", mirrorCode);
+            }
+        }
+
         Preferences prefs;
         prefs.begin("shc", false);
         prefs.putBool("claimDone", true);
