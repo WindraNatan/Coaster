@@ -241,7 +241,7 @@ $('bFindDevice').addEventListener('click', async () => {
 $('bClaim').addEventListener('click', async () => {
   const base = cleanUrl($('authUrlIn').value) || shcBaseUrl();
   if (!base) { setStatus($('claimStatus'), $('claimDot'), 'Isi URL database di kartu Akun.', 'err'); return; }
-  if (!shcToken()) { setStatus($('claimStatus'), $('claimDot'), 'Masuk dulu sebelum mengklaim alat.', 'err'); return; }
+  if (!(await shcEnsureToken())) { setStatus($('claimStatus'), $('claimDot'), 'Sesi akun habis. Masuk ulang.', 'err'); return; }
   $('bClaim').disabled = true;
   setStatus($('claimStatus'), $('claimDot'), 'Mencari kode alat…', '');
   try {

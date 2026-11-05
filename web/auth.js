@@ -65,7 +65,9 @@ function shcCoasterUrl(base){
 // node ini karena /claims hanya bisa dibaca setelah kodenya diketahui.
 // Kembalian kosong berarti belum ada alat yang pernah terhubung ke akun ini.
 async function shcFindOwnDevice(base){
-  if (!shcToken()) throw new Error('Masuk dulu sebelum mencari alat.');
+  // shcToken() kosong lima menit sebelum kedaluwarsa. Akun yang masih punya
+  // refresh token harus diperpanjang dulu, bukan ditolak.
+  if (!(await shcEnsureToken())) throw new Error('Sesi akun habis. Masuk ulang.');
   if (!shcUid()) throw new Error('Akun belum dikenal. Masuk ulang.');
   const url = base + '/users/' + encodeURIComponent(shcUid()) +
               '/smart_coaster/claimCode.json' + shcAuthSuffix();
@@ -79,7 +81,7 @@ async function shcFindOwnDevice(base){
 // Klaim kode alat: baca /claims/<kode>, lalu tulis tautan milik sendiri. Rules menolak
 // tautan kalau kode tidak menunjuk ke perangkat yang dimaksud.
 async function shcClaimDevice(base, code){
-  if (!shcToken()) throw new Error('Masuk dulu sebelum mengklaim alat.');
+  if (!(await shcEnsureToken())) throw new Error('Sesi akun habis. Masuk ulang.');
   const clean = (code || '').trim().toUpperCase();
   if (clean.length !== 8) throw new Error('Kode alat harus 8 karakter.');
   const res = await fetch(base + '/claims/' + encodeURIComponent(clean) + '.json' + shcAuthSuffix());
