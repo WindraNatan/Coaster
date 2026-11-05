@@ -12,6 +12,7 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <ESPmDNS.h>
+#include <esp_mac.h>
 
 // ponytail: satu transport cloud saja (HTTPS REST ke Firebase RTDB). MQTT sengaja
 // dilewat: RTDB sudah push realtime + last-known state, dan konsumen tambahan
@@ -51,6 +52,7 @@ static bool claimPublished = false;
 // boleh ditulis ulang bila aturannya baru dipasang atau alat di-flash ulang.
 static bool claimMirrored = false;
 static uint32_t claimRetryAfterMs = 0;
+static uint32_t mirrorRetryAfterMs = 0;
 static char sessionOwner[40] = "";
 static uint32_t tokenExpiryMs = 0;
 
@@ -280,7 +282,8 @@ static void cloudTask(void*) {
                                      "(FIREBASE_DB_URL)."));
                 } else if (WiFi.status() != WL_CONNECTED) {
                     Serial.printf("[CLOUD] Wi-Fi belum konek (status %d, SSID \"%s\"). "
-                                  "ESP32 hanya bisa 2.4 GHz.\n",
+                                  "Periksa sandi dan pastikan SSID 2.4 GHz; "
+                                  "status 6 hanya berarti terputus.\n",
                                   (int)WiFi.status(), activeWifiSsid.c_str());
                 }
             }
@@ -309,7 +312,7 @@ static void cloudTask(void*) {
         // Salinan kode di akun pemilik, terpisah dari /claims. /claims hanya
         // boleh dibaca pemilik dan menolak PUT kedua selamanya, jadi node ini
         // yang dipakai tombol "Cari alat" di halaman Akun.
-        if (!claimMirrored) {
+        if (!claimMirrored && (int32_t)(now - mirrorRetryAfterMs) >= 0) {
             String mine = activeFirebaseUrl + "/users/" + activeUid +
                           "/smart_coaster/claimCode.json" + authSuffix();
             if (rtdb.begin(tls, mine)) {
@@ -322,6 +325,11 @@ static void cloudTask(void*) {
                     mp.begin("shc", false);
                     mp.putBool("claimMirrorDone", true);
                     mp.end();
+                } else {
+                    // 401 = aturan claimCode belum dipasang di konsol.
+                    // Cetak sekali per jam, jangan tiap putaran cloudTask.
+                    mirrorRetryAfterMs = now + 3600000UL;
+                    Serial.printf("[CLOUD] Salinan kode klaim gagal (HTTP %d). Pasang aturan claimCode, atau baca kode dari sini.\n", mirrorCode);
                 }
             }
         }
@@ -557,11 +565,19 @@ inline void startClaimBeacon() {
         Serial.println(F("[MDNS] Gagal mulai; klaim lewat portal tetap jalan."));
         return;
     }
+    // Portal hidup dalam mode AP saja. Di mode itu antarmuka STA tidak aktif,
+    // dan WiFi.macAddress() mengembalikan 00:00:00:00:00:00. MAC dibaca dari
+    // eFuse supaya TXT tetap berisi alamat perangkat untuk aplikasi Android/iOS.
+    uint8_t macBin[6];
+    char macTxt[18];
+    esp_efuse_mac_get_default(macBin);
+    snprintf(macTxt, sizeof(macTxt), "%02X:%02X:%02X:%02X:%02X:%02X",
+             macBin[0], macBin[1], macBin[2], macBin[3], macBin[4], macBin[5]);
     MDNS.addService("shc", "tcp", 80);
     MDNS.addServiceTxt("shc", "tcp", "code", claimCode);
-    MDNS.addServiceTxt("shc", "tcp", "mac", WiFi.macAddress());
+    MDNS.addServiceTxt("shc", "tcp", "mac", String(macTxt));
     Serial.printf("[MDNS] Dapat ditemukan di LAN: %s._shc._tcp, code=%s, mac=%s\n",
-                  claimCode.c_str(), claimCode.c_str(), WiFi.macAddress().c_str());
+                  claimCode.c_str(), claimCode.c_str(), macTxt);
 }
 
 inline void stopClaimBeacon() {
