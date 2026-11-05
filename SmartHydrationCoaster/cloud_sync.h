@@ -53,6 +53,9 @@ static bool claimPublished = false;
 static bool claimMirrored = false;
 static uint32_t claimRetryAfterMs = 0;
 static uint32_t mirrorRetryAfterMs = 0;
+// Sekali per boot isi node diperiksa, supaya gerbang NVS tidak buta terhadap
+// node yang dihapus atau akun yang berganti.
+static bool claimMirrorChecked = false;
 static char sessionOwner[40] = "";
 static uint32_t tokenExpiryMs = 0;
 
@@ -312,6 +315,30 @@ static void cloudTask(void*) {
         // Salinan kode di akun pemilik, terpisah dari /claims. /claims hanya
         // boleh dibaca pemilik dan menolak PUT kedua selamanya, jadi node ini
         // yang dipakai tombol "Cari alat" di halaman Akun.
+        if (!claimMirrorChecked && claimMirrored &&
+            (int32_t)(now - mirrorRetryAfterMs) >= 0) {
+            String cek = activeFirebaseUrl + "/users/" + activeUid +
+                         "/smart_coaster/claimCode.json" + authSuffix();
+            if (rtdb.begin(tls, cek)) {
+                int cekCode = rtdb.GET();
+                String isi = (cekCode == 200) ? rtdb.getString() : String();
+                rtdb.end();
+                if (cekCode == 200) {
+                    claimMirrorChecked = true;
+                    if (isi.indexOf(claimCode) < 0) {
+                        // Node dihapus, atau akun berganti sementara NVS masih
+                        // menyimpan tanda lama. Buka gerbang dan tulis ulang.
+                        claimMirrored = false;
+                        Preferences mp;
+                        mp.begin("shc", false);
+                        mp.remove("claimMirrorDone");
+                        mp.end();
+                        Serial.println(F("[CLOUD] Salinan kode tidak cocok; ditulis ulang."));
+                    }
+                }
+            }
+        }
+
         if (!claimMirrored && (int32_t)(now - mirrorRetryAfterMs) >= 0) {
             String mine = activeFirebaseUrl + "/users/" + activeUid +
                           "/smart_coaster/claimCode.json" + authSuffix();
