@@ -513,7 +513,7 @@ static void wifiOnSaveParams() {
     wifiAttemptMs = millis();
 }
 
-// Portal dibuka tanpa memblokir: autoConnect() menahan core 1 sampai 180 dtk,
+// Portal dibuka tanpa memblokir: autoConnect() (tidak dipakai di sini) menahan core 1 sampai 180 dtk,
 // dan selama itu sampling 10 Hz serta gerbang stabilitas 1,5 dtk berhenti.
 // handleWifiPortal() dipanggil dari loop() dan hanya memproses satu putaran
 // server, jadi alat tetap mengukur sambil menunggu kredensial.
@@ -535,8 +535,9 @@ inline void startClaimBeacon() {
     }
     MDNS.addService("shc", "tcp", 80);
     MDNS.addServiceTxt("shc", "tcp", "code", claimCode);
-    Serial.printf("[MDNS] Dapat ditemukan di LAN: %s._shc._tcp, code=%s\n",
-                  claimCode.c_str(), claimCode.c_str());
+    MDNS.addServiceTxt("shc", "tcp", "mac", WiFi.macAddress());
+    Serial.printf("[MDNS] Dapat ditemukan di LAN: %s._shc._tcp, code=%s, mac=%s\n",
+                  claimCode.c_str(), claimCode.c_str(), WiFi.macAddress().c_str());
 }
 
 inline void stopClaimBeacon() {
