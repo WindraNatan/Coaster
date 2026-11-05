@@ -707,6 +707,12 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     // tidak melarang PUT ulang. Tandai terpisah supaya alat yang sudah
     // pernah mengklaim tetap menyalin kodenya setelah firmware ini naik.
     claimMirrored = prefs.getBool("claimMirrorDone", false);
+    // Statusnya dicetak: bila gerbang sudah tertutup, blok salinan tidak jalan
+    // dan tidak ada baris PUT sama sekali. Tanpa baris ini, "sudah tersimpan"
+    // dan "tidak pernah dicoba" tidak bisa dibedakan dari Serial.
+    Serial.printf("[CLOUD] Salinan kode klaim: %s\n",
+                  claimMirrored ? "sudah tercatat, PUT tidak diulang"
+                                : "belum tercatat, akan dicoba");
     if (claimCode.length() == 0) {
         claimCode = makeClaimCode();
         Preferences w;
