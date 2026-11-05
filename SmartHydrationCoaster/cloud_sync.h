@@ -47,6 +47,9 @@ static String activeUid = "";
 static String refreshToken = "";
 static String claimCode = "";
 static bool claimPublished = false;
+// Salinan kode di node pemilik punya status sendiri: /claims sekali tulis, salinan
+// boleh ditulis ulang bila aturannya baru dipasang atau alat di-flash ulang.
+static bool claimMirrored = false;
 static uint32_t claimRetryAfterMs = 0;
 static char sessionOwner[40] = "";
 static uint32_t tokenExpiryMs = 0;
@@ -233,23 +236,6 @@ static bool publishClaimCode() {
     if (code == 200) {
         Serial.printf("[CLOUD] Kode klaim: %s\n", claimCode.c_str());
 
-        // Salinan di akun pemilik. /claims hanya boleh dibaca pemilik, jadi
-        // halaman Akun tidak bisa mencari alat lewat node itu. Node ini bisa
-        // dibaca pemiliknya sendiri, dan dipakai tombol "Cari alat".
-        String mine = activeFirebaseUrl + "/users/" + activeUid +
-                      "/smart_coaster/claimCode.json" + authSuffix();
-        if (http.begin(tls, mine)) {
-            http.addHeader("Content-Type", "application/json");
-            int mirrorCode = http.PUT("\"" + claimCode + "\"");
-            http.end();
-            // Tulis sekali saja (gerbang claimDone): gagal di sini tidak
-            // diulang, jadi statusnya harus tercetak. 401 berarti aturan
-            // claimCode belum dipasang di konsol Firebase.
-            if (mirrorCode != 200) {
-                Serial.printf("[CLOUD] Salinan kode klaim gagal (HTTP %d). Pasang aturan claimCode, atau baca kode dari sini.\n", mirrorCode);
-            }
-        }
-
         Preferences prefs;
         prefs.begin("shc", false);
         prefs.putBool("claimDone", true);
@@ -319,6 +305,26 @@ static void cloudTask(void*) {
         portENTER_CRITICAL(&snapMux);
         local = snap;
         portEXIT_CRITICAL(&snapMux);
+
+        // Salinan kode di akun pemilik, terpisah dari /claims. /claims hanya
+        // boleh dibaca pemilik dan menolak PUT kedua selamanya, jadi node ini
+        // yang dipakai tombol "Cari alat" di halaman Akun.
+        if (!claimMirrored) {
+            String mine = activeFirebaseUrl + "/users/" + activeUid +
+                          "/smart_coaster/claimCode.json" + authSuffix();
+            if (rtdb.begin(tls, mine)) {
+                rtdb.addHeader("Content-Type", "application/json");
+                int mirrorCode = rtdb.PUT("\"" + claimCode + "\"");
+                rtdb.end();
+                if (mirrorCode == 200) {
+                    claimMirrored = true;
+                    Preferences mp;
+                    mp.begin("shc", false);
+                    mp.putBool("claimMirrorDone", true);
+                    mp.end();
+                }
+            }
+        }
 
         if (!claimPublished && (int32_t)(now - claimRetryAfterMs) >= 0) {
             // Aturan RTDB menolak PUT kedua selamanya. Gagal sekali = jangan
@@ -678,6 +684,10 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     // Aturan RTDB menolak penulisan kode klaim kedua; setelah berhasil sekali,
     // jangan PUT lagi (dulu retry 250 ms terus dan membakar kuota).
     claimPublished = prefs.getBool("claimDone", false);
+    // Salinan di node pemilik bukan bagian dari /claims: aturan di sana
+    // tidak melarang PUT ulang. Tandai terpisah supaya alat yang sudah
+    // pernah mengklaim tetap menyalin kodenya setelah firmware ini naik.
+    claimMirrored = prefs.getBool("claimMirrorDone", false);
     if (claimCode.length() == 0) {
         claimCode = makeClaimCode();
         Preferences w;
