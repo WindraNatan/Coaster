@@ -317,7 +317,7 @@ void setup() {
     initCloudSync(nvsSsid, nvsPass, nvsUrl);
 
     Serial.println(F("Smart Hydration Coaster - ESP32 Siap."));
-    Serial.println(F("Perintah: 't'=Tare, 'c'=Kalibrasi Gelas, 'e<g>'=Set Gelas, 'i<mnt>'=Interval, 'd'=Demo, 'm'=Auto/Manual, 'q'=Hening, 'r'=Reset"));
+    Serial.println(F("Perintah: 't'=Tare, 'c'=Kalibrasi Gelas, 'e<g>'=Set Gelas, 'i<mnt>'=Interval, 'd'=Demo, 'm'=Auto/Manual, 'q'=Hening, 'r'=Reset, 'z'=Tidur, 'x'=Bangun"));
 }
 
 void loop() {
