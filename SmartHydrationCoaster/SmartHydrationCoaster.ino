@@ -34,10 +34,8 @@ bool buzzerMuted = false;
 // config saat flag ini terpasang — jangan PATCH dari loop() core 1: satu HTTPS
 // butuh 1-3 dtk dan menghentikan sampling 10 Hz.
 volatile bool configDirty = false;
-// Sesi aktif atau berakhir datang dari klien lewat session.json. Ditulis
-// cloudTask (core 0), dibaca loop (core 1), jadi harus volatile.
-volatile bool standbyRequested = false;
-// Cermin sisi loop: dipakai untuk mendeteksi perpindahan sesi.
+// Cermin sisi loop dari SessionGate (lihat session_gate.h): dipakai untuk
+// mendeteksi perpindahan sesi dan untuk laporan serial.
 bool standbyActive = false;
 uint32_t customBaseIntervalMs = BASE_INTERVAL_MS;
 
@@ -179,7 +177,9 @@ void printTelemetry(float filteredWeight, uint32_t nowMs) {
     Serial.print(demoMode ? F("DEMO-") : F("NORM-"));
     Serial.print(autoDhtTimerMode ? F("AUTO") : F("MANUAL"));
     Serial.print(F(" | Buzzer: "));
-    Serial.println(buzzerMuted ? F("MUTE") : F("ON"));
+    Serial.print(buzzerMuted ? F("MUTE") : F("ON"));
+    Serial.print(F(" | Sesi: "));
+    Serial.println(standbyActive ? F("TIDUR") : F("AKTIF"));
 }
 
 void handleSerialCommands(float currentFilteredWeight) {
@@ -283,8 +283,16 @@ void handleSerialCommands(float currentFilteredWeight) {
             Serial.print(F("[KONFIG] URL Firebase RTDB disimpan: "));
             Serial.println(url);
         } else {
-            Serial.println(F("[DITOLAK] URL Firebase wajib diawali https://"));
+        Serial.println(F("[DITOLAK] URL Firebase wajib diawali https://"));
         }
+    } else if (cmd == 'z' || cmd == 'Z') {
+        // Jalan pintas USB untuk "Akhiri Sesi": tanpa ini, tidur hanya bisa
+        // dipicu lewat cloud, padahal demo sering memakai kabel saja.
+        setLocalStandby(true);
+        Serial.println(F("[SESI] Diminta tidur dari serial."));
+    } else if (cmd == 'x' || cmd == 'X') {
+        setLocalStandby(false);
+        Serial.println(F("[SESI] Diminta bangun dari serial."));
     }
 }
 
@@ -342,8 +350,9 @@ void loop() {
     filteredWeight = weightFilter.getAverage();
 
     // Perpindahan sesi: berakhir berarti tidur, dimulai lagi berarti bangun.
-    if (standbyRequested != standbyActive) {
-        standbyActive = standbyRequested;
+    bool standbyNow = standbyActiveNow();
+    if (standbyNow != standbyActive) {
+        standbyActive = standbyNow;
         alertModeActive = false;
         actuatorOutputState = false;
         if (standbyActive) {

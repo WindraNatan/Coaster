@@ -146,6 +146,70 @@ void main() {
     expect(find.text('OFF'), findsOneWidget);
   });
 
+  // Sesi: "Akhiri sesi" harus menulis active:false. Tanpa field itu perangkat
+  // hanya melihat owner kosong dan tetap berjalan, jadi alarm tetap berbunyi
+  // setelah sesi ditutup.
+  testWidgets('akhiri sesi menulis owner kosong dan active:false',
+      (tester) async {
+    final puts = <String>[];
+    final client = MockClient((req) async {
+      if (req.method == 'PUT' && req.url.path.endsWith('/session.json')) {
+        puts.add('${req.url.path} ${req.body}');
+        return Response('{}', 200);
+      }
+      return Response(
+          req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200);
+    });
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    final tombol = find.text('Akhiri sesi');
+    await tester.ensureVisible(tombol);
+    await tester.pump();
+    await tester.tap(tombol);
+    await tester.pump();
+
+    expect(puts, hasLength(1));
+    expect(puts.first, startsWith('/users/uid-test/smart_coaster/session.json '));
+    expect(puts.first, contains('"owner":""'));
+    expect(puts.first, contains('"active":false'));
+  });
+
+  // Mode harus sampai ke alat lebih dulu: kalau sesi dibuka sebelum PATCH mode
+  // diterima, siklus pertama berjalan dengan target mode lama.
+  testWidgets('mulai sesi minta konfirmasi mode, patch mode dulu baru buka sesi',
+      (tester) async {
+    final urutan = <String>[];
+    final client = MockClient((req) async {
+      if (req.method == 'PATCH' || req.method == 'PUT') {
+        urutan.add('${req.method} ${req.url.path} ${req.body}');
+      }
+      return Response('{}', 200);
+    });
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    final tombol = find.text('Mulai sesi');
+    await tester.ensureVisible(tombol);
+    await tester.pump();
+    await tester.tap(tombol);
+    // Lembar konfirmasi muncul lebih dulu; belum ada yang ditulis ke cloud.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Demo 15 detik'), findsOneWidget);
+    expect(urutan, isEmpty);
+
+    await tester.tap(find.text('Demo 15 detik'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(urutan, hasLength(2));
+    expect(urutan[0], 'PATCH /users/uid-test/smart_coaster/config.json {"timer_mode":"DEMO"}');
+    expect(urutan[1], contains('PUT /users/uid-test/smart_coaster/session.json'));
+    expect(urutan[1], contains('"owner":"uid-akun"'));
+    expect(urutan[1], contains('"active":true'));
+  });
+
   // Regresi desinkronisasi mute: config adalah perintah (saklar pengguna),
   // telemetry adalah echo perangkat yang baru berubah setelah ESP32 poll config
   // (15 dtk). Kalau telemetry menang, saklar membalik sendiri beberapa detik

@@ -18,6 +18,7 @@ void main() {
         'refill_count': 1,
         'cheat_count': 2,
         'muted': true,
+        'standby': true,
         'fsm_state': 'TIMING',
       });
       expect(t.weightG, 315.0);
@@ -30,6 +31,7 @@ void main() {
       expect(t.refillCount, 1);
       expect(t.cheatCount, 2);
       expect(t.muted, isTrue);
+      expect(t.standby, isTrue);
       expect(t.rawState, 'TIMING');
       expect(t.canonicalState, 'TIMING');
       expect(t.isAlert, isFalse);
@@ -41,6 +43,8 @@ void main() {
       expect(t.weightG, 0.0);
       expect(t.remainingSec, 0);
       expect(t.muted, isFalse);
+      // Firmware lama belum mengirim standby; ketiadaannya berarti sesi aktif.
+      expect(t.standby, isFalse);
       expect(t.cupPresent, isFalse);
       expect(t.reason, 'taruh gelas untuk mulai');
     });

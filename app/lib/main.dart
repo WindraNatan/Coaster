@@ -889,16 +889,84 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  /// Sesi bergiliran, sama seperti web: owner berubah membuat alat mereset
+  /// statistik, dan active:false membuat alat tidur sampai sesi berikutnya.
+  Future<bool> _setSession({required String ownerUid, required bool active}) async {
+    try {
+      final res = await _client
+          .put(
+            Uri.parse('${_session.coasterUrl(_base)}/session.json${_session.suffix}'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'owner': ownerUid,
+              'active': active,
+              'at': DateTime.now().millisecondsSinceEpoch,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Konfirmasi mode sebelum sesi dibuka: orang yang baru menyalakan alat tidak
+  /// perlu tahu di mana tombol mode berada.
+  Future<void> _mulaiSesi() async {
+    final pilih = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _panel,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                  'Pilih mode timer dulu. Pilihan ini yang dipakai alat selama sesi berjalan.',
+                  style: _monoStyle(12, color: _dim)),
+            ),
+            for (final opt in const [
+              ('DEMO', 'Demo 15 detik'),
+              ('AUTO_DHT', 'Otomatis DHT11'),
+              ('MANUAL', 'Manual tetap'),
+            ])
+              ListTile(
+                title: Text(opt.$2, style: _monoStyle(13, color: _ink)),
+                onTap: () => Navigator.pop(ctx, opt.$1),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (pilih == null || !mounted) return;
+    // Mode dikirim lebih dulu supaya alat sudah memakai target yang benar saat
+    // siklus pertama dimulai.
+    await _setMode(pilih);
+    final ok = await _setSession(ownerUid: _session.uid, active: true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(ok ? 'Sesi dimulai.' : 'Gagal memulai sesi.')));
+  }
+
+  Future<void> _akhiriSesi() async {
+    final ok = await _setSession(ownerUid: '', active: false);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Sesi ditutup. Alat tidur.' : 'Gagal menutup sesi.')));
+  }
+
   void _setMuted(bool v) {
     HapticFeedback.selectionClick();
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(muted: v));
     _patchConfig({'muted': v});
   }
 
-  void _setMode(String mode) {
+  Future<void> _setMode(String mode) async {
     HapticFeedback.selectionClick();
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(timerMode: mode));
-    _patchConfig({'timer_mode': mode});
+    await _patchConfig({'timer_mode': mode});
   }
 
   void _sendInterval() {
@@ -1812,6 +1880,40 @@ class _DashboardScreenState extends State<DashboardScreen>
               ],
             ),
           ],
+          const Divider(color: _line, height: 20),
+          Text('Sesi', style: _monoStyle(12, color: _ink)),
+          const SizedBox(height: 8),
+          if (_t?.standby == true)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text('Alat tidur. Sesi belum dimulai, alarm dan timer berhenti.',
+                  style: _monoStyle(11, color: _warn)),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _mulaiSesi,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: _line),
+                    minimumSize: const Size(0, 44),
+                  ),
+                  child: Text('Mulai sesi', style: _monoStyle(12, color: _water)),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _akhiriSesi,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: _line),
+                    minimumSize: const Size(0, 44),
+                  ),
+                  child: Text('Akhiri sesi', style: _monoStyle(12, color: _dim)),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           Text('Kalibrasi gelas kosong dan tare lewat USB.',
               style: _monoStyle(11, color: _dim)),

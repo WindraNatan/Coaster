@@ -7,6 +7,7 @@
 #include <cmath>
 #include "fsm.h"
 #include "adaptive_controller.h"
+#include "session_gate.h"
 
 static int fails = 0;
 #define CHECK(cond, msg) do { if (cond) printf("[PASS] %s\n", msg); else { printf("[FAIL] %s\n", msg); fails++; } } while (0)
@@ -206,6 +207,46 @@ int main(){
     CHECK(r.getDrinkCount() == 1, "24d. statistik minum tidak direset");
     r.update(340, 5000);
     CHECK(r.getState() == STATE_STABLE, "24e. setelah standby, update mulai dari IDLE, bukan melanjutkan siklus lama");
+
+    // 25. SessionGate: siapa yang menang antara perintah lokal z/x dan
+    // session.json. Bug yang dijaga: poll sesi tiap 10 dtk membaca nilai yang
+    // sama terus, jadi tanpa aturan "cloud hanya menang saat nilainya berubah",
+    // perintah lokal langsung dibatalkan poll berikutnya.
+    {
+        SessionGate g;
+        g.fromCloud(false);            // session.json aktif, atau field tidak ada
+        CHECK(!g.sleep, "25a. cloud aktif -> alat tidak tidur");
+        g.fromCloud(true);             // klien menekan Akhiri Sesi
+        CHECK(g.sleep, "25b. cloud menutup sesi -> alat tidur");
+
+        SessionGate h;
+        h.fromCloud(false);
+        h.local(true);                 // 'z' dari Serial Monitor
+        CHECK(h.sleep, "25c. perintah lokal tidur langsung berlaku");
+        h.fromCloud(false);            // poll 10 dtk, nilai cloud tidak berubah
+        h.fromCloud(false);
+        h.fromCloud(false);
+        CHECK(h.sleep, "25d. poll dengan nilai cloud yang sama tidak membangunkan alat");
+        h.fromCloud(true);             // klien benar-benar menekan tombol
+        CHECK(h.sleep && !h.localHold, "25e. nilai cloud yang berubah menimpa perintah lokal");
+
+        SessionGate i;
+        i.fromCloud(true);             // sesi sedang ditutup
+        i.local(false);                // 'x' dari Serial Monitor
+        CHECK(!i.sleep, "25f. perintah lokal bangun langsung berlaku");
+        i.fromCloud(true);
+        CHECK(!i.sleep, "25g. cloud yang diam tidak menidurkan alat kembali");
+        i.fromCloud(false);            // klien menekan Mulai Sesi
+        CHECK(!i.sleep && !i.localHold, "25h. klien memulai sesi -> pegangan lokal dilepas");
+
+        SessionGate j;
+        j.fromCloud(false);
+        j.local(true);
+        j.fromCloud(true);             // akhiri sesi dari klien
+        CHECK(j.sleep, "25i. akhiri sesi dari klien tetap tidur");
+        j.fromCloud(false);            // lalu mulai sesi lagi
+        CHECK(!j.sleep, "25j. mulai sesi dari klien membangunkan alat");
+    }
 
     printf("\n%s (%d gagal)\n", fails ? "ADA YANG GAGAL" : "SEMUA LULUS", fails);
     return fails ? 1 : 0;

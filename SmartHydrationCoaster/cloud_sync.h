@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include "config.h"
 #include "fsm.h"
+#include "session_gate.h"
 
 #if defined(ESP32)
 #include <WiFi.h>
@@ -38,6 +39,24 @@ struct CloudSnapshot {
 static volatile bool cloudTaskRunning = false;
 static CloudSnapshot snap = {};
 static portMUX_TYPE snapMux = portMUX_INITIALIZER_UNLOCKED;
+
+// Siapa yang menentukan tidur: perintah lokal (z/x) atau session.json. Aturannya
+// ada di session_gate.h supaya bisa diuji di PC. Ditulis cloudTask (core 0),
+// dibaca loop (core 1), makanya semua akses lewat snapMux.
+static SessionGate sessionGate;
+
+inline void setLocalStandby(bool sleep) {
+    portENTER_CRITICAL(&snapMux);
+    sessionGate.local(sleep);
+    portEXIT_CRITICAL(&snapMux);
+}
+
+inline bool standbyActiveNow() {
+    portENTER_CRITICAL(&snapMux);
+    bool v = sessionGate.sleep;
+    portEXIT_CRITICAL(&snapMux);
+    return v;
+}
 static String activeWifiSsid = WIFI_SSID;
 static String activeWifiPass = WIFI_PASSWORD;
 static String activeFirebaseUrl = FIREBASE_DB_URL;
@@ -198,8 +217,6 @@ static String authSuffix() {
 }
 
 extern bool demoMode;
-// Ditulis cloudTask (core 0), dibaca loop (core 1). true = sesi berakhir, alat tidur.
-extern volatile bool standbyRequested;
 extern bool autoDhtTimerMode;
 extern bool buzzerMuted;
 extern volatile bool configDirty;
@@ -535,7 +552,12 @@ static void cloudTask(void*) {
                 String sess = rtdb.getString();
                 // "active":false = pengguna menekan Akhiri Sesi. Field ini tidak
                 // ada di versi lama, dan ketiadaannya berarti sesi masih aktif.
-                standbyRequested = sess.indexOf("\"active\":false") >= 0;
+                // Nilai cloud hanya menimpa perintah lokal z/x saat nilainya
+                // berubah; lihat SessionGate di session_gate.h.
+                bool wantSleep = sess.indexOf("\"active\":false") >= 0;
+                portENTER_CRITICAL(&snapMux);
+                sessionGate.fromCloud(wantSleep);
+                portEXIT_CRITICAL(&snapMux);
                 int oi = sess.indexOf("\"owner\":\"");
                 if (oi >= 0) {
                     oi += 9;
@@ -809,7 +831,7 @@ inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bo
     snap.refillCnt = fsm.getRefillCount();
     snap.cheatCnt = fsm.getCheatCount();
     snap.muted = muted;
-    snap.standby = standbyRequested;
+    snap.standby = sessionGate.sleep;
     portEXIT_CRITICAL(&snapMux);
 }
 #else
@@ -817,6 +839,8 @@ inline void initCloudSync(const String&, const String&, const String&) {}
 inline void setCloudWifi(const String&, const String&) {}
 inline void setCloudFirebaseUrl(const String&) {}
 inline void updateCloudSnapshot(float, uint32_t, float, float, bool) {}
+inline void setLocalStandby(bool) {}
+inline bool standbyActiveNow() { return false; }
 #endif
 
 #endif

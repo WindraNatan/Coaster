@@ -22,6 +22,10 @@ class Telemetry {
   final int cheatCount;
   final bool muted;
 
+  /// Alat sedang tidur karena sesinya ditutup (session.json active:false).
+  /// Berat tetap terkirim, tetapi tidak ada alarm dan tidak ada siklus berjalan.
+  final bool standby;
+
   /// State mentah dari firmware: salah satu dari 7 state FSM, atau string
   /// turunan ALERT_EMPTY_CUP / ALERT_MISSING_CUP.
   final String rawState;
@@ -43,6 +47,7 @@ class Telemetry {
     required this.refillCount,
     required this.cheatCount,
     required this.muted,
+    required this.standby,
     required this.rawState,
     required this.heartbeat,
   });
@@ -59,6 +64,7 @@ class Telemetry {
         refillCount: _int(t['refill_count']),
         cheatCount: _int(t['cheat_count']),
         muted: t['muted'] == true,
+        standby: t['standby'] == true,
         rawState: (t['fsm_state'] as String?) ?? 'IDLE',
         heartbeat: _int(t['hb']),
       );

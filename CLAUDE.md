@@ -24,7 +24,7 @@ Panduan persistent context untuk Claude Code & Claude Cowork. Proyek tatakan gel
 
 Logika Finite State Machine (FSM) dan kontroler adaptif hidup di tiga tempat dan wajib selalu identik secara fungsional:
 1. **Firmware C++**: `SmartHydrationCoaster/fsm.h` & `SmartHydrationCoaster/adaptive_controller.h`.
-2. **Simulasi Python**: `test_simulation.py` (21/21 skenario wajib lulus).
+2. **Simulasi Python**: `test_simulation.py` (24/24 skenario wajib lulus).
 3. **Simulasi Web**: `web/fsm.js` (kelas JS `CoasterFSM`, diuji `web/fsm.test.js`; 8 tombol skenario di `web/index.html` wajib hijau).
 
 ### Perintah Verifikasi Paritas
@@ -32,7 +32,7 @@ Logika Finite State Machine (FSM) dan kontroler adaptif hidup di tiga tempat dan
 # 1. Jalankan pengujian Python (21 skenario regresi)
 python test_simulation.py
 
-# 2. Kompilasi dan jalankan harness C++ asli di PC (52 pemeriksaan paritas)
+# 2. Kompilasi dan jalankan harness C++ asli di PC (73 pemeriksaan paritas)
 cd tools/uji_fsm
 g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fsm.cpp
 ./uji_fsm
@@ -58,6 +58,7 @@ g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fs
   * Floor interval minimal: 5 detik (demo mode) / batas aman.
   * Interval dasar $T_{\text{base}}$ dapat dikustomisasi 1 s.d. 180 menit via perintah serial `i<menit>` atau UI.
   * *Catatan Terminologi*: Ini kendali adaptif berbasis aturan kontinu, BUKAN Fuzzy Logic Sugeno.
+* **Sesi & Tidur**: tidur bukan state FSM baru. Klien menulis `session.json` (`owner`, `active`; `active` tidak ada = sesi aktif). Saat tidur: `fsm.update()` tidak dipanggil, aktuator dipaksa mati setiap putaran, telemetri tetap jalan dengan `standby:true`. Bangun memanggil `toIdle(nowMs)`, jadi siklus lama tidak dilanjutkan. Perintah lokal `z` (tidur) / `x` (bangun) dari Serial dipegang `SessionGate` (`session_gate.h`, diuji di harness C++): nilai cloud hanya menimpa perintah lokal saat nilainya benar-benar berubah, kalau tidak poll sesi 10 detik akan membangunkan alat kembali.
 
 ---
 
@@ -65,6 +66,8 @@ g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fs
 
 * **Protokol ESP32**: HTTPS REST via `HTTPClient` + `WiFiClientSecure` (`setInsecure()`, Port 443, Wi-Fi STA 2.4 GHz).
   * Endpoint: PATCH `/smart_coaster/telemetry.json` (on-change + heartbeat 5 s), GET `/smart_coaster/config.json` (poll 1 s).
+  * Mode timer di `config.json`: `timer_mode` = `DEMO` (15 detik, `DEMO_INTERVAL_MS`), `AUTO_DHT`, atau `MANUAL` + `manual_interval_min` (1-180 menit). Demo tidak bisa diungkapkan lewat `manual_interval_min` karena lantainya 1 menit.
+  * Sesi: `GET` `/session.json` tiap 10 detik (`owner`, `active`). `active:false` menidurkan alat sampai klien menulis `active:true` lagi.
   * Tanpa NTP: firmware tidak menyinkronkan waktu; riwayat harian dihitung di web (`localStorage`) per tanggal perangkat.
 * **Web App**: PWA (`web/manifest.json`, `web/sw.js`) mendukung mode Simulator, USB Live (`navigator.serial` 115200 baud), dan Firebase Cloud (stream SSE; poll 20 s sebagai jaring aman). Akun (email, password) dan klaim alat ada di halaman sendiri `web/login.html` — kotak masuk hanya menampilkan dua kolom itu; URL database dan Web API Key ditanam di `web/auth.js` (`SHC_DEFAULT_URL`, `SHC_DEFAULT_API_KEY`) dan bisa diganti lewat blok tertutup **Pengaturan lanjutan**. `web/index.html` hanya menampilkan status akun dan tautan ke sana. Login membuka dashboard lewat `index.html?mode=cloud`.
 * **Aplikasi Android (Flutter)**: `app/` (Dart, package `smart_coaster`) — mode Cloud saja: URL RTDB dan Web API Key ditanam saat build lewat `app/lib/project_config.dart` (`--dart-define=FB_URL=…`, `--dart-define=FB_API_KEY=…`). `kFirebaseUrl` punya default proyek ini sehingga kolom URL tidak pernah tampil kecuali lewat tombol **Ubah URL** di dashboard; `kFirebaseApiKey` juga terisi default proyek ini, jadi kolom Web API Key tidak tampil; kedua kolom bisa dipaksa muncul lewat `showUrlField`/`showKeyField` untuk proyek lain atau pemanggilan `--dart-define`. Isian pengguna menang atas tetapan build, dan URL tersimpan di SharedPreferences (`shc_fb_url`) dipakai lebih dulu saat boot, polling `GET <url>/users/<uid>/smart_coaster.json` 2,5 s, kontrol `PATCH <url>/users/<uid>/smart_coaster/config.json` (`timer_mode`, `manual_interval_min`, `muted`). Identitas visual mengikuti web PWA (palet dark-teal/cyan, Space Grotesk + JetBrains Mono tabular, badge state berwarna); `ALERT_EMPTY_CUP`/`ALERT_MISSING_CUP` tetap dipetakan ke `ALERT_REFILL`. Kalibrasi `c`/tare `t` tetap USB-only. Verifikasi: `flutter pub get && flutter analyze && flutter test` (28 uji kontrak, alur cloud, layar masuk, dan penyimpanan API key). Toolchain di luar repo: `D:/flutter`, `D:/jdk/jdk-17.0.20.1+1`, `D:/android-sdk`.

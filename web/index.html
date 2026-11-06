@@ -855,6 +855,8 @@ $('bReset').addEventListener('click', () => {
 });
 
 let serialPort = null, serialWriter = null, serialBuf = '', serialReader = null, serialLoop = null;
+// Keadaan tidur yang dilaporkan baris serial ESP32 ("Sesi: TIDUR").
+let usbStandby = false;
 async function sendSerialCmd(str){
   if (!serialWriter) return;
   try {
@@ -964,6 +966,7 @@ function handleSerialLine(line){
   const mTarget = /Target:\s*(\d+)s/.exec(line);
   const mMode = /Mode:\s*(DEMO|NORM)-(AUTO|MANUAL)/.exec(line);
   const mBuzzer = /Buzzer:\s*(MUTE|ON)/.exec(line);
+  const mSesi = /Sesi:\s*(TIDUR|AKTIF)/.exec(line);
 
   const prevSt = fsm.stateString, prevDrink = fsm.drinkCount, prevRefill = fsm.refillCount, prevCheat = fsm.cheatCount;
   if (mState){
@@ -988,6 +991,17 @@ function handleSerialLine(line){
   }
   if (mBuzzer){
     buzzerMuted = (mBuzzer[1] === 'MUTE');
+  }
+  if (mSesi){
+    const tidur = mSesi[1] === 'TIDUR';
+    if (tidur !== usbStandby){
+      usbStandby = tidur;
+      // Baris status USB dipakai sebagai kanal keadaan alat: kalau alat tidur,
+      // pengguna harus tahu sebelum menyimpulkan alatnya rusak.
+      $('usbStatus').textContent = tidur
+        ? 'Terhubung ke ESP32 (115200 baud). Alat tidur, sesi ditutup.'
+        : 'Terhubung ke ESP32 (115200 baud)';
+    }
   }
   // Hanya label. applyTimerConfig() tidak boleh dipakai di sini: ia memanggil
   // recomputeAdaptive() yang menimpa fsm.interval dari baris Target: ESP32.
@@ -1031,6 +1045,9 @@ addEventListener('storage', renderAuthState);
 // menyalakan alat tidak perlu tahu tombol mode ada di mana.
 async function startSession(){
   const base = getCleanFbUrl();
+  // Di mode USB, alat tidak membaca session.json: perintahnya dikirim lewat
+  // kabel. Alat tetap memegang perintah itu sampai klien cloud mengubah nilainya.
+  if (connMode === 'usb') sendSerialCmd('x');
   if (!base || !shcDeviceUid()) return;
   const ok = await shcSetSession(base, shcUid(), true);
   if (ok) {
@@ -1044,6 +1061,7 @@ async function startSession(){
 }
 async function endSession(){
   const base = getCleanFbUrl();
+  if (connMode === 'usb') sendSerialCmd('z');
   if (!base || !shcDeviceUid()) return;
   // active:false membuat alat tidur: alarm dan timer berhenti sampai sesi
   // berikutnya dimulai. Statistik tidak direset di sini.
