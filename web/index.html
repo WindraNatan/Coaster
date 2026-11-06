@@ -901,7 +901,7 @@ $('bReset').addEventListener('click', () => {
   // berikutnya (<=5 s) memulihkan angkanya, jadi tombolnya tampak gagal. Di mode
   // cloud, arahkan ke perangkat alih-alih berpura-pura berhasil.
   if (connMode === 'cloud') {
-    log('Reset statistik harus dari alat: kirim perintah r lewat USB, atau tekan tombol di perangkat.', 'ev-ALERT_DRINK');
+    log('Reset statistik hanya dari alat: kirim perintah r lewat USB (Serial Monitor, atau mode USB Live di halaman ini).', 'ev-ALERT_DRINK');
     return;
   }
   // K2: simpan dulu ke riwayat, baru reset. Kebalikannya, resetStats()
@@ -1079,6 +1079,9 @@ function handleSerialLine(line){
 }
 
 let cloudTimer = null, lastCloudPushMs = 0;
+// Isi terakhir yang ditulis ke /daily/<tanggal>. Jalur cloud hanya menulis saat
+// angka harian berubah, jadi menulis ulang isi yang sama hanya membuang kuota.
+let lastDailyJson = '';
 // Heartbeat: firmware menaikkan `hb` setiap push. Angka berat dan suhu bisa
 // identik antar-kiriman, jadi hanya counter yang bisa membedakan "alat diam"
 // dari "alat mati". 90 dtk = tiga kali siklus push normal + kelonggaran.
@@ -1209,6 +1212,39 @@ async function pushCloudTelemetry(){
     });
   } catch(_){}
 }
+// Mode cloud: alat menulis telemetry.json sendiri, jadi web tidak boleh
+// menyentuh node itu (pernah terjadi: panel simulator mengirim nol ke node alat
+// nyata). Node /daily/<tanggal> tidak pernah ditulis alat karena alat tidak
+// punya jam, dan aplikasi membaca node itu untuk riwayat 7 hari. Tanpa fungsi
+// ini riwayat harian pengguna cloud selalu kosong: penulisnya dulu hanya jalur
+// USB.
+async function pushDailyCloud(){
+  if (connMode !== 'cloud') return;
+  const url = shcCoasterUrl(getCleanFbUrl());
+  if (!url) return;
+  try {
+    if (!await shcEnsureToken()) return;
+    const dd = todayDelta(Math.round(fsm.totalDrank), fsm.drinkCount, fsm.refillCount, fsm.cheatCount);
+    const isi = JSON.stringify({
+      total_ml: +dd.total_ml.toFixed(1),
+      drink_count: dd.drink_count,
+      refill_count: dd.refill_count,
+      cheat_count: dd.cheat_count
+    });
+    // Kunci memo memuat tanggal: isi yang sama pada hari berbeda tetap harus
+    // ditulis, kalau tidak baris hari baru tidak pernah muncul.
+    const stamp = todayKey() + '|' + isi;
+    if (stamp === lastDailyJson) return;
+    lastDailyJson = stamp;
+    await fetch(url + '/daily/' + todayKey() + '.json' + shcAuthSuffix(), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: isi
+    });
+  } catch(_){
+    lastDailyJson = '';  // gagal: izinkan percobaan berikutnya
+  }
+}
 async function pushCloudConfig(){
   // Sama seperti pushCloudTelemetry: mode Simulator tidak mengubah config alat nyata.
   if (connMode === 'sim') return;
@@ -1319,6 +1355,9 @@ function applyCloudData(t, cfgRemote){
   // daftar berkedip dan menulis tanpa perubahan isi.
   if ([fsm.drinkCount, fsm.refillCount, fsm.cheatCount].join(',') !== beforeCounts){
     saveTodayStatsToHistory();
+    // Alat tidak menulis /daily (tanpa jam), jadi baris hari ini diisi dari
+    // sini. Hanya saat angka berubah, bukan tiap detak.
+    pushDailyCloud();
   }
   if (fsm.stateString !== prevSt){
     log('[CLOUD] ' + prevSt + ' -> ' + fsm.stateString, evCls(fsm.stateString));

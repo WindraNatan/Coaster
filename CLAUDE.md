@@ -29,13 +29,16 @@ Logika Finite State Machine (FSM) dan kontroler adaptif hidup di tiga tempat dan
 
 ### Perintah Verifikasi Paritas
 ```bash
-# 1. Jalankan pengujian Python (21 skenario regresi)
+# 1. Jalankan pengujian Python (24 skenario regresi)
 python test_simulation.py
 
 # 2. Kompilasi dan jalankan harness C++ asli di PC (73 pemeriksaan paritas)
 cd tools/uji_fsm
 g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fsm.cpp
 ./uji_fsm
+
+# 3. Uji sisi web (FSM + riwayat harian + jalur tulis riwayat di mode cloud)
+node web/fsm.test.js && node web/daily-history.test.js && node web/daily-cloud.test.js
 ```
 *Catatan kompilasi*: Flag `-I.` wajib ada agar `Arduino.h` shim di `tools/uji_fsm/` terbaca saat mengompilasi header firmware asli.
 
@@ -60,6 +63,10 @@ g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fs
   * Interval dasar $T_{\text{base}}$ dapat dikustomisasi 1 s.d. 180 menit via perintah serial `i<menit>` atau UI.
   * *Catatan Terminologi*: Ini kendali adaptif berbasis aturan kontinu, BUKAN Fuzzy Logic Sugeno.
 * **Sesi & Tidur**: tidur bukan state FSM baru. Klien menulis `session.json` (`owner`, `active`; `active` tidak ada = sesi aktif). Saat tidur: `fsm.update()` tidak dipanggil, aktuator dipaksa mati setiap putaran, telemetri tetap jalan dengan `standby:true`. Kedua arah perpindahan memanggil `toIdle(nowMs)`: saat tidur supaya state yang dilaporkan tidak menyisakan `ALERT_DRINK` basi, saat bangun supaya siklus lama tidak dilanjutkan padahal selisih waktunya sudah lewat target. Perintah lokal `z` (tidur) / `x` (bangun) dari Serial dipegang `SessionGate` (`session_gate.h`, diuji di harness C++): nilai cloud hanya menimpa perintah lokal saat nilainya benar-benar berubah, kalau tidak poll sesi 10 detik akan membangunkan alat kembali.
+* **Batas Fisik yang Disadari (bukan bug)**: selisih berat hanya sah sebagai bukti minum atau isi ulang saat gelas berada di tatakan. Tiga kasus berikut terbaca sebagai curang atau sebagai tegukan palsu, dan tidak ada perbaikan perangkat lunak yang bisa memisahkannya dari data timbangan:
+  * Minum lalu mengisi ulang air di luar tatakan: berat bersih bisa turun di bawah `MIN_DRINK_DELTA` (20 g), sehingga terbaca `ALERT_CHEAT` walau pengguna benar-benar minum. Isi ulang sebaiknya dilakukan setelah gelas diletakkan kembali ke tatakan.
+  * Sendok atau pengaduk masuk dan keluar gelas: 25-35 g, di atas ambang isi ulang (30 g) dan ambang minum (20 g), sehingga terbaca isi ulang palsu lalu minum palsu.
+  * Air kondensasi gelas es menggenang di piringan: 5-15 ml membebani load cell, memotong selisih tegukan kecil sampai di bawah ambang 20 g.
 
 ---
 
@@ -70,8 +77,13 @@ g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fs
   * Mode timer di `config.json`: `timer_mode` = `DEMO` (15 detik, `DEMO_INTERVAL_MS`), `AUTO_DHT`, atau `MANUAL` + `manual_interval_min` (1-180 menit). Demo tidak bisa diungkapkan lewat `manual_interval_min` karena lantainya 1 menit.
   * Sesi: `GET` `/session.json` (`owner`, `active`). Periodenya 10 detik, tetapi turun ke 1 detik saat alarm menyala atau alat sedang tidur — dua keadaan di mana keterlambatan terasa. Perpindahan `standby` ikut memicu PATCH telemetri segera, tidak menunggu heartbeat 60 detik.
   * Tanpa NTP: firmware tidak menyinkronkan waktu; riwayat harian dihitung di web (`localStorage`) per tanggal perangkat.
+  * Penulis `daily/<tanggal>.json`: web (mode USB dan mode cloud), karena alat tidak punya jam. Di mode cloud web hanya menulis node `daily`, tidak pernah `telemetry.json` (node itu milik alat). Aplikasi Android hanya membaca node itu, dan memuat ulang saat `drink_count` berubah — bukan tiap poll.
+  * Batas yang disadari: baseline harian disimpan per peramban (`localStorage`), jadi bila dua peramban cloud terbuka dengan baseline berbeda, baris hari ini di `daily` mengikuti penulis terakhir. Angka kumulatif alat dan capaian harian masing-masing klien tetap benar; yang bisa berbeda hanya baris riwayat hari berjalan.
 * **Web App**: PWA (`web/manifest.json`, `web/sw.js`) mendukung mode Simulator, USB Live (`navigator.serial` 115200 baud), dan Firebase Cloud (stream SSE; poll 20 s sebagai jaring aman). Akun (email, password) dan klaim alat ada di halaman sendiri `web/login.html` — kotak masuk hanya menampilkan dua kolom itu; URL database dan Web API Key ditanam di `web/auth.js` (`SHC_DEFAULT_URL`, `SHC_DEFAULT_API_KEY`) dan bisa diganti lewat blok tertutup **Pengaturan lanjutan**. `web/index.html` hanya menampilkan status akun dan tautan ke sana. Login membuka dashboard lewat `index.html?mode=cloud`.
-* **Aplikasi Android (Flutter)**: `app/` (Dart, package `smart_coaster`) — mode Cloud saja: URL RTDB dan Web API Key ditanam saat build lewat `app/lib/project_config.dart` (`--dart-define=FB_URL=…`, `--dart-define=FB_API_KEY=…`). `kFirebaseUrl` punya default proyek ini sehingga kolom URL tidak pernah tampil kecuali lewat tombol **Ubah URL** di dashboard; `kFirebaseApiKey` juga terisi default proyek ini, jadi kolom Web API Key tidak tampil; kedua kolom bisa dipaksa muncul lewat `showUrlField`/`showKeyField` untuk proyek lain atau pemanggilan `--dart-define`. Isian pengguna menang atas tetapan build, dan URL tersimpan di SharedPreferences (`shc_fb_url`) dipakai lebih dulu saat boot, stream SSE `GET <url>/users/<uid>/smart_coaster.json` plus polling penyaring tiap 20 s, kontrol `PATCH <url>/users/<uid>/smart_coaster/config.json` (`timer_mode`, `manual_interval_min`, `muted`). Identitas visual mengikuti web PWA (palet dark-teal/cyan, Space Grotesk + JetBrains Mono tabular, badge state berwarna); `ALERT_EMPTY_CUP`/`ALERT_MISSING_CUP` tetap dipetakan ke `ALERT_REFILL`. Kalibrasi `c`/tare `t` tetap USB-only. Verifikasi: `flutter pub get && flutter analyze && flutter test` (28 uji kontrak, alur cloud, layar masuk, dan penyimpanan API key). Toolchain di luar repo: `D:/flutter`, `D:/jdk/jdk-17.0.20.1+1`, `D:/android-sdk`.
+* **Aplikasi Android (Flutter)**: `app/` (Dart, package `smart_coaster`) — mode Cloud saja: URL RTDB dan Web API Key ditanam saat build lewat `app/lib/project_config.dart` (`--dart-define=FB_URL=...`, `--dart-define=FB_API_KEY=...`). `kFirebaseUrl` punya default proyek ini sehingga kolom URL tidak pernah tampil kecuali lewat tombol **Ubah URL** di dashboard; `kFirebaseApiKey` juga terisi default proyek ini, jadi kolom Web API Key tidak tampil; kedua kolom bisa dipaksa muncul lewat `showUrlField`/`showKeyField` untuk proyek lain atau pemanggilan `--dart-define`. Isian pengguna menang atas tetapan build, dan URL tersimpan di SharedPreferences (`shc_fb_url`) dipakai lebih dulu saat boot, stream SSE `GET <url>/users/<uid>/smart_coaster.json` plus polling penyaring tiap 20 s, kontrol `PATCH <url>/users/<uid>/smart_coaster/config.json` (`timer_mode`, `manual_interval_min`, `muted`). Identitas visual mengikuti web PWA (palet dark-teal/cyan, Space Grotesk + JetBrains Mono tabular, badge state berwarna); `ALERT_EMPTY_CUP`/`ALERT_MISSING_CUP` tetap dipetakan ke `ALERT_REFILL`. Kalibrasi `c`/tare `t` tetap USB-only. Verifikasi: `flutter pub get && flutter analyze && flutter test` (63 uji kontrak, alur cloud, layar masuk, dan penyimpanan API key). Toolchain di luar repo: `D:/flutter`, `D:/jdk/jdk-17.0.20.1+1`, `D:/android-sdk`.
+  * Reset statistik harian hanya bisa dari alat (`r` lewat Serial atau mode USB Live); firmware tidak membaca perintah reset dari cloud, dan casing tidak punya tombol fisik. Firmware hanya mereset sendiri saat pemilik sesi di `session.json` berubah ke uid lain (`cloud_sync.h`).
+  * Capaian harian aplikasi memakai selisih terhadap angka alat saat aplikasi pertama dibuka hari itu. Karena alat tidak punya jam, aplikasi yang tertutup semalaman tidak tahu angka saat tengah malam: air yang diminum pagi ini sebelum aplikasi dibuka tidak ikut terhitung, dan aplikasi menampilkan catatan itu, bukan angka nol tanpa penjelasan.
+  * Pengingat Android dijadwalkan aplikasi. Bila aplikasi mati saat pengguna minum, pembatalannya tidak sampai dan alarm lama tetap berbunyi pada waktu target lama (`ReminderReceiver` tidak membaca keadaan alat). Batasan yang disadari, bukan bug yang bisa ditutup tanpa kerja jaringan di jalur native.
 
 ---
 

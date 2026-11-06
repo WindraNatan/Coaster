@@ -764,6 +764,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
     _trackHeartbeat(_t!);
     _dayMl = _computeDayMl(_t!);
+    _maybeReloadHistory(_t!);
     _syncReminderOnData();
   }
 
@@ -881,6 +882,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ..addAll(Map<String, dynamic>.from(tRaw));
           _trackHeartbeat(t);
           _dayMl = _computeDayMl(t);
+          _maybeReloadHistory(t);
           _syncReminderOnData();
         }
       } else {
@@ -1476,15 +1478,27 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
 
-  // Riwayat harian: web menulis /daily/<tanggal> saat statistik berubah. App
-  // membacanya sekali saat dashboard dibuka, bukan tiap poll — node ini tumbuh
-  // dan app tidak butuh real-time untuk data kemarin.
+  // Riwayat harian: klien cloud (web) menulis /daily/<tanggal> saat statistik
+  // berubah; alat tidak bisa menulisnya karena tidak punya jam. App memuatnya
+  // saat dashboard dibuka, lalu memuat ulang saat jumlah tegukan berubah —
+  // sekali saja tidak cukup: daftar yang dibuka sebelum web sempat menulis
+  // tidak pernah terisi sampai aplikasi dijalankan ulang.
   List<MapEntry<String, Map<String, dynamic>>> _history = const [];
-  bool _historyLoaded = false;
+  bool _historyLoading = false;
+  int? _historyDrinks;
+
+  /// Muat ulang hanya saat ada tegukan baru: node ini hanya berubah pada
+  /// peristiwa itu, dan memuatnya tiap detak poll membuang kuota.
+  void _maybeReloadHistory(Telemetry t) {
+    if (_historyDrinks == t.drinkCount) return;
+    final pertama = _historyDrinks == null;
+    _historyDrinks = t.drinkCount;
+    if (!pertama) _loadHistory();
+  }
 
   Future<void> _loadHistory() async {
-    if (_historyLoaded) return;
-    _historyLoaded = true;
+    if (_historyLoading) return;
+    _historyLoading = true;
     try {
       final url = '${_session.coasterUrl(_base)}/daily.json${_session.suffix}';
       final res = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 8));
@@ -1501,6 +1515,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       setState(() => _history = entries.take(7).toList());
     } catch (_) {
       // Riwayat tidak wajib: dashboard tetap jalan tanpa node ini.
+    } finally {
+      _historyLoading = false;
     }
   }
 
@@ -1542,22 +1558,42 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   /// Angka harian. Baseline dipasang ulang saat tanggal berganti atau saat
-  /// hitungan alat turun (tombol reset di alat), supaya selisih tidak negatif.
+  /// hitungan alat turun (reset statistik di alat), supaya selisih tidak negatif.
   double _computeDayMl(Telemetry t) {
     final turun = t.totalMl < _dayBaseMl || t.drinkCount < _dayBaseDrink;
     if (_dayKey == null || turun) {
       // Baseline baru dipasang pada nilai saat ini, jadi hari ini dimulai dari
       // nol. Mengembalikan totalMl di sini akan mengklaim semua air yang diminum
       // berhari-hari lalu sebagai milik hari ini.
+      //
+      // Batas yang disadari: alat tidak punya jam, jadi aplikasi yang tertutup
+      // semalaman tidak tahu angka alat saat tengah malam. Air yang diminum pagi
+      // ini sebelum aplikasi dibuka karena itu tidak bisa dipisahkan dan tidak
+      // ikut terhitung. Kasus itu diberitahukan ke pengguna, bukan disembunyikan.
+      _setDayFresh(_dayKey == null && !turun && t.totalMl > 0);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _saveDayBase(t.totalMl, t.drinkCount);
       });
       return 0;
     }
+    _setDayFresh(false);
     return (t.totalMl - _dayBaseMl).clamp(0, double.infinity).toDouble();
   }
 
+  /// Penanda catatan "hari baru": dipasang hanya saat angkanya memang tidak bisa
+  /// dihitung penuh, jadi catatan tidak muncul pada hari yang baseline-nya sudah
+  /// ada. Perubahan penanda butuh setState: _computeDayMl dipanggil dari jalur
+  /// stream di luar setState.
+  void _setDayFresh(bool nilai) {
+    if (_dayFresh == nilai) return;
+    _dayFresh = nilai;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   double _dayMl = 0;
+  bool _dayFresh = false;
 
   Widget _goalCard(Telemetry t) {
     final ml = _dayMl;
@@ -1584,6 +1620,14 @@ class _DashboardScreenState extends State<DashboardScreen>
               valueColor: const AlwaysStoppedAnimation(_water),
             ),
           ),
+          if (_dayFresh) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Hari baru: hitungan mulai dari angka alat saat aplikasi dibuka, '
+              'jadi air yang diminum sebelum itu tidak ikut terhitung.',
+              style: _monoStyle(10, color: _dim),
+            ),
+          ],
         ],
       ),
     );

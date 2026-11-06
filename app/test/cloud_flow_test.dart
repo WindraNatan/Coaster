@@ -607,4 +607,109 @@ void main() {
     expect(paths, contains('GET /users/uid-alat/smart_coaster/telemetry.json'));
     expect(paths, isNot(contains('GET /users/uid-akun/smart_coaster/telemetry.json')));
   });
+
+  // Alat tidak punya jam: hari baru hanya dikenali dari tanggal perangkat.
+  // Baseline dipasang pada angka alat saat aplikasi dibuka, jadi air yang
+  // diminum sebelum aplikasi dibuka tidak masuk capaian hari ini. Dulu angka itu
+  // tampil nol tanpa penjelasan; sekarang ada catatannya.
+  testWidgets('hari baru tanpa aplikasi terbuka menampilkan catatan, bukan nol diam-diam',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({}); // tanpa baseline tanggal
+    final client = MockClient((req) async {
+      if (req.url.path == '/users/uid-test/smart_coaster/telemetry.json') {
+        return Response(_telemetryBody, 200);
+      }
+      if (req.url.path == '/users/uid-test/smart_coaster/config.json') {
+        return Response(_configBody, 200);
+      }
+      return Response('{}', 200);
+    });
+
+    await _pumpApp(tester, client);
+    await tester.pump(); // _poll selesai
+
+    expect(find.textContaining('Hari baru'), findsOneWidget);
+    expect(find.textContaining('0 / 2000 ml'), findsOneWidget, reason: 'hari ini mulai dari nol');
+    // Kartu statistik tetap menampilkan angka kumulatif alat (750 ml); yang
+    // tidak boleh adalah capaian hari ini memakai angka itu.
+  });
+
+  testWidgets('baseline hari ini sudah ada: capaian dan catatan sesuai selisih',
+      (tester) async {
+    String today() {
+      final d = DateTime.now();
+      return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    }
+
+    SharedPreferences.setMockInitialValues({
+      'day_base_date': today(),
+      'day_base_ml': 600.0,
+      'day_base_drink': 2,
+    });
+    final client = MockClient((req) async {
+      if (req.url.path == '/users/uid-test/smart_coaster/telemetry.json') {
+        return Response(_telemetryBody, 200); // total 750, drink 3
+      }
+      if (req.url.path == '/users/uid-test/smart_coaster/config.json') {
+        return Response(_configBody, 200);
+      }
+      return Response('{}', 200);
+    });
+
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    expect(find.textContaining('150 / 2000 ml'), findsOneWidget, reason: '750 - 600');
+    expect(find.textContaining('Hari baru'), findsNothing);
+  });
+
+  // /daily hanya berubah saat ada tegukan. Dulu app memuatnya sekali saat
+  // dashboard dibuka, jadi pengguna yang membuka app sebelum web sempat menulis
+  // tidak pernah melihat riwayat sampai aplikasi dijalankan ulang.
+  testWidgets('riwayat dimuat ulang saat ada tegukan baru', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    var dailyBody = '{}';
+    var telemetry = _telemetryBody;
+    var dailyGets = 0;
+    final client = MockClient((req) async {
+      if (req.url.path == '/users/uid-test/smart_coaster/daily.json') {
+        dailyGets++;
+        return Response(dailyBody, 200);
+      }
+      if (req.url.path == '/users/uid-test/smart_coaster/telemetry.json') {
+        return Response(telemetry, 200);
+      }
+      if (req.url.path == '/users/uid-test/smart_coaster/config.json') {
+        return Response(_configBody, 200);
+      }
+      return Response('{}', 200);
+    });
+
+    await _pumpApp(tester, client);
+    await tester.pump(); // _poll pertama
+    expect(find.text('Riwayat'), findsNothing, reason: 'node riwayat masih kosong');
+
+    // Web menulis baris hari ini, lalu alat melaporkan tegukan baru.
+    dailyBody = '{"2026-11-06":{"total_ml":1500.0,"drink_count":6}}';
+    telemetry = jsonEncode({
+      'weight_g': 315,
+      'water_ml': 185,
+      'temp_c': 27,
+      'humidity_pct': 60,
+      'remaining_sec': 400,
+      'target_interval_min': 45,
+      'total_ml': 750,
+      'drink_count': 4, // bertambah
+      'refill_count': 1,
+      'cheat_count': 0,
+      'muted': false,
+      'fsm_state': 'TIMING',
+    });
+    await tester.pump(const Duration(seconds: 21)); // satu putaran poll
+    await tester.pump();
+
+    expect(dailyGets, 2, reason: 'satu saat dibuka, satu saat tegukan baru');
+    expect(find.text('Riwayat'), findsOneWidget);
+    expect(find.text('2026-11-06'), findsOneWidget);
+  });
 }
