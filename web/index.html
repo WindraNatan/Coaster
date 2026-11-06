@@ -1300,7 +1300,20 @@ function openCloudStreams(){
   cloudStream.onerror = onErr;
 }
 
+// Poll dipicu timer 20 detik dan event config. Dua permintaan yang berjalan
+// bersamaan bisa selesai terbalik, dan yang lebih lambat membawa snapshot lama.
+// Satu poll pada satu waktu, seperti di aplikasi.
+let pollBusy = false;
 async function pollCloudOnce(){
+  if (pollBusy) return;
+  pollBusy = true;
+  try {
+    await pollCloudBody();
+  } finally {
+    pollBusy = false;
+  }
+}
+async function pollCloudBody(){
   const base = getCleanFbUrl();
   const url = shcCoasterUrl(base);
   if (!base){
