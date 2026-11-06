@@ -34,6 +34,11 @@ bool buzzerMuted = false;
 // config saat flag ini terpasang — jangan PATCH dari loop() core 1: satu HTTPS
 // butuh 1-3 dtk dan menghentikan sampling 10 Hz.
 volatile bool configDirty = false;
+// Sesi aktif atau berakhir datang dari klien lewat session.json. Ditulis
+// cloudTask (core 0), dibaca loop (core 1), jadi harus volatile.
+volatile bool standbyRequested = false;
+// Cermin sisi loop: dipakai untuk mendeteksi perpindahan sesi.
+bool standbyActive = false;
 uint32_t customBaseIntervalMs = BASE_INTERVAL_MS;
 
 uint16_t prevDrinkCnt = 0;
@@ -336,9 +341,31 @@ void loop() {
 
     filteredWeight = weightFilter.getAverage();
 
+    // Perpindahan sesi: berakhir berarti tidur, dimulai lagi berarti bangun.
+    if (standbyRequested != standbyActive) {
+        standbyActive = standbyRequested;
+        alertModeActive = false;
+        actuatorOutputState = false;
+        if (standbyActive) {
+            Serial.println(F("[SESI] Sesi berakhir; alat tidur, alarm dan timer berhenti."));
+        } else {
+            // Siklus lama tidak dilanjutkan: selisih waktunya sudah lewat target,
+            // jadi alarm akan langsung berbunyi kalau state-nya dibiarkan.
+            fsm.toIdle(nowMs);
+            Serial.println(F("[SESI] Sesi dimulai; alat aktif kembali dari IDLE."));
+        }
+    }
+
     bool weightValid = filteredWeight == filteredWeight &&
                        filteredWeight >= WEIGHT_MIN_G && filteredWeight <= WEIGHT_MAX_G;
-    if (!weightValid) {
+    if (standbyActive) {
+        // Berat tidak dinilai selama tidur: tidak ada alarm, tidak ada siklus.
+        // Aktuator dipastikan mati setiap putaran, karena handleActuators()
+        // membaca isAlertActive() dari FSM, bukan dari state lokal ini.
+        writeActuator(PIN_BUZZER, false, BUZZER_ACTIVE_LOW);
+        writeActuator(PIN_MOTOR, false, MOTOR_ACTIVE_LOW);
+        writeActuator(PIN_LED_ALERT, false, false);
+    } else if (!weightValid) {
         if (nowMs - lastBadWeightWarn >= 5000) {
             lastBadWeightWarn = nowMs;
             Serial.println(F("[PERINGATAN] Bacaan berat tidak valid (NaN/di luar rentang). Periksa kabel HX711."));
@@ -352,7 +379,7 @@ void loop() {
         }
     }
 
-    handleActuators(fsm.getState(), nowMs);
+    if (!standbyActive) handleActuators(fsm.getState(), nowMs);
 
     if (nowMs - lastTelemetryTime >= 500) {
         lastTelemetryTime = nowMs;

@@ -32,6 +32,7 @@ struct CloudSnapshot {
     uint16_t refillCnt;
     uint16_t cheatCnt;
     bool muted;
+    bool standby;
 };
 
 static volatile bool cloudTaskRunning = false;
@@ -197,6 +198,8 @@ static String authSuffix() {
 }
 
 extern bool demoMode;
+// Ditulis cloudTask (core 0), dibaca loop (core 1). true = sesi berakhir, alat tidur.
+extern volatile bool standbyRequested;
 extern bool autoDhtTimerMode;
 extern bool buzzerMuted;
 extern volatile bool configDirty;
@@ -409,16 +412,17 @@ static void cloudTask(void*) {
             String url = userNode() + "/telemetry.json" + authSuffix();
             if (rtdb.begin(tls, url)) {
                 rtdb.addHeader("Content-Type", "application/json");
-                char body[360];
+                char body[400];
                 snprintf(body, sizeof(body),
                     "{\"weight_g\":%.1f,\"water_ml\":%.1f,\"temp_c\":%.1f,\"humidity_pct\":%.0f,"
                     "\"fsm_state\":\"%s\",\"remaining_sec\":%lu,\"target_interval_min\":%.2f,"
                     "\"total_ml\":%.1f,\"drink_count\":%u,\"refill_count\":%u,\"cheat_count\":%u,"
-                    "\"muted\":%s,\"hb\":%u}",
+                    "\"muted\":%s,\"standby\":%s,\"hb\":%u}",
                     local.weightG, local.waterMl, local.tempC, local.humPct,
                     local.stateStr, (unsigned long)local.remSec, local.targetMin,
                     local.totalMl, local.drinkCnt, local.refillCnt, local.cheatCnt,
-                    local.muted ? "true" : "false", (unsigned)(++hbCounter));
+                    local.muted ? "true" : "false", local.standby ? "true" : "false",
+                    (unsigned)(++hbCounter));
                 rtdb.PATCH((uint8_t*)body, strlen(body));
                 rtdb.end();
             }
@@ -478,10 +482,20 @@ static void cloudTask(void*) {
                 // tertimpa nilai lama dan NVS-nya ikut ditulis basi.
                 if (!configDirty) {
                     bool changed = false;
-                    if (cfg.indexOf("\"MANUAL\"") >= 0 && autoDhtTimerMode) { autoDhtTimerMode = false; changed = true; }
-                    else if (cfg.indexOf("\"AUTO_DHT\"") >= 0 && !autoDhtTimerMode) { autoDhtTimerMode = true; changed = true; }
-                    if (cfg.indexOf("\"muted\":true") >= 0 && !buzzerMuted) { buzzerMuted = true; changed = true; }
-                    else if (cfg.indexOf("\"muted\":false") >= 0 && buzzerMuted) { buzzerMuted = false; changed = true; }
+                    // Tiga nilai: DEMO (15 dtk, tanpa kompensasi DHT), AUTO_DHT,
+                    // MANUAL. Nilai DEMO dulu hanya hidup sebagai perintah serial,
+                    // sehingga pemilihan dari web atau aplikasi tidak berpengaruh
+                    // saat alat dijangkau lewat cloud.
+                    bool wantDemo = cfg.indexOf("\"DEMO\"") >= 0;
+                    bool wantAuto = cfg.indexOf("\"AUTO_DHT\"") >= 0;
+                    if (wantDemo != demoMode) { demoMode = wantDemo; changed = true; }
+                    // Dalam mode demo, tombol DHT tidak berlaku: targetnya tetap
+                    // 15 dtk. Nilainya hanya disimpan supaya kembali apa adanya
+                    // begitu pengguna keluar dari mode demo.
+                    if (!wantDemo && wantAuto != autoDhtTimerMode) {
+                        autoDhtTimerMode = wantAuto;
+                        changed = true;
+                    }
                     float mins = extractJsonFloat(cfg, "\"manual_interval_min\"", 0.0f);
                     if (mins >= MIN_CUSTOM_INTERVAL_MIN && mins <= MAX_CUSTOM_INTERVAL_MIN) {
                         uint32_t newBase = (uint32_t)(mins * 60000.0f);
@@ -519,6 +533,9 @@ static void cloudTask(void*) {
             String sessUrl = userNode() + "/session.json" + authSuffix();
             if (rtdb.begin(tls, sessUrl) && rtdb.GET() == 200) {
                 String sess = rtdb.getString();
+                // "active":false = pengguna menekan Akhiri Sesi. Field ini tidak
+                // ada di versi lama, dan ketiadaannya berarti sesi masih aktif.
+                standbyRequested = sess.indexOf("\"active\":false") >= 0;
                 int oi = sess.indexOf("\"owner\":\"");
                 if (oi >= 0) {
                     oi += 9;
@@ -792,6 +809,7 @@ inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bo
     snap.refillCnt = fsm.getRefillCount();
     snap.cheatCnt = fsm.getCheatCount();
     snap.muted = muted;
+    snap.standby = standbyRequested;
     portEXIT_CRITICAL(&snapMux);
 }
 #else

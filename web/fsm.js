@@ -71,6 +71,18 @@ class CoasterFSM {
   // Interval dikunci saat siklus mulai. Menyusutnya target di tengah siklus
   // tidak boleh mempercepat alarm; target baru berlaku di siklus berikutnya.
   startCycle(now){ this.timerStart = now; this.cycleTarget = this.interval; }
+  // Dipakai jalur standby: hentikan siklus berjalan dan kembali ke IDLE tanpa
+  // menyentuh statistik. Timer lama tidak dibawa karena selisihnya sudah
+  // melewati target dan alarm akan langsung berbunyi.
+  toIdle(now){
+    this.state = 'IDLE';
+    this.missing = false;
+    this.refillPending = false;
+    this.calibrationAlign = false;
+    this.stableCand = 0; this.stableStart = now;
+    this.timerStart = now; this.liftStart = now;
+    this.cycleTarget = this.interval;
+  }
   setMaxLift(ms){ this.maxLift = ms; }
   setEmptyCup(g){
     if (g >= CFG.CUP_ON && g <= CFG.MAX_EMPTY){

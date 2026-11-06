@@ -230,6 +230,20 @@ body:not([data-view="app"]) .conn-bar{display:none}
   input[type=range]{height:44px}
   .brand{min-height:44px}
 }
+
+/* Dialog mulai sesi. Warnanya memakai variabel tema yang sama supaya tidak
+   menjadi pulau warna sendiri di halaman ini. */
+#startDlg{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+  border-radius:8px;padding:20px;max-width:380px;width:calc(100% - 32px)}
+#startDlg::backdrop{background:rgba(6,17,22,.68)}
+#startDlg h2{margin:0 0 8px;font-size:16px}
+#startDlg p{margin:0 0 14px;color:var(--dim);font-size:13px;line-height:1.5}
+.start-modes{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.start-modes label{display:flex;align-items:center;gap:10px;min-height:44px;
+  background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  padding:0 12px;font-size:13px}
+.start-modes input{accent-color:var(--water);width:18px;height:18px}
+.start-actions{display:flex;gap:10px;justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -267,6 +281,20 @@ body:not([data-view="app"]) .conn-bar{display:none}
   </span>
   <a class="act" id="bAccountLink" href="login.html">Masuk / ganti akun</a>
 </div>
+
+<dialog id="startDlg" aria-labelledby="startDlgTitle">
+  <h2 id="startDlgTitle">Mulai sesi</h2>
+  <p id="startDlgLead">Pilih mode timer dulu. Pilihan ini yang dipakai alat selama sesi berjalan.</p>
+  <div class="start-modes" role="radiogroup" aria-labelledby="startDlgLead">
+    <label><input type="radio" name="startMode" value="DEMO"> Demo 15 detik</label>
+    <label><input type="radio" name="startMode" value="AUTO_DHT"> Otomatis DHT11</label>
+    <label><input type="radio" name="startMode" value="MANUAL"> Manual tetap</label>
+  </div>
+  <div class="start-actions">
+    <button class="act" type="button" id="bStartCancel">Batal</button>
+    <button class="act intro-primary" type="button" id="bStartConfirm">Mulai sesi</button>
+  </div>
+</dialog>
 
 <section id="intro" aria-labelledby="introTitle">
   <div class="intro-copy">
@@ -998,12 +1026,13 @@ renderAuthState();
 addEventListener('pageshow', renderAuthState);
 addEventListener('storage', renderAuthState);
 
-// Sesi bergiliran. Perangkat me-reset statistiknya saat nilai owner berubah, jadi
-// mulai dan akhiri sesi cukup menulis satu field.
+// Sesi bergiliran. Perangkat me-reset statistiknya saat nilai owner berubah, dan
+// masuk tidur saat active:false. Konfirmasi mode dulu supaya orang yang baru
+// menyalakan alat tidak perlu tahu tombol mode ada di mana.
 async function startSession(){
   const base = getCleanFbUrl();
   if (!base || !shcDeviceUid()) return;
-  const ok = await shcSetSession(base, shcUid());
+  const ok = await shcSetSession(base, shcUid(), true);
   if (ok) {
     // Sama seperti bReset: simpan dulu ke riwayat, baru reset. Urutan sebaliknya
     // menulis nol ke entri hari ini dan menghapus catatan pagi sampai siang.
@@ -1016,9 +1045,34 @@ async function startSession(){
 async function endSession(){
   const base = getCleanFbUrl();
   if (!base || !shcDeviceUid()) return;
-  await shcSetSession(base, '');
-  $('sessionLab').textContent = 'Sesi: belum dimulai';
+  // active:false membuat alat tidur: alarm dan timer berhenti sampai sesi
+  // berikutnya dimulai. Statistik tidak direset di sini.
+  const ok = await shcSetSession(base, '', false);
+  $('sessionLab').textContent = ok ? 'Sesi: ditutup, alat tidur' : 'Sesi: gagal ditutup';
 }
+
+function modeSekarang(){
+  return demo ? 'DEMO' : (autoDht ? 'AUTO_DHT' : 'MANUAL');
+}
+$('bStartSession').addEventListener('click', () => {
+  const dlg = $('startDlg');
+  const cur = modeSekarang();
+  document.querySelectorAll('input[name=startMode]').forEach(i => { i.checked = i.value === cur; });
+  dlg.showModal();
+});
+$('bStartCancel').addEventListener('click', () => $('startDlg').close());
+$('bStartConfirm').addEventListener('click', async () => {
+  const pilih = document.querySelector('input[name=startMode]:checked');
+  const mode = pilih ? pilih.value : 'AUTO_DHT';
+  demo = mode === 'DEMO';
+  autoDht = mode === 'AUTO_DHT';
+  applyTimerConfig();
+  // Mode dikirim ke alat lebih dulu, baru sesi dibuka, supaya alat sudah memakai
+  // target yang benar saat siklus pertama dimulai.
+  await pushCloudConfig();
+  await startSession();
+  $('startDlg').close();
+});
 
 function renderSessionState(){
   const has = !!shcDeviceUid();
@@ -1026,8 +1080,8 @@ function renderSessionState(){
   if (has) $('sessionLab').textContent = 'Sesi: belum dimulai';
 }
 renderSessionState();
-$('bStartSession').addEventListener('click', startSession);
 $('bEndSession').addEventListener('click', endSession);
+
 
 // URL database sekarang diisi di login.html dan disimpan di localStorage.
 function getCleanFbUrl(){
@@ -1086,7 +1140,7 @@ async function pushCloudConfig(){
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        timer_mode: autoDht ? 'AUTO_DHT' : 'MANUAL',
+        timer_mode: demo ? 'DEMO' : (autoDht ? 'AUTO_DHT' : 'MANUAL'),
         manual_interval_min: customBaseMin,
         empty_cup_weight_g: fsm.emptyCup,
         muted: buzzerMuted
@@ -1099,20 +1153,32 @@ async function pushCloudConfig(){
 function applyCloudData(t, cfgRemote){
   $('cloudDot').className = 'status-dot ok';
   $('cloudStatus').textContent = 'Cloud sinkron (' + new Date().toLocaleTimeString('id-ID') + ')';
+  // Alat sedang tidur karena sesinya ditutup. Statusnya disebut eksplisit,
+  // supaya angka berat yang tetap masuk tidak disalahartikan sebagai sesi jalan.
+  if (t && t.standby === true){
+    $('cloudStatus').textContent =
+      'Alat tidur, sesi belum dimulai (' + new Date().toLocaleTimeString('id-ID') + ')';
+  }
   const muteNow = mutedFrom(cfgRemote, t);
   if (muteNow !== null) buzzerMuted = muteNow;
   // Mode timer + interval dasar dari cloud, sama seperti aplikasi. applyTimerConfig
   // memanggil recomputeAdaptive, jadi interval dasar lokal ikut diselaraskan dulu:
   // tanpa ini, tombol mode berubah tetapi angkanya tetap milik perangkat ini.
   if (cfgRemote && typeof cfgRemote.timer_mode === 'string'){
-    const auto = cfgRemote.timer_mode !== 'MANUAL';
+    const mode = cfgRemote.timer_mode;
+    const mauDemo = mode === 'DEMO';
+    // Mode demo memakai target tetap 15 dtk; faktor DHT tidak berlaku di sana.
+    const auto = !mauDemo && mode !== 'MANUAL';
     const mins = +cfgRemote.manual_interval_min;
     if (mins >= 1 && mins <= 180 && Math.round(mins) !== customBaseMin){
       customBaseMin = Math.round(mins);
       $('baseMinIn').value = customBaseMin;
     }
-    if (auto !== autoDht){ autoDht = auto; applyTimerConfig(); }
-    else syncModeLabels_();
+    if (mauDemo !== demo || auto !== autoDht){
+      demo = mauDemo;
+      autoDht = auto;
+      applyTimerConfig();
+    } else syncModeLabels_();
   }
   if (!t) return;
   // Alat versi firmware lama belum mengirim hb. Menandainya "mati" akan salah,

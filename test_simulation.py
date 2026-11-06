@@ -110,6 +110,20 @@ class CoasterFSM:
         self.timer_start_ms = now_ms
         self.cycle_target_ms = self.target_interval_ms
 
+    def to_idle(self, now_ms):
+        # Dipakai jalur standby: hentikan siklus berjalan dan kembali ke IDLE
+        # tanpa menyentuh statistik. Timer lama tidak dibawa karena selisihnya
+        # sudah melewati target dan alarm akan langsung berbunyi.
+        self.state = "IDLE"
+        self.missing_cup_alert = False
+        self.refill_pending = False
+        self.calibration_align = False
+        self.stable_candidate_weight = 0.0
+        self.stable_start_ms = now_ms
+        self.timer_start_ms = now_ms
+        self.lift_start_ms = now_ms
+        self.cycle_target_ms = self.target_interval_ms
+
     def is_stable(self, w, now_ms):
         # Fix C1: berbasis waktu, bukan hitungan pemanggilan
         if (w - self.stable_candidate_weight > STABILITY_BAND_G or
@@ -552,6 +566,21 @@ def test_all_scenarios():
     settle(q, 380.0, 1000)
     assert q.cycle_target_ms == 5000
     print("[PASS] 23. Siklus yang dimulai setelah set_interval memakai target baru")
+
+    # 24. Standby: to_idle menghentikan siklus, mematikan alarm, statistik utuh.
+    r = CoasterFSM(empty_cup_weight=130.0, target_interval_ms=15000)
+    r.set_interval(5000)
+    settle(r, 380.0, 1000)
+    assert r.state == "TIMING", r.state
+    r.update(0.0, 3000)
+    settle(r, 340.0, 3100)
+    assert r.drink_count == 1, r.drink_count
+    r.to_idle(4000)
+    assert r.state == "IDLE", r.state
+    assert r.drink_count == 1, "statistik harus utuh"
+    r.update(340.0, 5000)
+    assert r.state == "STABLE", r.state
+    print("[PASS] 24. Standby: to_idle mematikan alarm, statistik utuh, siklus lama tidak dilanjutkan")
 
     print("\nSEMUA SKENARIO LULUS")
 

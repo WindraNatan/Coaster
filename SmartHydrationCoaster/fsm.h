@@ -56,6 +56,22 @@ public:
         cycleTargetMs = monitorIntervalMs;
     }
 
+    // Dipakai jalur standby: hentikan siklus yang sedang berjalan dan kembali ke
+    // IDLE tanpa menyentuh statistik. Timer lama tidak dibawa, karena selisihnya
+    // sudah melewati target dan alarm akan langsung berbunyi begitu update()
+    // dipanggil lagi.
+    void toIdle(uint32_t nowMs) {
+        currentState = STATE_IDLE;
+        missingCupAlert = false;
+        refillPending = false;
+        calibrationAlign = false;
+        stableCandidateWeight = 0.0f;
+        stableStartMs = nowMs;
+        timerStartMs = nowMs;
+        liftStartMs = nowMs;
+        cycleTargetMs = monitorIntervalMs;
+    }
+
     void setMaxLiftDuration(uint32_t maxLiftMs) { maxLiftDurationMs = maxLiftMs; }
 
     bool setEmptyCupWeight(float weightG) {

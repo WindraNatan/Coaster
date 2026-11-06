@@ -1761,6 +1761,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(
+                  value: 'DEMO',
+                  label: Text('DEMO 15 dtk', style: TextStyle(fontFamily: _mono, fontSize: 11))),
+              ButtonSegment(
                   value: 'AUTO_DHT',
                   label: Text('AUTO_DHT', style: TextStyle(fontFamily: _mono, fontSize: 11))),
               ButtonSegment(

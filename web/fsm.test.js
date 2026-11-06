@@ -116,4 +116,22 @@ assert.strictEqual(computeAdaptiveIntervalMs(1000, 40.0, 10.0), CFG.FLOOR,
   'lantai 5 detik berlaku');
 console.log('[PASS] 23. rumus adaptif JS sama dengan C++ dan Python');
 
+// 24. Standby: toIdle menghentikan siklus, mematikan alarm, statistik utuh.
+// Dipakai jalur "akhiri sesi" di web dan aplikasi.
+const r = new CoasterFSM(130.0, 15000);
+r.setMaxLift(10000);
+r.setInterval_(5000);
+settle(r, 380, 1000);
+assert.strictEqual(r.state, 'TIMING');
+r.update(0, 3000);
+settle(r, 340, 3100);
+assert.strictEqual(r.drinkCount, 1);
+r.toIdle(4000);
+assert.strictEqual(r.state, 'IDLE');
+assert.strictEqual(r.alertActive, false);
+assert.strictEqual(r.drinkCount, 1);
+r.update(340, 5000);
+assert.strictEqual(r.state, 'STABLE');
+console.log('[PASS] 24. Standby: toIdle mematikan alarm, statistik utuh, siklus lama tidak dilanjutkan');
+
 console.log('\nSEMUA LULUS (fsm.test.js)');

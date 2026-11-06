@@ -99,15 +99,16 @@ async function shcClaimDevice(base, code){
   return deviceUid;
 }
 
-// Sesi bergiliran: menulis siapa yang sedang memakai. Perangkat membaca node ini dan
-// me-reset statistiknya saat nilainya berubah.
-async function shcSetSession(base, ownerUid){
+// Sesi bergiliran: menulis siapa yang sedang memakai dan apakah sesinya masih
+// berjalan. Perangkat membaca node ini: owner berubah me-reset statistik, dan
+// active:false membuat alat tidur (alarm dan timer berhenti).
+async function shcSetSession(base, ownerUid, active = true){
   const url = shcCoasterUrl(base);
   if (!url || !shcToken()) return false;
   const res = await fetch(url + '/session.json' + shcAuthSuffix(), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ owner: ownerUid || '', at: Date.now() })
+    body: JSON.stringify({ owner: ownerUid || '', active: !!active, at: Date.now() })
   });
   return res.ok;
 }

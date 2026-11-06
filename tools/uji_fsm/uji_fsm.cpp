@@ -190,6 +190,23 @@ int main(){
     CHECK(q.getTargetIntervalMs() == 5000, "23a. siklus baru memakai target baru");
     CHECK(q.getRemainingTimeMs(3500) == 4000, "23b. sisa waktu mengikuti target 5000");
 
+    // 24. Standby: toIdle menghentikan siklus, mematikan alarm, statistik utuh.
+    // Dipakai jalur "akhiri sesi": perangkat berhenti menilai berat selama tidur.
+    CoasterFSM r;
+    r.setEmptyCupWeight(130.0f);
+    r.setInterval(5000);
+    r.setMaxLiftDuration(10000);
+    settle(r, 380, 1000);
+    CHECK(r.getState() == STATE_TIMING, "24a. siap: TIMING target 5 dtk");
+    r.update(0, 3000);
+    settle(r, 340, 3100);
+    CHECK(r.getDrinkCount() == 1, "24b. minum 40 g tercatat sebelum standby");
+    r.toIdle(4000);
+    CHECK(r.getState() == STATE_IDLE && !r.isAlertActive(), "24c. toIdle -> IDLE tanpa alarm");
+    CHECK(r.getDrinkCount() == 1, "24d. statistik minum tidak direset");
+    r.update(340, 5000);
+    CHECK(r.getState() == STATE_STABLE, "24e. setelah standby, update mulai dari IDLE, bukan melanjutkan siklus lama");
+
     printf("\n%s (%d gagal)\n", fails ? "ADA YANG GAGAL" : "SEMUA LULUS", fails);
     return fails ? 1 : 0;
 }
