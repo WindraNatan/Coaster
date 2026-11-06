@@ -1184,6 +1184,12 @@ let cloudStream = null, cloudStreamCfg = null, streamRetry = null;
 // Waktu frame live terakhir diterapkan. Poll yang berangkat sebelum ini
 // membawa data lebih lama; menerapkannya memundurkan countdown.
 let lastStreamAt = 0;
+// Config punya penanda sendiri: poll yang berangkat lebih dulu tidak boleh
+// menimpa mute/mode yang baru saja dikirim lewat stream.
+let lastCfgStreamAt = 0;
+// Config terakhir yang diketahui dari stream, dipakai poll ketika hasil GET-nya
+// lebih tua daripada frame config.
+let cfgRemoteLast = null;
 let tlmBox = { v: null }, lastTelemetry = null;
 
 function closeCloudStreams(){
@@ -1199,7 +1205,7 @@ function openCloudStreams(){
   const url = shcCoasterUrl(base);
   if (!base || !url || !shcDeviceUid()) return;
 
-  let cfgRemoteLast = null;
+  cfgRemoteLast = null;
   tlmBox = { v: null }; lastTelemetry = null;
   const onErr = async () => {
     // Token 1 jam: RTDB menutup stream dengan 401. Ambil token baru, buka lagi.
@@ -1255,11 +1261,13 @@ function openCloudStreams(){
   cloudStreamCfg.addEventListener('put', e => {
     applyEvent(cfgBox, e);
     cfgRemoteLast = cfgBox.v;
+    lastCfgStreamAt = performance.now();
     pollCloudOnce();
   });
   cloudStreamCfg.addEventListener('patch', e => {
     applyEvent(cfgBox, e);
     cfgRemoteLast = cfgBox.v;
+    lastCfgStreamAt = performance.now();
     // Nilai yang berubah hanya sebagian; cukup terapkan ulang snapshot terakhir.
     if (lastTelemetry) applyCloudData(lastTelemetry, cfgRemoteLast);
   });
@@ -1315,7 +1323,13 @@ async function pollCloudOnce(){
     const cfg = resC.ok ? await resC.json() : null;
     // Frame live yang tiba setelah permintaan berangkat lebih baru daripada
     // hasil poll. Terapkan config-nya saja, jangan telemetrinya.
-    applyCloudData(lastStreamAt > mulai ? null : tlm, cfg);
+    const tlmSegar = lastStreamAt <= mulai;
+    // Config basi: pakai yang terakhir diketahui dari stream, bukan null —
+    // null membuat mute jatuh ke salinan di telemetri yang bisa lebih tua lagi.
+    applyCloudData(tlmSegar ? tlm : null, lastCfgStreamAt > mulai ? cfgRemoteLast : cfg);
+    // Snapshot SSE harus ikut diperbarui, kalau tidak patch config berikutnya
+    // menerapkan ulang telemetri lama dan countdown mundur.
+    if (tlmSegar) { tlmBox = { v: tlm }; lastTelemetry = tlm; }
   } catch (err){
     $('cloudDot').className = 'status-dot err';
     $('cloudStatus').textContent = 'Gagal baca Cloud: ' + (err.message || err);

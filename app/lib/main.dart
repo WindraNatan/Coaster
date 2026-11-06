@@ -587,6 +587,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Waktu frame SSE terakhir diterapkan. Poll yang berangkat sebelum ini
   // membawa data lebih lama, dan menerapkannya memundurkan countdown.
   DateTime? _streamFrameAt;
+  /// Penanda config terpisah: mute/mode dari stream tidak boleh ditimpa poll
+  /// yang berangkat sebelum frame itu tiba.
+  DateTime? _cfgFrameAt;
   Timer? _timer;
   StreamSubscription<String>? _streamSub;
   Timer? _streamRetry;
@@ -698,6 +701,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _cfgCache
       ..clear()
       ..addAll(_cfgState.json);
+    _cfgFrameAt = DateTime.now();
     setState(() => _cfg = CloudConfig.fromJson(Map<String, dynamic>.from(_cfgCache)));
   }
 
@@ -805,12 +809,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         // Frame SSE yang tiba setelah permintaan berangkat lebih baru daripada
         // hasil poll. Config tetap dipakai, telemetrinya dibuang.
         final usang = _streamFrameAt != null && _streamFrameAt!.isAfter(mulai);
+        final cfgUsang = _cfgFrameAt != null && _cfgFrameAt!.isAfter(mulai);
         setState(() {
           if (!usang) {
             if (_frameIsNew(t)) _frameAt = DateTime.now();
             _t = t;
           }
-          _cfg = c;
+          if (!cfgUsang) _cfg = c;
           _error = null;
           _loading = false;
           _lastSync = DateTime.now();
