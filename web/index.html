@@ -1048,6 +1048,17 @@ function applyCloudData(t, cfgRemote){
   // Alat versi firmware lama belum mengirim hb. Menandainya "mati" akan salah,
   // jadi hanya firmware yang benar-benar mengirim counter yang diperiksa.
   const hbNum = typeof t.hb === 'number' ? t.hb : null;
+  // Snapshot yang sama bisa datang berkali-kali: poll 20 dtk terhadap
+  // heartbeat 60 dtk, dan event config memutar ulang telemetri lama. Jangkar
+  // countdown hanya maju saat isinya benar-benar baru, kalau tidak angka
+  // melompat naik dan jadwal alarm ikut mundur.
+  const remMasuk = +(t.remaining_sec || 0);
+  // Tanpa hb, pembandingnya nilai mentah yang terakhir diterima, bukan hitungan
+  // lokal: hitungan lokal selalu lebih kecil, jadi snapshot identik akan terus
+  // dianggap baru dan jangkar tidak pernah tenang.
+  const frameBaru = hbNum !== null
+    ? hbNum !== lastHb
+    : (liveRemSec === null || remMasuk > liveRemSec + 1);
   hbKnown = hbNum !== null;
   if (hbNum === null) lastHbAt = Date.now();  // firmware lama: data tetap datang
   if (hbNum !== null){
@@ -1070,8 +1081,8 @@ function applyCloudData(t, cfgRemote){
   roomHum = +(t.humidity_pct || 60);
   $('sTemp').value = roomT; $('tVal').textContent = roomT.toFixed(1) + ' °C';
   $('sHum').value = roomHum; $('tHum').textContent = roomHum + ' %';
-  liveRemSec = +(t.remaining_sec || 0);
-  liveRemAt = performance.now();
+  liveRemSec = remMasuk;
+  if (frameBaru) liveRemAt = performance.now();
   if (t.target_interval_min) fsm.interval = Math.round(t.target_interval_min * 60000);
   const beforeCounts = [fsm.drinkCount, fsm.refillCount, fsm.cheatCount].join(',');
   fsm.totalDrank = +(t.total_ml || 0);

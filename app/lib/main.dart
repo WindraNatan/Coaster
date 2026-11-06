@@ -580,6 +580,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   Timer? _remindTick;
   bool _polling = false;
   DateTime? _lastSync;
+  // Saat snapshot ini pertama terlihat. Dipisah dari _lastSync: poll 20
+  // detik dan event config bisa mengirim ulang telemetri yang sama, dan
+  // memakai _lastSync sebagai jangkar membuat countdown melompat naik.
+  DateTime? _frameAt;
   Timer? _timer;
   StreamSubscription<String>? _streamSub;
   Timer? _streamRetry;
@@ -705,7 +709,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     _streamBuf = '';
     if (!changed || !mounted) return;
     setState(() {
-      _t = Telemetry.fromJson(Map<String, dynamic>.from(_stream.json));
+      final baru = Telemetry.fromJson(Map<String, dynamic>.from(_stream.json));
+      if (_frameIsNew(baru)) _frameAt = DateTime.now();
+      _t = baru;
       _error = null;
       _loading = false;
       _lastSync = DateTime.now();
@@ -792,6 +798,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
         if (!mounted) return;
         setState(() {
+          if (_frameIsNew(t)) _frameAt = DateTime.now();
           _t = t;
           _cfg = c;
           _error = null;
@@ -1078,10 +1085,21 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// saat ada perubahan lain atau heartbeat, jadi angka mentah membeku lalu
   /// melompat. Kurangi sendiri dengan waktu sejak snapshot tiba.
   int _liveRemaining(Telemetry t) {
-    final at = _lastSync;
+    final at = _frameAt ?? _lastSync;
     if (at == null) return t.remainingSec;
     final rem = t.remainingSec - DateTime.now().difference(at).inSeconds;
     return rem < 0 ? 0 : rem;
+  }
+
+  /// Apakah snapshot ini benar-benar baru. Counter hb adalah penanda yang
+  /// pasti; firmware lama tanpa hb dinilai dari sisa waktu yang naik.
+  bool _frameIsNew(Telemetry t) {
+    final prev = _t;
+    if (prev == null) return true;
+    if (t.heartbeat > 0 || prev.heartbeat > 0) {
+      return t.heartbeat != prev.heartbeat;
+    }
+    return t.remainingSec > prev.remainingSec + 1;
   }
 
   void _startRemindTick() {
