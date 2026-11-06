@@ -172,6 +172,41 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
   display:inline-block;padding-block:4px}
 @media (prefers-reduced-motion: reduce){.badge.alert{animation:none}}
 
+/* Perkenalan: satu halaman untuk pengunjung expo, dashboard tetap utuh. */
+#intro{max-width:1160px;margin:0 auto;padding:56px 24px 72px;min-height:calc(100dvh - 57px);align-content:center;
+  display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);
+  gap:48px;align-items:center}
+#intro h1{font-size:clamp(32px,4.6vw,52px);font-weight:600;line-height:1.08;
+  letter-spacing:-.02em;max-width:18ch}
+.intro-lede{margin-top:18px;font-size:17px;line-height:1.6;color:var(--dim);
+  max-width:44ch}
+.intro-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}
+.intro-actions .act{min-height:44px;padding:10px 18px;font-size:14px}
+button.act.intro-primary{background:var(--water);border-color:var(--water);
+  color:#04222B;font-weight:600}
+button.act.intro-primary:hover{background:#5FD3EE;border-color:#5FD3EE;color:#04222B}
+.intro-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;
+  margin-top:44px;padding-top:22px;border-top:1px solid var(--line)}
+.intro-facts dt{font-family:var(--mono);font-size:11px;color:var(--dim);
+  margin-bottom:4px}
+.intro-facts dd{font-size:14px;color:var(--ink);line-height:1.4}
+.intro-art{display:flex;justify-content:center;align-items:center;
+  background:var(--panel2);border:1px solid var(--line);
+  border-radius:14px;padding:32px}
+.intro-art svg{width:100%;max-width:380px;height:auto}
+body[data-view="app"] #intro{display:none}
+body:not([data-view="app"]) > main{display:none}
+body:not([data-view="app"]) > .conn-drawer{display:none}
+/* Pilihan mode baru berguna setelah masuk dashboard; di perkenalan ia hanya
+   deretan tombol yang belum melakukan apa pun bagi pengunjung. */
+body:not([data-view="app"]) .conn-bar{display:none}
+@media(max-width:920px){
+  #intro{grid-template-columns:1fr;padding:32px 16px 48px;gap:28px}
+  .intro-art{order:-1;padding:20px}
+  .intro-art svg{max-width:230px}
+  .intro-facts{grid-template-columns:1fr;gap:12px;margin-top:28px}
+}
+
 /* Target sentuh wajib menang atas aturan dasar di atasnya, jadi blok ini paling akhir. */
 @media(pointer:coarse){
   /* iOS Safari memperbesar halaman saat input difokus kalau font < 16px. */
@@ -232,6 +267,41 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
   </span>
   <a class="act" id="bAccountLink" href="login.html">Masuk / ganti akun</a>
 </div>
+
+<section id="intro" aria-labelledby="introTitle">
+  <div class="intro-copy">
+    <h1 id="introTitle">Tatakan gelas yang mengingatkan minum.</h1>
+    <p class="intro-lede">Menimbang gelas setiap saat, menghitung air yang benar-benar diminum, lalu berbunyi saat waktunya minum lagi.</p>
+    <div class="intro-actions">
+      <button class="act intro-primary" type="button" data-open-app>Coba simulator</button>
+      <a class="act" href="login.html">Hubungkan alat</a>
+    </div>
+    <dl class="intro-facts">
+      <div><dt>beban</dt><dd>Load cell 5 kg</dd></div>
+      <div><dt>pengingat</dt><dd>30 menit, menyesuaikan suhu ruang</dd></div>
+      <div><dt>riwayat</dt><dd>Tersimpan per tanggal</dd></div>
+    </dl>
+  </div>
+  <figure class="intro-art">
+    <svg viewBox="0 0 512 512" role="img" aria-label="Tanda Smart Hydration Coaster: gelas di atas tatakan">
+      <defs>
+        <clipPath id="introBody">
+          <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z"/>
+        </clipPath>
+      </defs>
+      <g transform="translate(70 70) scale(0.72)">
+        <ellipse cx="256" cy="404" rx="176" ry="54" fill="#071219"/>
+        <ellipse cx="256" cy="386" rx="176" ry="54" fill="#173743" stroke="#44C8E6" stroke-width="13"/>
+        <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z" fill="#143440"/>
+        <g clip-path="url(#introBody)">
+          <rect x="160" y="286" width="192" height="120" fill="#44C8E6"/>
+        </g>
+        <ellipse cx="256" cy="286" rx="79" ry="26" fill="#7FE3F4"/>
+        <ellipse cx="256" cy="158" rx="88" ry="30" fill="#143440" stroke="#9FC4CE" stroke-width="9"/>
+      </g>
+    </svg>
+  </figure>
+</section>
 
 <main>
   <h1 class="sr-only" style="font-size:20px;font-weight:600">Smart Hydration Coaster — status dan kendali</h1>
@@ -1401,8 +1471,20 @@ render();
 
 // login.html menautkan ke ?mode=cloud supaya pengguna yang baru masuk langsung
 // melihat data cloud, bukan Simulator.
+// Dua tampilan: perkenalan untuk pengunjung, dashboard untuk memakai alat.
+// Dashboard tidak dimuat ulang, hanya disembunyikan, jadi simulator yang
+// sudah berjalan tidak kehilangan waktunya saat orang menekan tombol.
+function setView(v){ document.body.dataset.view = v; }
+document.querySelectorAll('[data-open-app]').forEach(el =>
+  el.addEventListener('click', () => setView('app')));
+document.querySelectorAll('.conn-pill').forEach(el =>
+  el.addEventListener('click', () => setView('app')));
+
 const _startMode = new URLSearchParams(location.search).get('mode');
-if (_startMode === 'cloud' || _startMode === 'usb') setConnMode(_startMode);
+if (_startMode === 'cloud' || _startMode === 'usb'){
+  setView('app');
+  setConnMode(_startMode);
+}
 log('Smart Hydration Coaster siap. Pilih Simulator, USB Live, atau Cloud Firebase.', '');
 </script>
 </body>
