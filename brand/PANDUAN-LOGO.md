@@ -27,6 +27,32 @@ sekitarnya, misalnya kepala laporan atau favicon cetak.
 Setiap berkas tersedia sebagai SVG (tajam di ukuran apa pun) dan PNG (siap
 tempel di Word atau PowerPoint). PNG diekspor 2x dari ukuran aslinya.
 
+## Sticker untuk casing kuning
+
+Casing dicetak 3D dengan filamen kuning mustard `#EDB651`. Logo versi biasa
+tidak bisa ditempel di atasnya: cyan `#44C8E6` di atas kuning hanya punya
+kontras 1,3:1, jadi garis tatakan hilang. Karena itu ada versi khusus.
+
+| Berkas | Isi | Pakai untuk |
+|---|---|---|
+| `logo-sticker-yellow.svg` / `.png` | tanda + nama, latar kosong | sticker persegi panjang di tutup belakang |
+| `logo-sticker-yellow-mark.svg` / `.png` | tanda saja, latar kosong | sticker bulat, atau potong mati |
+| `logo-sticker-yellow-preview.svg` / `.png` | sama, di atas bidang kuning | menilai hasil sebelum dicetak |
+
+Aturan versi ini:
+
+1. Nama produk memakai tinta `#0C1F27`, bukan warna pucat. Pucat di atas kuning
+   hilang seluruhnya.
+2. Air tetap cyan, tetapi selalu berada di dalam badan gelas yang bertinta. Cyan
+   tidak pernah bersinggungan langsung dengan kuning.
+3. Tatakan diberi muka putih tulang `#FAF5E9` dengan garis tinta, dan bayangan
+   kuning tua `#C9922F` di bawahnya, supaya tanda punya bidang untuk berdiri.
+4. Latar berkas transparan; kuningnya datang dari casing. Kalau percetakan
+   meminta latar, pakai `logo-sticker-yellow-preview` yang kuningnya sudah
+   tercetak.
+
+Ukuran cetak yang masuk akal untuk tutup belakang: lebar sticker 60–70 mm.
+
 ## Warna
 
 | Nama | Nilai | Dipakai untuk |
@@ -37,6 +63,9 @@ tempel di Word atau PowerPoint). PNG diekspor 2x dari ukuran aslinya.
 | Cyan | `#44C8E6` | tepi tatakan, air |
 | Cyan terang | `#7FE3F4` | permukaan air |
 | Pucat | `#E2F1F3` | garis gelas, teks di latar gelap |
+| Kuning casing | `#EDB651` | filamen casing, bidang sticker |
+| Kuning tua | `#C9922F` | bayangan tatakan di versi sticker |
+| Putih tulang | `#FAF5E9` | muka tatakan di versi sticker |
 
 ## Aturan
 
@@ -60,17 +89,26 @@ tidak bisa berbeda antarberkas.
 python brand/tools/build-brand.py
 ```
 
-Skrip itu menulis enam SVG di `brand/` dan `web/icon.svg`. Ikon Android
+Skrip itu menulis sembilan SVG di `brand/` dan `web/icon.svg`. Ikon Android
 (`ic_launcher_foreground.xml`) memakai bentuk yang sama dan diperbarui manual.
+Tiga yang terakhir adalah versi sticker untuk casing kuning.
 
 Untuk memperbarui PNG, jalankan `python brand/tools/export-png.py`. Skrip itu
 tidak mengekspor sendiri: ia menghitung ukuran target dan memeriksa berkas yang
 sudah ada di disk. Ekspor dijalankan lewat browser dengan viewport 2,4x viewBox
 (tangkapan browser menambah 1,25x, jadi hasilnya 3x). Ukuran akhir yang benar:
-tanda 1536x1536, kuncian horizontal 4183x960, kuncian vertikal 2649x1380.
+tanda 1536x1536, kuncian horizontal 4183x960, kuncian vertikal 2649x1380,
+sticker kuning 3300x1080, tanda sticker 1080x1080, pratinjau sticker 3876x1656.
+
+Halaman ekspor harus berkas `file://` yang memuat SVG dengan jalur relatif.
+Halaman `data:` tidak diizinkan memuat `file://`, dan hasilnya PNG kosong tanpa
+galat apa pun.
 
 Semua ukuran itu 300 DPI: kuncian horizontal 4183 px = 354 mm, cukup untuk
 sampul A4 (210 mm) dengan margin.
+
+PNG di folder ini berlatar putih, tanpa kanal alfa. Kalau percetakan meminta
+versi transparan, kirim berkas SVG-nya, bukan PNG.
 
 Font nama produk adalah Space Grotesk Bold dari `app/assets/fonts/`. Nama
 diubah menjadi bentuk (path), bukan teks, supaya berkas logo tampil sama di

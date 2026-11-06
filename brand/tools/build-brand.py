@@ -60,6 +60,12 @@ def mark(color_mode='dark'):
     """Tanda: gelas di atas tatakan, tampak sedikit dari atas."""
     if color_mode == 'dark':
         base, face, edge, water, surf, rim = '#071219', '#173743', CYAN, CYAN, '#7FE3F4', '#9FC4CE'
+    elif color_mode == 'yellow':
+        # Sticker di casing mustard #EDB651. Cyan di atas kuning nyaris tidak
+        # terbaca (kontras 1,3:1), jadi air dikurung di dalam badan gelas yang
+        # bertinta, dan tatakan diberi muka putih tulang supaya gelas punya
+        # bidang untuk berdiri.
+        base, face, edge, water, surf, rim = '#C9922F', '#FAF5E9', INK, CYAN, '#DDF1F6', INK
     else:
         base, face, edge, water, surf, rim = '#0A1920', '#132B35', '#2FA8C4', CYAN, '#8FE9F7', '#8FB3BD'
     return f'''  <ellipse cx="256" cy="404" rx="176" ry="54" fill="{base}"/>
@@ -70,6 +76,62 @@ def mark(color_mode='dark'):
   </g>
   <ellipse cx="256" cy="286" rx="79" ry="26" fill="{surf}"/>
   <ellipse cx="256" cy="158" rx="88" ry="30" fill="{INK if color_mode != 'dark' else '#143440'}" stroke="{rim}" stroke-width="9"/>'''
+
+
+def sticker_yellow(with_name=True):
+    """Sticker untuk ditempel di casing kuning mustard.
+
+    Latar sengaja kosong: kalau dicetak di vinil bening, kuning casing yang
+    menjadi latarnya. Preview-nya ada di sticker_yellow_preview().
+
+    Nama produk memakai tinta gelap, bukan pucat: pucat di atas kuning hilang.
+    """
+    if with_name:
+        name, w = glyphs('Smart Hydration Coaster', 56)
+    else:
+        name, w = '', 0.0
+    margin, gap, mark_size = 64, 42, 232
+    height = int(margin * 2 + mark_size)
+    mark_y = (height - mark_size) // 2
+    if with_name:
+        tx = margin + mark_size + gap
+        total_w = int(tx + w + margin)
+    else:
+        tx = 0
+        total_w = int(mark_size + margin * 2)
+    baseline = height // 2 + 20
+    inner = mark('yellow')
+    body = f'''  <g transform="translate({margin} {mark_y}) scale({mark_size/512:.4f})">
+{inner}
+  </g>'''
+    if with_name:
+        body += f'''
+  <g fill="{INK}" transform="translate({tx:.2f} {baseline})">
+      {name}
+  </g>'''
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total_w} {height}" width="{total_w}" height="{height}" role="img" aria-label="Smart Hydration Coaster">
+  <title>Smart Hydration Coaster</title>
+{mark_defs()}{body}
+</svg>
+'''
+
+
+def sticker_yellow_preview():
+    """Sticker yang sama di atas bidang kuning casing, untuk menilai kontras."""
+    satu = sticker_yellow()
+    vb = satu.split('viewBox="')[1].split('"')[0].split()
+    w, h = int(vb[2]), int(vb[3])
+    # Seluruh isi dipakai apa adanya, termasuk <defs>: clipPath gelas harus
+    # ikut, kalau tidak air menonjol keluar dinding yang meruncing.
+    isi = satu[satu.index('>') + 1:satu.rindex('</svg>')]
+    isi = isi[isi.index('</title>') + len('</title>'):]
+    pad = 96
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w + pad*2} {h + pad*2}" width="{w + pad*2}" height="{h + pad*2}" role="img" aria-label="Pratinjau sticker di casing kuning">
+  <title>Pratinjau sticker di casing kuning</title>
+  <rect width="100%" height="100%" fill="#EDB651"/>
+  <g transform="translate({pad} {pad})">{isi}</g>
+</svg>
+'''
 
 
 def lockup_horizontal(bg):
@@ -207,6 +269,9 @@ def main():
         'logo-horizontal-dark.svg': lockup_horizontal('dark'),
         'logo-vertical-light.svg': lockup_vertical('light'),
         'logo-vertical-dark.svg': lockup_vertical('dark'),
+        'logo-sticker-yellow.svg': sticker_yellow(),
+        'logo-sticker-yellow-mark.svg': sticker_yellow(with_name=False),
+        'logo-sticker-yellow-preview.svg': sticker_yellow_preview(),
     }
     files['../web/icon.svg'] = icon()
     files['../app/android/app/src/main/res/drawable/ic_launcher_foreground.xml'] = android_foreground()

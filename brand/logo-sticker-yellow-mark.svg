@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" width="360" height="360" role="img" aria-label="Smart Hydration Coaster">
+  <title>Smart Hydration Coaster</title>
+  <defs>
+    <clipPath id="body">
+      <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z"/>
+    </clipPath>
+  </defs>
+  <g transform="translate(64 64) scale(0.4531)">
+  <ellipse cx="256" cy="404" rx="176" ry="54" fill="#C9922F"/>
+  <ellipse cx="256" cy="386" rx="176" ry="54" fill="#FAF5E9" stroke="#0C1F27" stroke-width="13"/>
+  <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z" fill="#0C1F27"/>
+  <g clip-path="url(#body)">
+    <rect x="160" y="286" width="192" height="120" fill="#44C8E6"/>
+  </g>
+  <ellipse cx="256" cy="286" rx="79" ry="26" fill="#DDF1F6"/>
+  <ellipse cx="256" cy="158" rx="88" ry="30" fill="#0C1F27" stroke="#0C1F27" stroke-width="9"/>
+  </g>
+</svg>
