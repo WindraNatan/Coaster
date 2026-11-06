@@ -834,6 +834,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             ..addAll(cMap);
         }
         if (!usang) {
+          // Peta merge untuk event stream harus memuat frame yang sama dengan
+          // _t. Kalau tidak, satu patch sebagian membangun ulang _t dari
+          // snapshot lama dan sisa waktunya mundur.
+          _stream.json
+            ..clear()
+            ..addAll(Map<String, dynamic>.from(tRaw));
           _trackHeartbeat(t);
           _dayMl = _computeDayMl(t);
           _syncReminderOnData();

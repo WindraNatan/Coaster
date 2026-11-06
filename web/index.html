@@ -1193,6 +1193,10 @@ let lastCfgStreamAt = 0;
 // telemetri berikutnya memasang lagi config lama.
 let cfgRemoteLast = null;
 const cfgBox = { v: null };
+// Cache di atas milik perangkat yang mana. Membuka ulang stream untuk perangkat
+// yang sama tidak boleh mengosongkannya: poll yang baru saja berjalan sudah
+// mengisinya, dan event telemetri pertama bisa membawa salinan mute yang lebih tua.
+let cacheFor = '';
 let tlmBox = { v: null }, lastTelemetry = null;
 
 function closeCloudStreams(){
@@ -1208,9 +1212,14 @@ function openCloudStreams(){
   const url = shcCoasterUrl(base);
   if (!base || !url || !shcDeviceUid()) return;
 
-  cfgRemoteLast = null;
-  cfgBox.v = null;
-  tlmBox = { v: null }; lastTelemetry = null;
+  if (cacheFor !== url){
+    cfgRemoteLast = null;
+    cfgBox.v = null;
+    tlmBox = { v: null }; lastTelemetry = null;
+    lastStreamAt = 0;
+    lastCfgStreamAt = 0;
+    cacheFor = url;
+  }
   const onErr = async () => {
     // Token 1 jam: RTDB menutup stream dengan 401. Ambil token baru, buka lagi.
     closeCloudStreams();
@@ -1327,9 +1336,10 @@ async function pollCloudOnce(){
     // Frame live yang tiba setelah permintaan berangkat lebih baru daripada
     // hasil poll. Terapkan config-nya saja, jangan telemetrinya.
     const tlmSegar = lastStreamAt <= mulai;
-    // Config basi: pakai yang terakhir diketahui dari stream, bukan null —
+    // Config basi atau gagal diambil: pakai yang terakhir diketahui, bukan null.
     // null membuat mute jatuh ke salinan di telemetri yang bisa lebih tua lagi.
-    applyCloudData(tlmSegar ? tlm : null, lastCfgStreamAt > mulai ? cfgRemoteLast : cfg);
+    const cfgPakai = (lastCfgStreamAt > mulai || !cfg) ? cfgRemoteLast : cfg;
+    applyCloudData(tlmSegar ? tlm : null, cfgPakai);
     // Snapshot SSE harus ikut diperbarui, kalau tidak patch config berikutnya
     // menerapkan ulang telemetri lama dan countdown mundur.
     if (tlmSegar) { tlmBox = { v: tlm }; lastTelemetry = tlm; }
