@@ -353,12 +353,14 @@ void loop() {
     bool standbyNow = standbyActiveNow();
     if (standbyNow != standbyActive) {
         standbyActive = standbyNow;
-        alertModeActive = false;
-        actuatorOutputState = false;
         // Kedua arah memakai toIdle: saat tidur supaya state yang dilaporkan
         // jujur (bukan sisa ALERT_DRINK), saat bangun supaya siklus lama tidak
         // dilanjutkan dengan selisih waktu yang sudah lewat target.
         fsm.toIdle(nowMs);
+        // Sekali lewat handleActuators yang sama: cabang !alertActive di sana
+        // yang mematikan ketiga aktuator sekaligus mereset alertModeActive dan
+        // actuatorOutputState, jadi tidak ada salinan logika di sini.
+        handleActuators(fsm.getState(), nowMs);
         if (standbyActive) {
             Serial.println(F("[SESI] Sesi berakhir; alat tidur, alarm dan timer berhenti."));
         } else {

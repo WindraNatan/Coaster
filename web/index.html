@@ -1185,8 +1185,11 @@ function applyCloudData(t, cfgRemote){
   if (cfgRemote && typeof cfgRemote.timer_mode === 'string'){
     const mode = cfgRemote.timer_mode;
     const mauDemo = mode === 'DEMO';
-    // Mode demo memakai target tetap 15 dtk; faktor DHT tidak berlaku di sana.
-    const auto = !mauDemo && mode !== 'MANUAL';
+    // Mode demo memakai target tetap 15 dtk. Sumbu AUTO/MANUAL tetap disimpan
+    // saat demo: firmware juga tidak mengubahnya, jadi mematikannya di sini
+    // menghapus pilihan pengguna begitu saja saat demo dimatikan.
+
+    const auto = mauDemo ? autoDht : mode !== 'MANUAL';
     const mins = +cfgRemote.manual_interval_min;
     if (mins >= 1 && mins <= 180 && Math.round(mins) !== customBaseMin){
       customBaseMin = Math.round(mins);

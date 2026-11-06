@@ -290,6 +290,7 @@ static void cloudTask(void*) {
     float lastWeightG = -999, lastTempC = -999, lastHumPct = -999, lastTargetMin = -1;
     uint16_t lastDrinkCnt = 0xFFFF, lastRefillCnt = 0xFFFF, lastCheatCnt = 0xFFFF;
     bool lastMuted = false;
+    bool lastStandby = false;
     uint16_t hbCounter = 0;
     uint8_t cfgPatchFails = 0;
 
@@ -409,7 +410,11 @@ static void cloudTask(void*) {
             local.muted != lastMuted ||
             fabsf(local.targetMin - lastTargetMin) > 0.01f ||
             fabsf(local.tempC - lastTempC) > 0.2f ||
-            fabsf(local.humPct - lastHumPct) > 1.0f;
+            fabsf(local.humPct - lastHumPct) > 1.0f ||
+            // Perpindahan sesi harus terkirim saat itu juga. Kalau alat sudah IDLE
+            // saat sesi ditutup, state-nya tidak berubah, jadi tanpa pembanding ini
+            // klien baru tahu alat tidur dari heartbeat 60 dtk.
+            local.standby != lastStandby;
         // Heartbeat 60 dtk: penanda hidup, bukan data. Klien bisa membedakan
         // "alat diam" dari "alat mati" tanpa membandingkan nilai yang identik.
         bool heartbeat = (now - lastPushMs >= 60000UL);
@@ -424,6 +429,7 @@ static void cloudTask(void*) {
             lastTargetMin = local.targetMin;
             lastTempC = local.tempC;
             lastHumPct = local.humPct;
+            lastStandby = local.standby;
             lastPushMs = now;
 
             String url = userNode() + "/telemetry.json" + authSuffix();
@@ -456,10 +462,15 @@ static void cloudTask(void*) {
             if (rtdb.begin(tls, cfgUrl)) {
                 rtdb.addHeader("Content-Type", "application/json");
                 char cfgBody[160];
+                // Demo harus ikut ditulis. Tanpa ini, perintah serial apa pun yang
+                // mengubah config lokal membuat alat mem-PATCH AUTO_DHT/MANUAL dan
+                // pilihan DEMO milik klien ikut terhapus.
+                const char* modeStr =
+                    demoMode ? "DEMO" : (autoDhtTimerMode ? "AUTO_DHT" : "MANUAL");
                 snprintf(cfgBody, sizeof(cfgBody),
                     "{\"timer_mode\":\"%s\",\"manual_interval_min\":%lu,"
                     "\"muted\":%s,\"empty_cup_weight_g\":%.1f}",
-                    autoDhtTimerMode ? "AUTO_DHT" : "MANUAL",
+                    modeStr,
                     (unsigned long)(customBaseIntervalMs / 60000UL),
                     buzzerMuted ? "true" : "false",
                     fsm.getEmptyCupWeight());
@@ -539,13 +550,18 @@ static void cloudTask(void*) {
             rtdb.end();
 
             // Sesi bergiliran: web menulis session.owner. Begitu nilainya berbeda dari
-            // pemilik terakhir, statistik di-reset supaya orang berikutnya tidak mewarisi
-            // angka orang sebelumnya.
+            // pemilik terakhir, statistik di-reset supaya orang berikutnya tidak
+            // mewarisi angka orang sebelumnya. Node ini juga membawa active:false,
+            // jadi periode poll menentukan secepat apa alarm berhenti setelah
+            // pengguna menekan Akhiri Sesi.
             //
-            // Dibaca tiap 10 dtk, bukan 1 dtk: pemilik sesi hanya berubah saat
-            // pengguna menekan Mulai Sesi, jadi request per detik hanya menambah
-            // kuota terpakai tanpa manfaat.
-            if (now - lastSessMs >= 10000UL) {
+            // 1 dtk hanya saat alarm menyala atau alat sedang tidur: di dua keadaan
+            // itu keterlambatan terasa (buzzer masih berbunyi, atau tombol Mulai
+            // Sesi tampak tidak bekerja). Di luar itu pemilik sesi jarang berubah,
+            // jadi 10 dtk sudah cukup dan kuota lebih hemat.
+            bool alertNow = strncmp(local.stateStr, "ALERT_", 6) == 0;
+            uint32_t sessPeriodMs = (local.standby || alertNow) ? 1000UL : 10000UL;
+            if (now - lastSessMs >= sessPeriodMs) {
             lastSessMs = now;
             String sessUrl = userNode() + "/session.json" + authSuffix();
             if (rtdb.begin(tls, sessUrl) && rtdb.GET() == 200) {

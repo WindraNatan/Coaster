@@ -114,7 +114,7 @@ class Telemetry {
 }
 
 class CloudConfig {
-  final String timerMode; // AUTO_DHT | MANUAL
+  final String timerMode; // DEMO | AUTO_DHT | MANUAL
   final int manualIntervalMin;
   final double emptyCupWeightG;
   final bool muted;
