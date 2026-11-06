@@ -355,12 +355,13 @@ void loop() {
         standbyActive = standbyNow;
         alertModeActive = false;
         actuatorOutputState = false;
+        // Kedua arah memakai toIdle: saat tidur supaya state yang dilaporkan
+        // jujur (bukan sisa ALERT_DRINK), saat bangun supaya siklus lama tidak
+        // dilanjutkan dengan selisih waktu yang sudah lewat target.
+        fsm.toIdle(nowMs);
         if (standbyActive) {
             Serial.println(F("[SESI] Sesi berakhir; alat tidur, alarm dan timer berhenti."));
         } else {
-            // Siklus lama tidak dilanjutkan: selisih waktunya sudah lewat target,
-            // jadi alarm akan langsung berbunyi kalau state-nya dibiarkan.
-            fsm.toIdle(nowMs);
             Serial.println(F("[SESI] Sesi dimulai; alat aktif kembali dari IDLE."));
         }
     }

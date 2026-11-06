@@ -58,7 +58,7 @@ g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fs
   * Floor interval minimal: 5 detik (demo mode) / batas aman.
   * Interval dasar $T_{\text{base}}$ dapat dikustomisasi 1 s.d. 180 menit via perintah serial `i<menit>` atau UI.
   * *Catatan Terminologi*: Ini kendali adaptif berbasis aturan kontinu, BUKAN Fuzzy Logic Sugeno.
-* **Sesi & Tidur**: tidur bukan state FSM baru. Klien menulis `session.json` (`owner`, `active`; `active` tidak ada = sesi aktif). Saat tidur: `fsm.update()` tidak dipanggil, aktuator dipaksa mati setiap putaran, telemetri tetap jalan dengan `standby:true`. Bangun memanggil `toIdle(nowMs)`, jadi siklus lama tidak dilanjutkan. Perintah lokal `z` (tidur) / `x` (bangun) dari Serial dipegang `SessionGate` (`session_gate.h`, diuji di harness C++): nilai cloud hanya menimpa perintah lokal saat nilainya benar-benar berubah, kalau tidak poll sesi 10 detik akan membangunkan alat kembali.
+* **Sesi & Tidur**: tidur bukan state FSM baru. Klien menulis `session.json` (`owner`, `active`; `active` tidak ada = sesi aktif). Saat tidur: `fsm.update()` tidak dipanggil, aktuator dipaksa mati setiap putaran, telemetri tetap jalan dengan `standby:true`. Kedua arah perpindahan memanggil `toIdle(nowMs)`: saat tidur supaya state yang dilaporkan tidak menyisakan `ALERT_DRINK` basi, saat bangun supaya siklus lama tidak dilanjutkan padahal selisih waktunya sudah lewat target. Perintah lokal `z` (tidur) / `x` (bangun) dari Serial dipegang `SessionGate` (`session_gate.h`, diuji di harness C++): nilai cloud hanya menimpa perintah lokal saat nilainya benar-benar berubah, kalau tidak poll sesi 10 detik akan membangunkan alat kembali.
 
 ---
 
