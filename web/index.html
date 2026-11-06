@@ -1181,6 +1181,9 @@ function applyCloudData(t, cfgRemote){
 // putus; token kedaluwarsa ditangani dengan menutup lalu membuka stream baru
 // memakai token hasil refresh — pengguna tidak perlu memasukkan apa pun.
 let cloudStream = null, cloudStreamCfg = null, streamRetry = null;
+// Waktu frame live terakhir diterapkan. Poll yang berangkat sebelum ini
+// membawa data lebih lama; menerapkannya memundurkan countdown.
+let lastStreamAt = 0;
 let tlmBox = { v: null }, lastTelemetry = null;
 
 function closeCloudStreams(){
@@ -1266,6 +1269,7 @@ function openCloudStreams(){
   ['put', 'patch'].forEach(t => cloudStream.addEventListener(t, e => {
     applyEvent(tlmBox, e);
     lastTelemetry = tlmBox.v;
+    lastStreamAt = performance.now();
     applyCloudData(lastTelemetry, cfgRemoteLast);
   }));
   cloudStream.onerror = onErr;
@@ -1301,12 +1305,17 @@ async function pollCloudOnce(){
     // Hanya dua node kecil. Sebelumnya seluruh /smart_coaster ditarik tiap 2,5 detik,
     // termasuk daily/<tanggal> yang tumbuh tanpa batas: kuota RTDB gratis 10 GB/bulan
     // bisa habis hanya dari satu tab yang dibiarkan terbuka.
+    const mulai = performance.now();
     const [resT, resC] = await Promise.all([
       fetch(url + '/telemetry.json' + shcAuthSuffix()),
       fetch(url + '/config.json' + shcAuthSuffix())
     ]);
     if (!resT.ok) throw new Error('HTTP ' + resT.status);
-    applyCloudData(await resT.json(), resC.ok ? await resC.json() : null);
+    const tlm = await resT.json();
+    const cfg = resC.ok ? await resC.json() : null;
+    // Frame live yang tiba setelah permintaan berangkat lebih baru daripada
+    // hasil poll. Terapkan config-nya saja, jangan telemetrinya.
+    applyCloudData(lastStreamAt > mulai ? null : tlm, cfg);
   } catch (err){
     $('cloudDot').className = 'status-dot err';
     $('cloudStatus').textContent = 'Gagal baca Cloud: ' + (err.message || err);

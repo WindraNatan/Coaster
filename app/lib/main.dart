@@ -584,6 +584,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   // detik dan event config bisa mengirim ulang telemetri yang sama, dan
   // memakai _lastSync sebagai jangkar membuat countdown melompat naik.
   DateTime? _frameAt;
+  // Waktu frame SSE terakhir diterapkan. Poll yang berangkat sebelum ini
+  // membawa data lebih lama, dan menerapkannya memundurkan countdown.
+  DateTime? _streamFrameAt;
   Timer? _timer;
   StreamSubscription<String>? _streamSub;
   Timer? _streamRetry;
@@ -712,6 +715,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       final baru = Telemetry.fromJson(Map<String, dynamic>.from(_stream.json));
       if (_frameIsNew(baru)) _frameAt = DateTime.now();
       _t = baru;
+      _streamFrameAt = DateTime.now();
       _error = null;
       _loading = false;
       _lastSync = DateTime.now();
@@ -773,6 +777,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       // detik, termasuk daily/<tanggal> yang tumbuh tanpa batas, padahal _poll()
       // tidak pernah membacanya. Web sudah memakai pola yang sama.
       final base = _session.coasterUrl(_base);
+      final mulai = DateTime.now();
       final results = await Future.wait([
         _client.get(Uri.parse('$base/telemetry.json${_session.suffix}'))
             .timeout(const Duration(seconds: 8)),
@@ -797,17 +802,24 @@ class _DashboardScreenState extends State<DashboardScreen>
           }
         }
         if (!mounted) return;
+        // Frame SSE yang tiba setelah permintaan berangkat lebih baru daripada
+        // hasil poll. Config tetap dipakai, telemetrinya dibuang.
+        final usang = _streamFrameAt != null && _streamFrameAt!.isAfter(mulai);
         setState(() {
-          if (_frameIsNew(t)) _frameAt = DateTime.now();
-          _t = t;
+          if (!usang) {
+            if (_frameIsNew(t)) _frameAt = DateTime.now();
+            _t = t;
+          }
           _cfg = c;
           _error = null;
           _loading = false;
           _lastSync = DateTime.now();
         });
-        _trackHeartbeat(t);
-        _dayMl = _computeDayMl(t);
-        _syncReminderOnData();
+        if (!usang) {
+          _trackHeartbeat(t);
+          _dayMl = _computeDayMl(t);
+          _syncReminderOnData();
+        }
       } else {
         // Node kosong / telemetry belum pernah ditulis firmware.
         if (!mounted) return;
