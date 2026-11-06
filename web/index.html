@@ -1187,9 +1187,12 @@ let lastStreamAt = 0;
 // Config punya penanda sendiri: poll yang berangkat lebih dulu tidak boleh
 // menimpa mute/mode yang baru saja dikirim lewat stream.
 let lastCfgStreamAt = 0;
-// Config terakhir yang diketahui dari stream, dipakai poll ketika hasil GET-nya
-// lebih tua daripada frame config.
+// Config terakhir yang diketahui, dipakai poll ketika hasil GET-nya lebih tua
+// daripada frame config. cfgBox adalah basis merge event patch: keduanya harus
+// ikut diperbarui saat poll membawa config yang lebih baru, kalau tidak event
+// telemetri berikutnya memasang lagi config lama.
 let cfgRemoteLast = null;
+const cfgBox = { v: null };
 let tlmBox = { v: null }, lastTelemetry = null;
 
 function closeCloudStreams(){
@@ -1206,6 +1209,7 @@ function openCloudStreams(){
   if (!base || !url || !shcDeviceUid()) return;
 
   cfgRemoteLast = null;
+  cfgBox.v = null;
   tlmBox = { v: null }; lastTelemetry = null;
   const onErr = async () => {
     // Token 1 jam: RTDB menutup stream dengan 401. Ambil token baru, buka lagi.
@@ -1256,7 +1260,6 @@ function openCloudStreams(){
     return path.split('/').filter(Boolean).reduce((a, k) => (a && typeof a === 'object') ? a[k] : undefined, root);
   }
 
-  const cfgBox = { v: cfgRemoteLast };
   cloudStreamCfg = new EventSource(url + '/config.json' + shcAuthSuffix());
   cloudStreamCfg.addEventListener('put', e => {
     applyEvent(cfgBox, e);
@@ -1330,6 +1333,12 @@ async function pollCloudOnce(){
     // Snapshot SSE harus ikut diperbarui, kalau tidak patch config berikutnya
     // menerapkan ulang telemetri lama dan countdown mundur.
     if (tlmSegar) { tlmBox = { v: tlm }; lastTelemetry = tlm; }
+    if (!(lastCfgStreamAt > mulai) && cfg && typeof cfg === 'object'){
+      // Poll memuat config yang lebih baru: jadikan itu patokan, termasuk untuk
+      // event telemetri yang datang sebelum stream config menyusul.
+      cfgRemoteLast = cfg;
+      cfgBox.v = cfg;
+    }
   } catch (err){
     $('cloudDot').className = 'status-dot err';
     $('cloudStatus').textContent = 'Gagal baca Cloud: ' + (err.message || err);

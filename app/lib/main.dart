@@ -796,10 +796,12 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (tRaw is Map) {
         final t = Telemetry.fromJson(Map<String, dynamic>.from(tRaw));
         CloudConfig? c = _cfg;
+        Map<String, dynamic>? cMap;
         if (results[1].statusCode == 200) {
           final cRaw = jsonDecode(results[1].body);
           if (cRaw is Map) {
-            c = CloudConfig.fromJson(Map<String, dynamic>.from(cRaw));
+            cMap = Map<String, dynamic>.from(cRaw);
+            c = CloudConfig.fromJson(cMap);
             if (_cfg == null) {
               _intervalCtrl.text = c.manualIntervalMin.toString();
             }
@@ -820,6 +822,17 @@ class _DashboardScreenState extends State<DashboardScreen>
           _loading = false;
           _lastSync = DateTime.now();
         });
+        if (!cfgUsang && cMap != null) {
+          // Config hasil poll menjadi patokan merge untuk event patch
+          // berikutnya. Tanpa ini, patch satu bidang bisa memulihkan bidang
+          // lain dari salinan yang lebih tua.
+          _cfgCache
+            ..clear()
+            ..addAll(cMap);
+          _cfgState.json
+            ..clear()
+            ..addAll(cMap);
+        }
         if (!usang) {
           _trackHeartbeat(t);
           _dayMl = _computeDayMl(t);
