@@ -1197,11 +1197,15 @@ const cfgBox = { v: null };
 // yang sama tidak boleh mengosongkannya: poll yang baru saja berjalan sudah
 // mengisinya, dan event telemetri pertama bisa membawa salinan mute yang lebih tua.
 let cacheFor = '';
+// Nomor generasi mode dan perangkat. Permintaan yang berangkat sebelum pengguna
+// pindah mode atau alat tidak boleh diterapkan sesudahnya.
+let cloudGen = 0;
 // Kepemilikan cache ditetapkan sebelum poll pertama, bukan saat stream dibuka.
 // Urutannya poll lalu buka stream, jadi kalau penetapan ditunda ke stream, cache
 // hasil poll baru saja terisi lalu langsung dikosongkan.
 function siapkanCache(url){
   if (cacheFor === url) return;
+  cloudGen++;
   cfgRemoteLast = null;
   cfgBox.v = null;
   tlmBox = { v: null }; lastTelemetry = null;
@@ -1344,6 +1348,7 @@ async function pollCloudBody(){
     // termasuk daily/<tanggal> yang tumbuh tanpa batas: kuota RTDB gratis 10 GB/bulan
     // bisa habis hanya dari satu tab yang dibiarkan terbuka.
     siapkanCache(url);
+    const gen = cloudGen;
     const mulai = performance.now();
     const [resT, resC] = await Promise.all([
       fetch(url + '/telemetry.json' + shcAuthSuffix()),
@@ -1354,6 +1359,9 @@ async function pollCloudBody(){
     const cfg = resC.ok ? await resC.json() : null;
     // Frame live yang tiba setelah permintaan berangkat lebih baru daripada
     // hasil poll. Terapkan config-nya saja, jangan telemetrinya.
+    // Mode atau alat berganti selama permintaan berjalan: buang hasilnya,
+    // jangan menimpa simulator atau perangkat lain.
+    if (gen !== cloudGen || url !== shcCoasterUrl(getCleanFbUrl())) return;
     const tlmSegar = lastStreamAt <= mulai;
     // Config basi atau gagal diambil: pakai yang terakhir diketahui, bukan null.
     // null membuat mute jatuh ke salinan di telemetri yang bisa lebih tua lagi.
@@ -1374,6 +1382,7 @@ async function pollCloudBody(){
   }
 }
 function setConnMode(mode){
+  if (connMode !== mode) cloudGen++;
   connMode = mode;
   document.querySelectorAll('.conn-pill').forEach(b =>
     b.classList.toggle('on', b.dataset.mode === mode));
