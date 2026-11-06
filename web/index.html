@@ -1197,6 +1197,18 @@ const cfgBox = { v: null };
 // yang sama tidak boleh mengosongkannya: poll yang baru saja berjalan sudah
 // mengisinya, dan event telemetri pertama bisa membawa salinan mute yang lebih tua.
 let cacheFor = '';
+// Kepemilikan cache ditetapkan sebelum poll pertama, bukan saat stream dibuka.
+// Urutannya poll lalu buka stream, jadi kalau penetapan ditunda ke stream, cache
+// hasil poll baru saja terisi lalu langsung dikosongkan.
+function siapkanCache(url){
+  if (cacheFor === url) return;
+  cfgRemoteLast = null;
+  cfgBox.v = null;
+  tlmBox = { v: null }; lastTelemetry = null;
+  lastStreamAt = 0;
+  lastCfgStreamAt = 0;
+  cacheFor = url;
+}
 let tlmBox = { v: null }, lastTelemetry = null;
 
 function closeCloudStreams(){
@@ -1212,14 +1224,7 @@ function openCloudStreams(){
   const url = shcCoasterUrl(base);
   if (!base || !url || !shcDeviceUid()) return;
 
-  if (cacheFor !== url){
-    cfgRemoteLast = null;
-    cfgBox.v = null;
-    tlmBox = { v: null }; lastTelemetry = null;
-    lastStreamAt = 0;
-    lastCfgStreamAt = 0;
-    cacheFor = url;
-  }
+  siapkanCache(url);
   const onErr = async () => {
     // Token 1 jam: RTDB menutup stream dengan 401. Ambil token baru, buka lagi.
     closeCloudStreams();
@@ -1325,6 +1330,7 @@ async function pollCloudOnce(){
     // Hanya dua node kecil. Sebelumnya seluruh /smart_coaster ditarik tiap 2,5 detik,
     // termasuk daily/<tanggal> yang tumbuh tanpa batas: kuota RTDB gratis 10 GB/bulan
     // bisa habis hanya dari satu tab yang dibiarkan terbuka.
+    siapkanCache(url);
     const mulai = performance.now();
     const [resT, resC] = await Promise.all([
       fetch(url + '/telemetry.json' + shcAuthSuffix()),
