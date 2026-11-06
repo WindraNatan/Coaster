@@ -103,8 +103,9 @@ def main():
         'tag_name': tag,
         'target_commitish': sha,
         'name': nama,
-        'body': f'APK debug untuk uji, dibangun dari `{sha[:7]}`. Pasang di atas '
-                'versi lama; sesi tidak hilang karena ditandatangani kunci yang sama.',
+        'body': f'APK release, dibangun dari `{sha[:7]}`. Ditandatangani '
+                'kunci debug, jadi memasang di atas versi lama tidak perlu mencopot '
+                'dan sesi tidak hilang.',
         'draft': False,
         'prerelease': True,
     })
