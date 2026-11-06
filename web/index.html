@@ -58,6 +58,9 @@ header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
 input:disabled,.conn-drawer input:disabled,input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 .adaptive-note{display:none;font-size:11px;color:var(--dim);margin-top:8px;line-height:1.5}
 .adaptive-note.show{display:block}
+/* Pengaturan timer yang belum dipakai siklus yang sedang berjalan. Warna
+   peringatan, bukan merah: tidak ada yang rusak, hanya tertunda. */
+.hint{font-size:11px;color:var(--warn);margin-top:8px;line-height:1.5}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-right:8px}
 .status-dot.ok{background:var(--ok)}
 .status-dot.err{background:var(--alarm)}
@@ -456,6 +459,9 @@ body:not([data-view="app"]) .conn-bar{display:none}
         <input type="number" id="baseMinIn" min="1" max="180" step="1" value="30">
         <button class="act" id="bApplyInt">Atur Interval</button>
       </div>
+      <!-- Muncul hanya saat pengaturan timer diubah ketika siklus sedang
+           berjalan: siklus itu memegang targetnya sendiri sampai selesai. -->
+      <p class="hint" id="timerHint" hidden></p>
       <div class="cfg-row">
         <label for="emptyIn">Gelas kosong (g):</label>
         <input type="number" id="emptyIn" min="35" max="300" step="1" value="130">
@@ -496,6 +502,10 @@ let liveRemSec = null, liveTargetSec = 15, liveWaterMl = null;
 // menunggu push berikutnya: alat hanya mengirim saat field lain berubah
 // atau heartbeat 60 detik, jadi angka mentah selalu membeku lalu melompat.
 let liveRemAt = 0;
+// Target yang benar-benar dipegang alat (menit), apa adanya dari telemetri.
+// Bukan fsm.interval: angka itu ikut berubah saat pengaturan diubah, sehingga
+// tidak bisa dipakai untuk menilai apakah alat sudah memakai target baru.
+let devTargetMnt = null;
 let csvRows = [];
 let fsm = new CoasterFSM(+(localStorage.getItem('shc_empty_cup') || CFG.DEFAULT_EMPTY), CFG.DEMO_INTERVAL);
 
@@ -777,17 +787,65 @@ $('bSip').addEventListener('click', () => { sc = null; setWeight(weight - 30); }
 $('bPour').addEventListener('click', () => { sc = null; setWeight(weight + 50); });
 $('bEmpty').addEventListener('click', () => { sc = null; setWeight(fsm.emptyCup + 5); });
 
+// Pengaturan timer (mode atau interval dasar) hanya dipakai saat siklus BARU
+// dimulai: siklus yang berjalan memegang targetnya sendiri. Itu disengaja
+// (paritas 22c/23a: target yang menyusut tidak boleh memicu alarm lebih awal),
+// tapi tanpa pemberitahuan pengguna menunggu dengan angka lama lalu mengira
+// pengaturannya tidak masuk.
+let timerHint = null;      // target alat saat pengaturan diubah, atau null
+let timerHintShown = null; // teks yang sedang tampil; hindari tulis DOM tiap render
+
+function targetEfektifMnt(){
+  if (connMode === 'cloud') return devTargetMnt;
+  if (connMode === 'usb') return liveTargetSec / 60;
+  return fsm.targetIntervalMs() / 60000;
+}
+function fmtTargetMnt(m){
+  if (m === null || m === undefined || !isFinite(m)) return 'sebelumnya';
+  return m < 1 ? Math.round(m * 60) + ' detik' : (Math.round(m * 10) / 10) + ' menit';
+}
+function catatUbahTimer(){
+  // Hanya TIMING yang butuh peringatan. Di ALERT_* dan LIFTED, aksi berikutnya
+  // (minum, isi ulang, taruh kembali) sudah memulai siklus baru dengan sendirinya.
+  timerHint = fsm.stateString === 'TIMING' ? { targetMnt: targetEfektifMnt() } : null;
+  timerHintShown = null;
+  renderTimerHint();
+}
+function renderTimerHint(){
+  const el = $('timerHint');
+  let teks = '';
+  if (timerHint){
+    const sekarang = targetEfektifMnt();
+    // Siklus baru sudah mulai: target alat bergeser dari nilai yang dicatat.
+    if (fsm.stateString !== 'TIMING' ||
+        (sekarang !== null && timerHint.targetMnt !== null &&
+         Math.abs(sekarang - timerHint.targetMnt) > 0.01)){
+      timerHint = null;
+    } else {
+      teks = 'Pengaturan baru dipakai mulai siklus berikutnya. Siklus ini masih '
+        + 'memakai target ' + fmtTargetMnt(timerHint.targetMnt)
+        + '; angkat gelas, minum atau tuang sedikit, lalu taruh kembali.';
+    }
+  }
+  if (teks === timerHintShown) return;
+  timerHintShown = teks;
+  el.textContent = teks;
+  el.hidden = teks === '';
+}
+
 $('bDemo').addEventListener('click', () => {
   demo = !demo;
   applyTimerConfig();
   sendSerialCmd('d');
   pushCloudConfig();
+  catatUbahTimer();
 });
 $('bAutoMode').addEventListener('click', () => {
   autoDht = !autoDht;
   applyTimerConfig();
   sendSerialCmd('m');
   pushCloudConfig();
+  catatUbahTimer();
 });
 $('bMute').addEventListener('click', () => {
   buzzerMuted = !buzzerMuted;
@@ -806,6 +864,7 @@ $('bApplyInt').addEventListener('click', () => {
   sendSerialCmd('i' + m + '\n');
   pushCloudConfig();
   log('Interval dasar diatur ke ' + m + ' menit (Mode Normal)', '');
+  catatUbahTimer();
 });
 $('sTemp').addEventListener('input', e => {
   roomT = +e.target.value;
@@ -985,7 +1044,7 @@ function handleSerialLine(line){
   if (mDrinkCnt) fsm.drinkCount = +mDrinkCnt[1];
   if (mCheatCnt) fsm.cheatCount = +mCheatCnt[1];
   if (mRefillCnt) fsm.refillCount = +mRefillCnt[1];
-  if (mTarget){ liveTargetSec = +mTarget[1]; fsm.interval = liveTargetSec * 1000; }
+  if (mTarget){ liveTargetSec = +mTarget[1]; fsm.interval = liveTargetSec * 1000; devTargetMnt = liveTargetSec / 60; }
   if (mMode){
     demo = (mMode[1] === 'DEMO');
     autoDht = (mMode[2] === 'AUTO');
@@ -1089,6 +1148,7 @@ $('bStartConfirm').addEventListener('click', async () => {
   // Mode dikirim ke alat lebih dulu, baru sesi dibuka, supaya alat sudah memakai
   // target yang benar saat siklus pertama dimulai.
   await pushCloudConfig();
+  catatUbahTimer();
   await startSession();
   $('startDlg').close();
 });
@@ -1170,6 +1230,9 @@ async function pushCloudConfig(){
 // Menerapkan satu snapshot cloud ke UI. Dipakai jalur SSE (utama) dan poll
 // (cadangan), supaya kedua jalur tidak pernah berbeda perilaku.
 function applyCloudData(t, cfgRemote){
+  // Target yang dipakai alat sekarang. Dipakai renderTimerHint() untuk tahu
+  // apakah siklus baru (dengan pengaturan baru) sudah benar-benar berjalan.
+  if (t && typeof t.target_interval_min === 'number') devTargetMnt = t.target_interval_min;
   $('cloudDot').className = 'status-dot ok';
   $('cloudStatus').textContent = 'Cloud sinkron (' + new Date().toLocaleTimeString('id-ID') + ')';
   // Alat sedang tidur karena sesinya ditutup. Statusnya disebut eksplisit,
@@ -1516,6 +1579,7 @@ function fmt(ms){ return ms >= 60000 ? fmtClock(ms) : (ms/1000).toFixed(1) + ' s
 
 function render(){
   syncModeLabels_();
+  renderTimerHint();
   const w = weight, st = fsm.stateString;
   const badge = $('badge');
   badge.className = 'badge st-' + fsm.state + (fsm.alertActive ? ' alert' : '');

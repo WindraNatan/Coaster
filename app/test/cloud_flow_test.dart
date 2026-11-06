@@ -381,6 +381,79 @@ void main() {
     expect(find.text('AUTO_DHT'), findsOneWidget);
   });
 
+  // Siklus yang sedang berjalan memegang targetnya sendiri (paritas 22c/23a),
+  // jadi pengaturan timer yang diubah saat itu baru dipakai pada siklus
+  // berikutnya. Tanpa peringatan, pengguna menunggu alarm dengan angka lama dan
+  // mengira pengaturannya tidak masuk.
+  testWidgets('ubah interval saat TIMING memberi tahu siklus berikutnya',
+      (tester) async {
+    var telemetry = jsonEncode({
+      'weight_g': 315,
+      'remaining_sec': 423,
+      'target_interval_min': 30,
+      'muted': false,
+      'fsm_state': 'TIMING',
+    });
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json') ? _configBody : telemetry, 200));
+    await _pumpApp(tester, client);
+    await tester.pump();
+    expect(find.textContaining('masih memakai target'), findsNothing);
+
+    final field = find.ancestor(
+        of: find.text('Interval dasar (menit)'), matching: find.byType(TextField));
+    await tester.ensureVisible(field);
+    await tester.pump();
+    await tester.enterText(field, '60');
+    final kirim = find.widgetWithText(OutlinedButton, 'Kirim');
+    await tester.ensureVisible(kirim);
+    await tester.pump();
+    await tester.tap(kirim);
+    await tester.pump();
+    expect(find.textContaining('masih memakai target 30 menit'), findsOneWidget);
+
+    // Siklus baru sudah berjalan dengan target 60: peringatan hilang sendiri.
+    telemetry = jsonEncode({
+      'weight_g': 315,
+      'remaining_sec': 3400,
+      'target_interval_min': 60,
+      'muted': false,
+      'fsm_state': 'TIMING',
+    });
+    // Poll berkala 20 detik: lewati satu putaran supaya telemetri baru terbaca.
+    await tester.pump(const Duration(seconds: 21));
+    await tester.pump();
+    expect(find.textContaining('masih memakai target'), findsNothing);
+  });
+
+  testWidgets('ubah interval saat IDLE tidak memunculkan peringatan',
+      (tester) async {
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json')
+            ? _configBody
+            : jsonEncode({
+                'weight_g': 0,
+                'remaining_sec': 0,
+                'target_interval_min': 30,
+                'muted': false,
+                'fsm_state': 'IDLE',
+              }),
+        200));
+    await _pumpApp(tester, client);
+    await tester.pump();
+    final field = find.ancestor(
+        of: find.text('Interval dasar (menit)'), matching: find.byType(TextField));
+    await tester.ensureVisible(field);
+    await tester.pump();
+    await tester.enterText(field, '60');
+    final kirim = find.widgetWithText(OutlinedButton, 'Kirim');
+    await tester.ensureVisible(kirim);
+    await tester.pump();
+    await tester.tap(kirim);
+    await tester.pump();
+    expect(find.textContaining('masih memakai target'), findsNothing);
+  });
+
   // Dua node kecil, bukan seluruh /smart_coaster: daily/<tanggal> tumbuh tanpa
   // batas dan tidak pernah dibaca _poll(), jadi menariknya tiap 2,5 detik hanya
   // membakar kuota.

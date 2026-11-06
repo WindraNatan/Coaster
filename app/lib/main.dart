@@ -54,6 +54,16 @@ TextStyle _monoStyle(double size, {Color? color, FontWeight? weight}) =>
       fontFeatures: _tabular,
     );
 
+/// Target siklus dalam satuan yang enak dibaca: demo memakai detik, sisanya
+/// menit tanpa ekor ",0" (Dart menulis 30.0 apa adanya).
+String _fmtTargetMnt(double m) {
+  if (m < 1) return '${(m * 60).round()} detik';
+  final n = (m * 10).round() / 10;
+  return n == n.roundToDouble()
+      ? '${n.toInt()} menit'
+      : '${n.toStringAsFixed(1)} menit';
+}
+
 void main() => runApp(const CoasterApp());
 
 class CoasterApp extends StatelessWidget {
@@ -569,6 +579,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AuthSession _session = widget.session;
   Telemetry? _t;
+  /// Target yang dipegang siklus berjalan saat pengaturan timer diubah, atau
+  /// null kalau tidak ada peringatan yang perlu ditampilkan. Pengaturan baru
+  /// dipakai pada siklus berikutnya (siklus berjalan memegang targetnya
+  /// sendiri), jadi tanpa ini pengguna menunggu dengan angka lama.
+  double? _hintTargetLama;
   CloudConfig? _cfg;
   String? _error;
   bool _loading = true;
@@ -599,6 +614,28 @@ class _DashboardScreenState extends State<DashboardScreen>
   final _intervalCtrl = TextEditingController();
 
   String get _base => widget.url;
+
+  /// Dipanggil setelah pengaturan timer (mode atau interval dasar) dikirim.
+  /// Hanya TIMING yang butuh peringatan: di ALERT_*/LIFTED, aksi berikutnya
+  /// (minum, isi ulang, taruh kembali) sudah memulai siklus baru sendiri.
+  void _catatUbahTimer() {
+    setState(() {
+      _hintTargetLama =
+          (_t?.canonicalState == 'TIMING') ? _t!.targetIntervalMin : null;
+    });
+  }
+
+  /// Melepas peringatan begitu siklus baru benar-benar berjalan, yaitu ketika
+  /// target alat bergeser dari nilai yang dicatat, atau alat keluar dari TIMING.
+  void _segarkanHintTimer() {
+    final t = _t;
+    final lama = _hintTargetLama;
+    if (lama == null || t == null) return;
+    if (t.canonicalState != 'TIMING' ||
+        (t.targetIntervalMin - lama).abs() > 0.01) {
+      _hintTargetLama = null;
+    }
+  }
 
   @override
   void initState() {
@@ -719,6 +756,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       final baru = Telemetry.fromJson(Map<String, dynamic>.from(_stream.json));
       if (_frameIsNew(baru)) _frameAt = DateTime.now();
       _t = baru;
+      _segarkanHintTimer();
       _streamFrameAt = DateTime.now();
       _error = null;
       _loading = false;
@@ -816,6 +854,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           if (!usang) {
             if (_frameIsNew(t)) _frameAt = DateTime.now();
             _t = t;
+            _segarkanHintTimer();
           }
           if (!cfgUsang) _cfg = c;
           _error = null;
@@ -967,6 +1006,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     HapticFeedback.selectionClick();
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(timerMode: mode));
     await _patchConfig({'timer_mode': mode});
+    _catatUbahTimer();
   }
 
   void _sendInterval() {
@@ -979,6 +1019,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(manualIntervalMin: v));
     _patchConfig({'manual_interval_min': v});
+    _catatUbahTimer();
   }
 
   Color _stateColor(String s) {
@@ -1878,6 +1919,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: Text('Kirim', style: _monoStyle(12, color: _water)),
                 ),
               ],
+            ),
+          ],
+          if (_hintTargetLama != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Pengaturan baru dipakai mulai siklus berikutnya. Siklus ini masih '
+              'memakai target ${_fmtTargetMnt(_hintTargetLama!)}; angkat gelas, '
+              'minum atau tuang sedikit, lalu taruh kembali.',
+              style: _monoStyle(11, color: _warn),
             ),
           ],
           const Divider(color: _line, height: 20),
