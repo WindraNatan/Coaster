@@ -1151,7 +1151,12 @@ $('bStartConfirm').addEventListener('click', async () => {
   // Mode dikirim ke alat lebih dulu, baru sesi dibuka, supaya alat sudah memakai
   // target yang benar saat siklus pertama dimulai.
   await pushCloudConfig();
-  catatUbahTimer();
+  // Mode USB: pilihan mode di dialog ini tidak sampai ke alat. Tombol d/m/i
+  // yang mengirimkannya satu per satu, sedangkan dialog hanya mengubah salinan
+  // lokal lalu menulis RTDB. Catatan "dipakai mulai siklus berikutnya" di sini
+  // akan menjanjikan perubahan yang tidak pernah datang dari kabel. Di mode
+  // cloud config.json benar-benar dibaca alat, jadi catatannya sah.
+  if (connMode === 'cloud') catatUbahTimer();
   await startSession();
   $('startDlg').close();
 });

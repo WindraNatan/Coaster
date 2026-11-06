@@ -1799,7 +1799,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             children: [
               Text('Sisa waktu', style: _monoStyle(11)),
               const Spacer(),
-              Text('target ${t.targetIntervalMin.toStringAsFixed(1)} menit',
+              Text('target ${_fmtTargetMnt(t.targetIntervalMin)}',
                   style: _monoStyle(11)),
             ],
           ),
