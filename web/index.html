@@ -1308,12 +1308,24 @@ function openCloudStreams(){
 // bersamaan bisa selesai terbalik, dan yang lebih lambat membawa snapshot lama.
 // Satu poll pada satu waktu, seperti di aplikasi.
 let pollBusy = false;
+// Permintaan yang menggantung tidak boleh mematikan poll berikutnya. Fetch
+// dibatasi 8 detik, dan penjaga pollBusy punya batas sendiri sebagai jaring
+// pengaman kalau ada await lain yang tidak pernah selesai.
+let pollDeadlineMs = 15000;
+function fetchT(url, opts){
+  const ctl = new AbortController();
+  const jam = setTimeout(() => ctl.abort(), 8000);
+  return fetch(url, Object.assign({}, opts, { signal: ctl.signal }))
+    .finally(() => clearTimeout(jam));
+}
 async function pollCloudOnce(){
   if (pollBusy) return;
   pollBusy = true;
+  const jaga = setTimeout(() => { pollBusy = false; }, pollDeadlineMs);
   try {
     await pollCloudBody();
   } finally {
+    clearTimeout(jaga);
     pollBusy = false;
   }
 }
@@ -1351,8 +1363,8 @@ async function pollCloudBody(){
     const gen = cloudGen;
     const mulai = performance.now();
     const [resT, resC] = await Promise.all([
-      fetch(url + '/telemetry.json' + shcAuthSuffix()),
-      fetch(url + '/config.json' + shcAuthSuffix())
+      fetchT(url + '/telemetry.json' + shcAuthSuffix()),
+      fetchT(url + '/config.json' + shcAuthSuffix())
     ]);
     if (!resT.ok) throw new Error('HTTP ' + resT.status);
     const tlm = await resT.json();
