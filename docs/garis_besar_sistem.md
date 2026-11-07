@@ -237,9 +237,7 @@ Simulator menjalankan FSM JavaScript sepenuhnya di browser, tanpa perangkat. Ada
 
 USB Live memakai Web Serial API pada 115200 baud. Baris telemetry diparse jadi nilai tampilan, dan perintah dikirim balik lewat port yang sama. Butuh Chrome atau Edge; Firefox dan Safari belum mendukung Web Serial.
 
-Cloud Firebase hanya melakukan poll ke RTDB tiap 2,5 detik, tanpa WebSocket, jadi tidak ada update push.
-
-Halaman `web/casing_3d.html` terpisah dari dashboard. Isinya viewer Three.js untuk casing, murni visual, tanpa koneksi ke perangkat.
+Cloud Firebase memakai stream SSE ke RTDB, ditambah poll tiap 20 detik sebagai jaring aman kalau stream putus.
 
 ## 7. Tiga port, satu logika
 

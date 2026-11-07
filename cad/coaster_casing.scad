@@ -8,9 +8,7 @@
 $fn = 64; // Resolusi kurva lingkaran halus
 
 // FRAME: Z-up — +X = kanan dari depan (sisi kaca), +Y = ke belakang, +Z = atas.
-// Viewer web/casing_3d.html Y-up memetakan (x,y,z)_html = (-X, Z, Y)_scad, jadi angka
-// x di HTML berlawanan tanda dengan x di file ini. Posisi modul di bawah sudah
-// dicerminkan agar model ini sama dengan rakitan build (patokan HTML).
+// Posisi modul di bawah mengikuti rakitan build yang sudah jadi.
 
 // --- PARAMETER DIMENSI PRESISI (mm) ---
 floor_th       = 2.5;   // Tebal lantai dasar sasis
