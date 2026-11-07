@@ -1632,7 +1632,7 @@ function render(){
   $('stWhy').textContent = {
     IDLE: 'taruh gelas untuk mulai',
     STABLE: 'menunggu berat stabil 1,5 s',
-    TIMING: 'baseline ' + fsm.baseline.toFixed(0) + ' g',
+    TIMING: 'berat awal ' + fsm.baseline.toFixed(0) + ' g',
     LIFTED: 'diangkat ' + Math.floor((simMs - fsm.liftStart)/1000) + ' s / ' + Math.round(fsm.maxLift/1000) + ' s',
     ALERT_DRINK: 'saatnya minum air!',
     ALERT_CHEAT: 'berat kembali tanpa minum cukup (< 20 g)',

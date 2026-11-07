@@ -2013,12 +2013,12 @@ class _DashboardScreenState extends State<DashboardScreen>
               style: _monoStyle(11, color: _dim)),
           if (widget.onClaimDevice != null) ...[
             const Divider(color: _line, height: 20),
-            Text('Node alat', style: _monoStyle(12, color: _ink)),
+            Text('Alat', style: _monoStyle(12, color: _ink)),
             const SizedBox(height: 2),
             Text(
               _session.hasDevice
                   ? 'tertaut: ${_session.deviceUid}'
-                  : 'belum tertaut, memakai node akun',
+                  : 'belum tertaut ke alat',
               style: _monoStyle(11, color: _session.hasDevice ? _ok : _warn),
             ),
             const SizedBox(height: 10),
@@ -2135,7 +2135,7 @@ class _ClaimScreenState extends State<ClaimScreen> {
                 const SizedBox(height: 24),
                 TextButton(
                   onPressed: _busy ? null : widget.onCancel,
-                  child: Text('Lewati, pakai node akun saja',
+                  child: Text('Lewati untuk sekarang',
                       style: _monoStyle(11, color: _dim)),
                 ),
               ],
