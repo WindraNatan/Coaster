@@ -82,6 +82,19 @@ class Telemetry {
   bool get emptyCup => rawState == 'ALERT_EMPTY_CUP';
   bool get isAlert => canonicalState.startsWith('ALERT_');
 
+  /// Nama state untuk badge. ALERT_ hanya dipertahankan pada DRINK; REFILL dan
+  /// CHEAT sudah terjelaskan di baris alasannya, jadi cukup namanya saja.
+  String get stateName {
+    switch (canonicalState) {
+      case 'ALERT_REFILL':
+        return 'REFILL';
+      case 'ALERT_CHEAT':
+        return 'CHEAT';
+      default:
+        return canonicalState.replaceAll('_', ' ');
+    }
+  }
+
   String get reason {
     switch (canonicalState) {
       case 'IDLE':

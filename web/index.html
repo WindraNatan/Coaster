@@ -170,9 +170,6 @@ button.act:disabled{opacity:.45;cursor:not-allowed}
 .log .ev-ALERT_CHEAT{color:var(--alarm)}
 .log .ev-ALERT_REFILL{color:var(--warn)}
 .hist-head h2{font-size:11px;font-weight:400;color:var(--dim);letter-spacing:0;margin:0}
-.foot{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:16px;line-height:1.55}
-.foot a{color:var(--water);text-decoration:underline;text-underline-offset:2px;
-  display:inline-block;padding-block:4px}
 @media (prefers-reduced-motion: reduce){.badge.alert{animation:none}}
 
 /* Perkenalan: satu halaman untuk pengunjung expo, dashboard tetap utuh. */
@@ -215,9 +212,8 @@ body:not([data-view="app"]) .conn-bar{display:none}
   /* iOS Safari memperbesar halaman saat input difokus kalau font < 16px. */
   input,.conn-drawer input,.cfg-row input{font-size:16px}
   button.act,a.act,.conn-pill,.warp button,.cfg-row input,
-  .fold summary,.foot a{min-height:44px}
+  .fold summary{min-height:44px}
   .fold summary{display:flex;align-items:center}
-  .foot a{display:inline-flex;align-items:center;padding-block:8px}
   input[type=range]{height:44px;padding-block:8px}
 }
 /* Sasaran jari minimum 44 px pada layar sempit. Dipicu lebar, bukan
@@ -228,7 +224,6 @@ body:not([data-view="app"]) .conn-bar{display:none}
   /* Tombol warp (1x, 10x, …) hanya 33 px lebar: tambah padding horizontal
      supaya sasaran jari tidak lebih sempit dari petunjuk 44 px. */
   .warp button{min-width:44px}
-  .foot a{min-height:44px;display:inline-flex;align-items:center}
   input[type=number],input[type=email],input[type=password],input[type=text]{min-height:44px}
   input[type=range]{height:44px}
   .brand{min-height:44px}
@@ -291,7 +286,7 @@ body:not([data-view="app"]) .conn-bar{display:none}
   <p id="startDlgLead">Pilih mode timer dulu. Pilihan ini yang dipakai alat selama sesi berjalan.</p>
   <div class="start-modes" role="radiogroup" aria-labelledby="startDlgLead">
     <label><input type="radio" name="startMode" value="DEMO"> Demo 15 detik</label>
-    <label><input type="radio" name="startMode" value="AUTO_DHT"> Otomatis DHT11</label>
+    <label><input type="radio" name="startMode" value="AUTO_DHT"> Otomatis (sesuaikan dengan suhu ruangan)</label>
     <label><input type="radio" name="startMode" value="MANUAL"> Manual tetap</label>
   </div>
   <div class="start-actions">
@@ -382,7 +377,7 @@ body:not([data-view="app"]) .conn-bar{display:none}
         <div class="water-ml" id="wMl">air 0 ml</div>
         <div class="cup-absent" id="cupAbsent">gelas tidak ada di tatakan</div>
         <div class="stab-bar" aria-hidden="true"><i id="stabFill"></i></div>
-        <div class="stab-lab" id="stabLab">stabilitas: menunggu</div>
+        <div class="stab-lab" id="stabLab">menunggu gelas</div>
       </div>
     </div>
 
@@ -432,7 +427,7 @@ body:not([data-view="app"]) .conn-bar{display:none}
       <div class="hist-list" id="histList"></div>
     </div>
 
-    <p class="foot">Simulator, USB, atau cloud. <a href="casing_3d.html">Model casing 3D</a></p>
+
   </section>
 
   <aside class="tele" aria-labelledby="hAtur">
@@ -440,7 +435,7 @@ body:not([data-view="app"]) .conn-bar{display:none}
     <div class="adaptive">
       <div>Target interval: <b id="interval">--</b></div>
       <div id="intervalWhy" style="margin-top:2px"></div>
-      <label for="sTemp"><span>Suhu ruang (DHT11)</span><span id="tVal">27.0 °C</span></label>
+      <label for="sTemp"><span>Suhu ruangan</span><span id="tVal">27.0 °C</span></label>
       <input type="range" id="sTemp" min="18" max="40" step="0.5" value="27">
       <label for="sHum"><span>Kelembapan relatif (RH)</span><span id="tHum">60 %</span></label>
       <input type="range" id="sHum" min="20" max="95" step="1" value="60">
@@ -449,7 +444,7 @@ body:not([data-view="app"]) .conn-bar{display:none}
 
     <div class="cfg-grid">
       <div class="cfg-row">
-        <button class="act active-btn" id="bAutoMode">Timer: Adaptif DHT11</button>
+        <button class="act active-btn" id="bAutoMode">Timer: Otomatis</button>
         <button class="act active-btn" id="bDemo">Demo 15 dtk: ON</button>
         <button class="act" id="bMute" title="Buzzer mati, motor getar tetap jalan">Buzzer: ON</button>
         <button class="act" id="bReset">Reset Harian</button>
@@ -752,7 +747,7 @@ function applyTimerConfig(){
 function syncModeLabels_(){
   $('bDemo').textContent = 'Demo 15 dtk: ' + (demo ? 'ON' : 'OFF');
   $('bDemo').classList.toggle('active-btn', demo);
-  $('bAutoMode').textContent = 'Timer: ' + (autoDht ? 'Adaptif DHT11' : 'Manual Tetap');
+  $('bAutoMode').textContent = 'Timer: ' + (autoDht ? 'Otomatis' : 'Manual Tetap');
   $('bAutoMode').classList.toggle('active-btn', autoDht);
   $('bMute').textContent = 'Buzzer: ' + (buzzerMuted ? 'OFF' : 'ON');
   $('bMute').classList.toggle('active-btn', !buzzerMuted);
@@ -1629,9 +1624,11 @@ function render(){
   badge.className = 'badge st-' + fsm.state + (fsm.alertActive ? ' alert' : '');
   // ALERT_EMPTY_CUP / ALERT_MISSING_CUP hanya turunan flag dari ALERT_REFILL
   // (CLAUDE.md §3); pembedanya sudah ada di #stWhy.
-  $('stName').textContent = st === 'ALERT_EMPTY_CUP' || st === 'ALERT_MISSING_CUP'
-    ? 'ALERT REFILL'
-    : st.replace('ALERT_', 'ALERT ');
+  // ALERT_ hanya dipertahankan pada DRINK; dua alert lain sudah terjelaskan di
+  // baris alasannya (#stWhy), jadi cukup namanya saja.
+  const namaSt = { ALERT_EMPTY_CUP: 'REFILL', ALERT_MISSING_CUP: 'REFILL',
+                   ALERT_REFILL: 'REFILL', ALERT_CHEAT: 'CHEAT' };
+  $('stName').textContent = namaSt[st] || st.replace('ALERT_', 'ALERT ');
   $('stWhy').textContent = {
     IDLE: 'taruh gelas untuk mulai',
     STABLE: 'menunggu berat stabil 1,5 s',
@@ -1694,7 +1691,7 @@ function render(){
     ? (inBand ? Math.min(1, (simMs - fsm.stableStart) / CFG.STAB_MS) : 0)
     : (w >= CFG.CUP_ON ? 1 : 0);
   $('stabFill').style.width = (prog * 100) + '%';
-  $('stabLab').textContent = w < CFG.CUP_ON ? 'stabilitas: menunggu gelas'
+  $('stabLab').textContent = w < CFG.CUP_ON ? 'menunggu gelas'
     : prog >= 1 ? 'stabil (1,5 s terpenuhi)' : 'stabilitas: ' + Math.round(prog * 100) + '%';
 
   $('simClock').textContent = fmtClock(simMs);
@@ -1702,8 +1699,8 @@ function render(){
   $('interval').textContent = fmt(targetMs);
   const baseLabel = demo ? 'demo 15 s' : ('basis ' + customBaseMin + ' mnt');
   $('intervalWhy').textContent = demo
-    ? 'demo 15 s (tetap, tanpa faktor DHT)'
-    : (autoDht ? (baseLabel + ' x faktor kontinu DHT11')
+    ? 'demo 15 s (tetap, tanpa penyesuaian ruangan)'
+    : (autoDht ? (baseLabel + ' x kondisi ruangan')
                : (baseLabel + ' (mode manual tetap)'));
 }
 

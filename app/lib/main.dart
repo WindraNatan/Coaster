@@ -969,7 +969,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             for (final opt in const [
               ('DEMO', 'Demo 15 detik'),
-              ('AUTO_DHT', 'Otomatis DHT11'),
+              ('AUTO_DHT', 'Otomatis (sesuaikan dengan suhu ruangan)'),
               ('MANUAL', 'Manual tetap'),
             ])
               ListTile(
@@ -1748,7 +1748,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _badgeCard(Telemetry t, bool reduceMotion) {
     final color = _stateColor(t.canonicalState);
-    final name = t.canonicalState.replaceAll('_', ' ');
+    final name = t.stateName;
     return AnimatedBuilder(
       animation: _pulse,
       builder: (context, _) {

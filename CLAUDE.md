@@ -47,6 +47,8 @@ node web/fsm.test.js && node web/daily-history.test.js && node web/daily-cloud.t
 ## 3. Logika FSM & Aturan Pengendalian
 
 * **7-State FSM**: `STATE_IDLE`, `STATE_STABLE`, `STATE_TIMING`, `STATE_LIFTED`, `STATE_ALERT_DRINK`, `STATE_ALERT_CHEAT`, `STATE_ALERT_REFILL` + flag `missingCupAlert`. `ALERT_EMPTY_CUP`/`ALERT_MISSING_CUP` hanyalah string turunan flag, bukan state.
+* **Nama State di UI**: badge menampilkan `REFILL` dan `CHEAT` tanpa awalan `ALERT` (alasannya sudah ada di baris penjelas di bawah badge); hanya `ALERT DRINK` yang memakai awalan itu. String protokol tetap `ALERT_*` di telemetri, log, dan kelas CSS.
+* **Istilah UI untuk Pengguna**: mode timer disebut `Otomatis (sesuaikan dengan suhu ruangan)`, bukan "DHT11"; label sensor suhu hanya "Suhu ruangan"; baris alasan interval menyebut "x kondisi ruangan".
 * **Anti Tekan-Lepas (K1)**: isi ulang langsung di tatakan dicatat sebagai *pending*; bila berat kembali ke baseline pra-isi-ulang dalam `REFILL_CONFIRM_MS` (5 s), isi ulang dibatalkan dan penurunan tidak dicatat sebagai minum. Pembatalan memulihkan state & timer pra-isi-ulang (kecuali `LIFTED`/`ALERT_REFILL`), sehingga tekan-lepas tidak membunuh alarm minum atau menunda timer.
 * **Selaras Kalibrasi (K3)**: `setEmptyCupWeight()` saat state aktif memaksa `ALERT_REFILL` dengan flag `calibrationAlign`; `update()` menyelaraskan baseline ke berat aktual lebih dulu, tidak menghitung isi ulang untuk air yang sudah ada di gelas. Flag dibersihkan juga saat berat kosong teramati di `ALERT_REFILL`, agar tidak basi setelah gelas diangkat lalu kembali (isi ulang sah tetap terhitung).
 * **Gerbang Stabilitas (Fix C4)**:

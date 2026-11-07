@@ -92,7 +92,7 @@ void main() {
     expect(find.textContaining('Belum ada data telemetry.'), findsOneWidget);
   });
 
-  testWidgets('state turunan ALERT_MISSING_CUP render sebagai ALERT REFILL',
+  testWidgets('state turunan ALERT_MISSING_CUP render sebagai badge REFILL',
       (tester) async {
     final body = jsonEncode({
       'weight_g': 0,
@@ -112,7 +112,7 @@ void main() {
         req.url.path.endsWith('/config.json') ? _configBody : body, 200));
     await _pumpApp(tester, client);
     await tester.pump();
-    expect(find.text('ALERT REFILL'), findsOneWidget);
+    expect(find.text('REFILL'), findsOneWidget);
     expect(find.text('gelas belum kembali ke tatakan'), findsOneWidget);
     expect(find.text('Gelas tidak di tatakan'), findsOneWidget);
   });
