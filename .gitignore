@@ -37,3 +37,7 @@ SmartHydrationCoaster/secrets.h
 /*.jpg
 /WATCHDOG.yml
 /screenshot/
+
+# Web dependencies & build outputs
+/web/node_modules/
+/web/dist/

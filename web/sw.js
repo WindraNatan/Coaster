@@ -1,5 +1,5 @@
-const CACHE_NAME = 'shc-pwa-v18';
-const ASSETS = ['./', './index.html', './login.html', './auth.js', './fsm.js', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png'];
+const CACHE_NAME = 'shc-pwa-v19';
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -15,15 +15,10 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) return;
-  // Navigasi ambil dari jaringan dulu. Cache-first membuat HTML lama terus tampil setelah
-  // file diedit, sampai pengguna menghapus data situs. Cache hanya dipakai saat offline.
   if (e.request.mode === 'navigate') {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
-  // Script dan stylesheet: jaringan dulu, cache hanya saat offline. Cache-first
-  // pernah mencampur HTML baru dengan fsm.js lama, sehingga halaman memanggil
-  // fungsi yang belum ada di berkas yang tersaji.
   const url = new URL(e.request.url);
   const isCode = /\.(js|css)$/.test(url.pathname);
   if (isCode) {

@@ -1,0 +1,179 @@
+const SHC_DEFAULT_URL = 'https://smart-coaster-64880-default-rtdb.asia-southeast1.firebasedatabase.app';
+const SHC_DEFAULT_API_KEY = 'AIzaSyAsJOK540P20E2KeOyB2BdXQj3dOARfyLA';
+
+export const SHC_AUTH_KEY = 'shc_id_token';
+export const SHC_EMAIL_KEY = 'shc_auth_email';
+export const SHC_UID_KEY = 'shc_uid';
+export const SHC_REFRESH_KEY = 'shc_refresh_token';
+
+export const SHC_AUTH_ERRORS = {
+  EMAIL_NOT_FOUND: 'Email belum terdaftar.',
+  INVALID_PASSWORD: 'Password salah.',
+  INVALID_LOGIN_CREDENTIALS: 'Email atau password salah.',
+  INVALID_EMAIL: 'Format email tidak valid.',
+  USER_DISABLED: 'Akun ini dinonaktifkan.',
+  EMAIL_EXISTS: 'Email ini sudah terdaftar. Pakai tombol Masuk.',
+  WEAK_PASSWORD: 'Password minimal 6 karakter.',
+  MISSING_PASSWORD: 'Password wajib diisi.',
+  TOO_MANY_ATTEMPTS_TRY_LATER: 'Terlalu banyak percobaan. Coba lagi nanti.',
+  CONFIGURATION_NOT_FOUND: 'API key salah atau Authentication belum diaktifkan.'
+};
+
+export function shcToken() {
+  const raw = localStorage.getItem(SHC_AUTH_KEY);
+  if (!raw) return '';
+  try {
+    const o = JSON.parse(raw);
+    if (!o.token) return '';
+    if (!o.exp || Date.now() > o.exp - 300000) return '';
+    return o.token;
+  } catch (_) {
+    return '';
+  }
+}
+
+export function shcAuthSuffix() {
+  const t = shcToken();
+  return t ? '?auth=' + encodeURIComponent(t) : '';
+}
+
+export function shcUid() {
+  return localStorage.getItem(SHC_UID_KEY) || '';
+}
+
+export function shcDeviceUid() {
+  return localStorage.getItem('shc_device_uid') || '';
+}
+
+export function shcCoasterUrl(base) {
+  const uid = shcDeviceUid();
+  if (!uid) return '';
+  return base + '/users/' + encodeURIComponent(uid) + '/smart_coaster';
+}
+
+export function shcApiKey() {
+  return (localStorage.getItem('shc_api_key') || '').trim() || SHC_DEFAULT_API_KEY;
+}
+
+export function shcBaseUrl() {
+  return (localStorage.getItem('shc_fb_url') || '').trim() || SHC_DEFAULT_URL;
+}
+
+export function getCleanFbUrl() {
+  let url = shcBaseUrl();
+  while (url.endsWith('/')) url = url.slice(0, -1);
+  return url;
+}
+
+export async function shcEnsureToken(force = false) {
+  if (!force && shcToken()) return true;
+  const rt = localStorage.getItem(SHC_REFRESH_KEY) || '';
+  const key = shcApiKey();
+  if (!rt || !key) return false;
+  try {
+    const res = await fetch(
+      'https://securetoken.googleapis.com/v1/token?key=' + encodeURIComponent(key),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(rt)
+      }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.id_token) return false;
+    localStorage.setItem(SHC_AUTH_KEY, JSON.stringify({
+      token: data.id_token,
+      exp: Date.now() + (parseInt(data.expires_in, 10) || 3600) * 1000
+    }));
+    if (data.refresh_token) localStorage.setItem(SHC_REFRESH_KEY, data.refresh_token);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+export async function shcAuth(mode, email, password) {
+  const key = shcApiKey();
+  if (!key) throw new Error('Isi API key proyek Firebase dulu.');
+  const action = mode === 'signUp' ? 'accounts:signUp' : 'accounts:signInWithPassword';
+  const res = await fetch(
+    'https://identitytoolkit.googleapis.com/v1/' + action + '?key=' + encodeURIComponent(key),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password, returnSecureToken: true })
+    }
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const code = (data && data.error && data.error.message) || ('HTTP ' + res.status);
+    throw new Error(SHC_AUTH_ERRORS[code] || code);
+  }
+  if (!data.localId) throw new Error('Respons Firebase tidak memuat UID.');
+  localStorage.setItem(SHC_AUTH_KEY, JSON.stringify({
+    token: data.idToken,
+    exp: Date.now() + (parseInt(data.expiresIn, 10) || 3600) * 1000
+  }));
+  localStorage.setItem(SHC_EMAIL_KEY, data.email || email.trim());
+  localStorage.setItem(SHC_UID_KEY, data.localId);
+  if (data.refreshToken) localStorage.setItem(SHC_REFRESH_KEY, data.refreshToken);
+  return { email: data.email || email.trim(), uid: data.localId };
+}
+
+export function shcLogin(email, password) {
+  return shcAuth('signIn', email, password);
+}
+
+export function shcRegister(email, password) {
+  return shcAuth('signUp', email, password);
+}
+
+export function shcLogout() {
+  localStorage.removeItem(SHC_AUTH_KEY);
+  localStorage.removeItem(SHC_EMAIL_KEY);
+  localStorage.removeItem(SHC_UID_KEY);
+  localStorage.removeItem(SHC_REFRESH_KEY);
+  localStorage.removeItem('shc_device_uid');
+}
+
+export async function shcClaimDevice(base, code) {
+  if (!(await shcEnsureToken())) throw new Error('Sesi akun habis. Masuk ulang.');
+  const clean = (code || '').trim().toUpperCase();
+  if (clean.length !== 8) throw new Error('Kode alat harus 8 karakter.');
+  const res = await fetch(base + '/claims/' + encodeURIComponent(clean) + '.json' + shcAuthSuffix());
+  if (!res.ok) throw new Error('Gagal membaca kode (HTTP ' + res.status + ').');
+  const deviceUid = await res.json();
+  if (!deviceUid || typeof deviceUid !== 'string') throw new Error('Kode tidak dikenali. Cek lagi di Serial Monitor (115200 baud).');
+  const put = await fetch(base + '/links/' + encodeURIComponent(shcUid()) + '/' +
+      encodeURIComponent(deviceUid) + '.json' + shcAuthSuffix(), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: clean, at: Date.now() })
+  });
+  if (!put.ok) throw new Error('Gagal menautkan alat (HTTP ' + put.status + ').');
+  localStorage.setItem('shc_device_uid', deviceUid);
+  return deviceUid;
+}
+
+export async function shcFindOwnDevice(base) {
+  if (!(await shcEnsureToken())) throw new Error('Sesi akun habis. Masuk ulang.');
+  if (!shcUid()) throw new Error('Akun belum dikenal. Masuk ulang.');
+  const url = base + '/users/' + encodeURIComponent(shcUid()) +
+              '/smart_coaster/claimCode.json' + shcAuthSuffix();
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Gagal mencari alat (HTTP ' + res.status + ').');
+  const value = await res.json();
+  if ('object' === typeof value || !value) return '';
+  return String(value).trim().toUpperCase();
+}
+
+export async function shcSetSession(base, ownerUid, active = true) {
+  const url = shcCoasterUrl(base);
+  if (!url || !shcToken()) return false;
+  const res = await fetch(url + '/session.json' + shcAuthSuffix(), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner: ownerUid || '', active: !!active, at: Date.now() })
+  });
+  return res.ok;
+}

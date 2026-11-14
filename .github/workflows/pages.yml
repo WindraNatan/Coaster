@@ -36,6 +36,10 @@ jobs:
         run: |
           node web/fsm.test.js
           node web/daily-history.test.js
+          node web/daily-cloud.test.js
+      - name: Build web (Vite)
+        run: |
+          cd web && npm ci && npm run build
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
@@ -53,7 +57,7 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./web
+          path: ./web/dist
       - id: deploy
         uses: actions/deploy-pages@v4
 
