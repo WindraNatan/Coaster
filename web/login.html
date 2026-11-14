@@ -171,8 +171,8 @@ function render(){
   const device = shcDeviceUid();
   $('claimForm').hidden = !ok || !!device;
   if (device) setStatus($('claimStatus'), $('claimDot'), 'Alat tertaut: ' + device.slice(0, 8) + '…', 'ok');
-  else if (ok) setStatus($('claimStatus'), $('claimDot'), 'Masukkan kode dari Serial Monitor ESP32.', '');
-  else setStatus($('claimStatus'), $('claimDot'), 'Masuk dulu untuk mengklaim alat.', '');
+  else if (ok) setStatus($('claimStatus'), $('claimDot'), 'Masukkan 8 karakter kode alat dari perangkat.', '');
+  else setStatus($('claimStatus'), $('claimDot'), 'Masuk dulu untuk menautkan alat.', '');
 }
 
 async function doAuth(kind){

@@ -612,6 +612,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   late final AnimationController _pulse;
   final _intervalCtrl = TextEditingController();
+  final _emptyCupCtrl = TextEditingController();
 
   String get _base => widget.url;
 
@@ -809,6 +810,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     _client.close();
     _pulse.dispose();
     _intervalCtrl.dispose();
+    _emptyCupCtrl.dispose();
     super.dispose();
   }
 
@@ -843,6 +845,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             c = CloudConfig.fromJson(cMap);
             if (_cfg == null) {
               _intervalCtrl.text = c.manualIntervalMin.toString();
+              _emptyCupCtrl.text = c.emptyCupWeightG.toStringAsFixed(0);
             }
           }
         }
@@ -1022,6 +1025,20 @@ class _DashboardScreenState extends State<DashboardScreen>
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(manualIntervalMin: v));
     _patchConfig({'manual_interval_min': v});
     _catatUbahTimer();
+  }
+
+  void _sendEmptyCup() {
+    final text = _emptyCupCtrl.text.trim();
+    final v = double.tryParse(text);
+    if (v == null || v < 35.0 || v > 300.0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Berat gelas kosong harus 35 sampai 300 gram.')));
+      return;
+    }
+    setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(emptyCupWeightG: v));
+    _patchConfig({'empty_cup_weight_g': v});
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Berat gelas kosong (${v.toStringAsFixed(0)} g) disimpan.')));
   }
 
   Color _stateColor(String s) {
@@ -1623,8 +1640,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           if (_dayFresh) ...[
             const SizedBox(height: 10),
             Text(
-              'Hari baru: hitungan mulai dari angka alat saat aplikasi dibuka, '
-              'jadi air yang diminum sebelum itu tidak ikut terhitung.',
+              'Hari baru: hitungan dimulai dari posisi saat aplikasi dibuka.',
               style: _monoStyle(10, color: _dim),
             ),
           ],
@@ -1840,9 +1856,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Firmware tidak punya jam (CLAUDE.md §4: tanpa NTP), jadi angkanya
-                // kumulatif sejak reset manual, bukan per hari kalender.
-                Text('Total sejak reset', style: _monoStyle(11)),
+                Text('Akumulasi sesi', style: _monoStyle(11)),
                 const Spacer(),
                 Text('${t.totalMl.toStringAsFixed(1)} ml',
                     style: _monoStyle(20, color: _water, weight: FontWeight.w600)),
@@ -1853,7 +1867,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               children: [
                 _countCell('Minum', '${t.drinkCount}', _ok),
                 _countCell('Isi ulang', '${t.refillCount}', _water),
-                _countCell('Curang', '${t.cheatCount}', _alarm),
+                _countCell('Tegukan kecil', '${t.cheatCount}', _alarm),
               ],
             ),
           ],
@@ -1965,12 +1979,40 @@ class _DashboardScreenState extends State<DashboardScreen>
               ],
             ),
           ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _emptyCupCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: _monoStyle(13, color: _ink),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    labelText: 'Berat gelas kosong (g)',
+                    labelStyle: _monoStyle(11),
+                    enabledBorder: const OutlineInputBorder(
+                        borderSide: BorderSide(color: _line)),
+                    focusedBorder: const OutlineInputBorder(
+                        borderSide: BorderSide(color: _water, width: 2)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton(
+                onPressed: _sendEmptyCup,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: _line),
+                  minimumSize: const Size(88, 44),
+                ),
+                child: Text('Simpan', style: _monoStyle(12, color: _water)),
+              ),
+            ],
+          ),
           if (_hintTargetLama != null) ...[
             const SizedBox(height: 10),
             Text(
-              'Pengaturan baru dipakai mulai siklus berikutnya. Siklus ini masih '
-              'memakai target ${_fmtTargetMnt(_hintTargetLama!)}; angkat gelas, '
-              'minum atau tuang sedikit, lalu taruh kembali.',
+              'Pengaturan baru aktif siklus berikutnya (saat ini masih memakai target ${_fmtTargetMnt(_hintTargetLama!)}).',
               style: _monoStyle(11, color: _warn),
             ),
           ],
@@ -1980,7 +2022,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           if (_t?.standby == true)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Text('Alat tidur. Sesi belum dimulai, alarm dan timer berhenti.',
+              child: Text('Mode siaga aktif. Sesi belum dimulai, alarm dan timer berhenti.',
                   style: _monoStyle(11, color: _warn)),
             ),
           Row(
@@ -2009,7 +2051,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
           const SizedBox(height: 12),
-          Text('Kalibrasi gelas kosong dan tare lewat USB.',
+          Text('Kalibrasi bobot kosong dapat disimpan via cloud atau USB.',
               style: _monoStyle(11, color: _dim)),
           if (widget.onClaimDevice != null) ...[
             const Divider(color: _line, height: 20),
@@ -2094,9 +2136,8 @@ class _ClaimScreenState extends State<ClaimScreen> {
               const SizedBox(height: 6),
               // Tatakan tidak punya layar. Kode hanya dicetak firmware ke Serial,
               // jadi arahkan ke sana daripada mencari tampilan yang tidak ada.
-              Text('Sambungkan alat ke komputer lewat USB, buka Serial Monitor '
-                  '115200 baud, lalu lihat baris "[CLOUD] Kode klaim alat: XXXXXXXX". '
-                  'Kode yang sama bisa dimasukkan di halaman Akun web PWA.',
+              Text('Masukkan 8 karakter kode alat dari stiker perangkat atau log koneksi. '
+                  'Kode yang sama dapat digunakan di aplikasi web.',
                   style: _monoStyle(11, color: _dim)),
               const SizedBox(height: 28),
               TextField(

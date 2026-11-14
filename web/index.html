@@ -263,11 +263,11 @@ body:not([data-view="app"]) .conn-bar{display:none}
 <div class="conn-drawer" id="usbDrawer">
   <span><i class="status-dot" id="usbDot"></i><span id="usbStatus">USB belum terhubung (115200 baud)</span></span>
   <button class="act" id="bUsbConnect">Hubungkan Port ESP32</button>
-  <button class="act" id="bUsbTare" disabled>Tare Load Cell ('t')</button>
-  <button class="act" id="bUsbCalSensor" disabled>Simpan Gelas di Tatakan ('c')</button>
-  <input type="text" id="espSsidIn" placeholder="SSID Wi-Fi 2.4GHz ESP32" aria-label="SSID Wi-Fi ESP32">
+  <button class="act" id="bUsbTare" disabled>Nol-kan Timbangan</button>
+  <button class="act" id="bUsbCalSensor" disabled>Simpan Berat Gelas</button>
+  <input type="text" id="espSsidIn" placeholder="Nama Wi-Fi (SSID 2.4 GHz)" aria-label="SSID Wi-Fi ESP32">
   <input type="password" id="espPassIn" placeholder="Password Wi-Fi" aria-label="Password Wi-Fi ESP32">
-  <button class="act" id="bUsbPushWifi" disabled>Kirim Wi-Fi &amp; Cloud ke ESP32</button>
+  <button class="act" id="bUsbPushWifi" disabled>Simpan Pengaturan Wi-Fi</button>
 </div>
 
 <div class="conn-drawer" id="cloudDrawer">
@@ -304,9 +304,9 @@ body:not([data-view="app"]) .conn-bar{display:none}
       <a class="act" href="login.html">Hubungkan alat</a>
     </div>
     <dl class="intro-facts">
-      <div><dt>beban</dt><dd>Load cell 5 kg</dd></div>
-      <div><dt>pengingat</dt><dd>30 menit, menyesuaikan suhu ruang</dd></div>
-      <div><dt>riwayat</dt><dd>Tersimpan per tanggal</dd></div>
+      <div><dt>kapasitas</dt><dd>Timbangan presisi s.d. 500 g</dd></div>
+      <div><dt>pengingat</dt><dd>Adaptif terhadap suhu ruangan</dd></div>
+      <div><dt>riwayat</dt><dd>Tersimpan harian otomatis</dd></div>
     </dl>
   </div>
   <figure class="intro-art">
@@ -350,9 +350,9 @@ body:not([data-view="app"]) .conn-bar{display:none}
 
     <div class="counts">
       <div><b id="cDrink">0</b><span>minum (x)</span></div>
-      <div><b id="cCheat">0</b><span>curang</span></div>
+      <div><b id="cCheat">0</b><span>tegukan kecil</span></div>
       <div><b id="cRefill">0</b><span>isi ulang</span></div>
-      <div><b id="cTotal">0</b><span>total sejak reset</span></div>
+      <div><b id="cTotal">0</b><span>akumulasi sesi</span></div>
     </div>
   </section>
 
@@ -405,16 +405,16 @@ body:not([data-view="app"]) .conn-bar{display:none}
       </div>
 
       <details class="fold">
-        <summary>Skenario uji otomatis (PRD)</summary>
+        <summary>Skenario Uji Otomatis</summary>
         <div class="scen">
-          <button class="act" data-sc="0">1. Taruh gelas terisi<small>stabil 1,5 s menuju TIMING</small></button>
-          <button class="act" data-sc="1">2. Timer habis<small>tidak minum sesuai jadwal</small></button>
-          <button class="act" data-sc="2">3. Sentuhan tipuan<small>turun &lt; 20 g memicu CHEAT</small></button>
-          <button class="act" data-sc="3">4. Minum sah<small>turun 120 g, tercatat</small></button>
-          <button class="act" data-sc="4">5. Gelas kosong<small>alarm isi ulang</small></button>
-          <button class="act" data-sc="5">6. Isi ulang<small>kembali ke TIMING</small></button>
-          <button class="act" data-sc="6">7. Gelas dibawa pergi<small>MISSING lalu pulih</small></button>
-          <button class="act" data-sc="7">8. Isi ulang di tatakan<small>+50 g tanpa angkat</small></button>
+          <button class="act" data-sc="0">1. Taruh gelas terisi<small>Stabil 1,5 s menuju siklus minum</small></button>
+          <button class="act" data-sc="1">2. Timer habis<small>Peringatan minum aktif</small></button>
+          <button class="act" data-sc="2">3. Tegukan kecil<small>Penurunan &lt; 20 ml memicu pengingat</small></button>
+          <button class="act" data-sc="3">4. Minum tercatat<small>Penurunan 120 ml terverifikasi</small></button>
+          <button class="act" data-sc="4">5. Gelas kosong<small>Peringatan isi ulang aktif</small></button>
+          <button class="act" data-sc="5">6. Isi ulang<small>Penambahan air terdeteksi</small></button>
+          <button class="act" data-sc="6">7. Gelas diangkat<small>Peringatan gelas belum kembali</small></button>
+          <button class="act" data-sc="7">8. Isi ulang di tatakan<small>+50 ml tanpa mengangkat gelas</small></button>
         </div>
       </details>
     </div>
@@ -435,22 +435,22 @@ body:not([data-view="app"]) .conn-bar{display:none}
     <div class="adaptive">
       <div>Target interval: <b id="interval">--</b></div>
       <div id="intervalWhy" style="margin-top:2px"></div>
-      <label for="sTemp"><span>Suhu ruangan</span><span id="tVal">27.0 °C</span></label>
+      <label for="sTemp"><span>Suhu Ruangan</span><span id="tVal">27.0 °C</span></label>
       <input type="range" id="sTemp" min="18" max="40" step="0.5" value="27">
-      <label for="sHum"><span>Kelembapan relatif (RH)</span><span id="tHum">60 %</span></label>
+      <label for="sHum"><span>Kelembapan Ruangan</span><span id="tHum">60 %</span></label>
       <input type="range" id="sHum" min="20" max="95" step="1" value="60">
-      <p class="adaptive-note" id="adaptiveNote">Penggeser hanya untuk simulasi.</p>
+      <p class="adaptive-note" id="adaptiveNote">Slider hanya aktif pada mode simulator.</p>
     </div>
 
     <div class="cfg-grid">
       <div class="cfg-row">
         <button class="act active-btn" id="bAutoMode">Timer: Otomatis</button>
         <button class="act active-btn" id="bDemo">Demo 15 dtk: ON</button>
-        <button class="act" id="bMute" title="Buzzer mati, motor getar tetap jalan">Buzzer: ON</button>
+        <button class="act" id="bMute" title="Buzzer hening, motor getar tetap aktif">Buzzer: ON</button>
         <button class="act" id="bReset">Reset Harian</button>
       </div>
       <div class="cfg-row">
-        <label for="baseMinIn">Interval dasar (mnt):</label>
+        <label for="baseMinIn">Interval Dasar (menit):</label>
         <input type="number" id="baseMinIn" min="1" max="180" step="1" value="30">
         <button class="act" id="bApplyInt">Atur Interval</button>
       </div>
@@ -458,19 +458,19 @@ body:not([data-view="app"]) .conn-bar{display:none}
            berjalan: siklus itu memegang targetnya sendiri sampai selesai. -->
       <p class="hint" id="timerHint" hidden></p>
       <div class="cfg-row">
-        <label for="emptyIn">Gelas kosong (g):</label>
+        <label for="emptyIn">Berat Gelas Kosong (g):</label>
         <input type="number" id="emptyIn" min="35" max="300" step="1" value="130">
         <button class="act" id="bCal">Simpan Gelas</button>
       </div>
       <div class="cfg-row">
-        <label for="goalIn">Target harian (ml):</label>
+        <label for="goalIn">Target Harian (ml):</label>
         <input type="number" id="goalIn" min="250" max="6000" step="50" value="2000">
         <button class="act" id="bSaveGoal">Simpan Target</button>
       </div>
     </div>
 
     <details class="fold">
-      <summary>Log kejadian dan telemetri <span id="csvCount">0</span> baris</summary>
+      <summary>Log aktivitas dan telemetri <span id="csvCount">0</span> baris</summary>
       <div class="log-tools">
         <button class="act" id="bExportCsv">Unduh CSV</button>
       </div>
@@ -879,7 +879,7 @@ $('bCal').addEventListener('click', () => {
     sendSerialCmd('e' + g.toFixed(1) + '\n');
     pushCloudConfig();
   } else {
-    log('DITOLAK: ' + g + ' g di luar rentang gelas kosong (35-300 g).', '');
+    log('Berat gelas harus antara 35 hingga 300 gram.', '');
   }
   $('emptyIn').value = fsm.emptyCup;
 });
@@ -896,7 +896,7 @@ $('bReset').addEventListener('click', () => {
   // berikutnya (<=5 s) memulihkan angkanya, jadi tombolnya tampak gagal. Di mode
   // cloud, arahkan ke perangkat alih-alih berpura-pura berhasil.
   if (connMode === 'cloud') {
-    log('Reset statistik hanya dari alat: kirim perintah r lewat USB (Serial Monitor, atau mode USB Live di halaman ini).', 'ev-ALERT_DRINK');
+    log('Reset statistik hanya dapat dilakukan langsung dari perangkat via USB.', 'ev-ALERT_DRINK');
     return;
   }
   // K2: simpan dulu ke riwayat, baru reset. Kebalikannya, resetStats()
@@ -1630,13 +1630,13 @@ function render(){
                    ALERT_REFILL: 'REFILL', ALERT_CHEAT: 'CHEAT' };
   $('stName').textContent = namaSt[st] || st.replace('ALERT_', 'ALERT ');
   $('stWhy').textContent = {
-    IDLE: 'taruh gelas untuk mulai',
-    STABLE: 'menunggu berat stabil 1,5 s',
-    TIMING: 'berat awal ' + fsm.baseline.toFixed(0) + ' g',
-    LIFTED: 'diangkat ' + Math.floor((simMs - fsm.liftStart)/1000) + ' s / ' + Math.round(fsm.maxLift/1000) + ' s',
-    ALERT_DRINK: 'saatnya minum air!',
-    ALERT_CHEAT: 'berat kembali tanpa minum cukup (< 20 g)',
-    ALERT_REFILL: fsm.missing ? 'gelas belum kembali ke tatakan' : 'gelas kosong, silakan isi ulang'
+    IDLE: 'Letakkan gelas di tatakan untuk mulai',
+    STABLE: 'Menstabilkan timbangan...',
+    TIMING: 'Gelas terdeteksi (' + fsm.baseline.toFixed(0) + ' g)',
+    LIFTED: 'Gelas diangkat (' + Math.floor((simMs - fsm.liftStart)/1000) + 's / ' + Math.round(fsm.maxLift/1000) + 's)',
+    ALERT_DRINK: 'Waktunya minum air!',
+    ALERT_CHEAT: 'Tegukan belum cukup (minimal 20 ml)',
+    ALERT_REFILL: fsm.missing ? 'Gelas belum kembali ke tatakan' : 'Gelas kosong, silakan isi ulang'
   }[fsm.state] || '';
   if (fsm.alertActive){
     badge.style.setProperty('--pulse',
@@ -1692,15 +1692,15 @@ function render(){
     : (w >= CFG.CUP_ON ? 1 : 0);
   $('stabFill').style.width = (prog * 100) + '%';
   $('stabLab').textContent = w < CFG.CUP_ON ? 'menunggu gelas'
-    : prog >= 1 ? 'stabil (1,5 s terpenuhi)' : 'stabilitas: ' + Math.round(prog * 100) + '%';
+    : prog >= 1 ? 'timbangan stabil' : 'menimbang... ' + Math.round(prog * 100) + '%';
 
   $('simClock').textContent = fmtClock(simMs);
   const targetMs = connMode === 'sim' ? fsm.targetIntervalMs() : fsm.interval;
   $('interval').textContent = fmt(targetMs);
   const baseLabel = demo ? 'demo 15 s' : ('basis ' + customBaseMin + ' mnt');
   $('intervalWhy').textContent = demo
-    ? 'demo 15 s (tetap, tanpa penyesuaian ruangan)'
-    : (autoDht ? (baseLabel + ' x kondisi ruangan')
+    ? 'mode demo 15 detik (tetap)'
+    : (autoDht ? (baseLabel + ' (menyesuaikan suhu ruang)')
                : (baseLabel + ' (mode manual tetap)'));
 }
 
@@ -1732,7 +1732,7 @@ setInterval(() => {
   }
   if (fsm.cheatCount > bc){
     saveTodayStatsToHistory();
-    log('percobaan curang ke-' + fsm.cheatCount, 'ev-ALERT_CHEAT');
+    log('tegukan kecil ke-' + fsm.cheatCount, 'ev-ALERT_CHEAT');
   }
   if (fsm.refillCount > br){
     saveTodayStatsToHistory();
