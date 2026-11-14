@@ -14,28 +14,38 @@ import 'project_config.dart';
 import 'reminder.dart';
 import 'telemetry.dart';
 
-// Palet & tipografi mengikuti identitas web PWA (web/index.html :root):
-// dark-teal surface, aksen cyan "water", angka monospace tabular.
-const _bg = Color(0xFF0C1F27);
-const _panel = Color(0xFF132B35);
-const _panel2 = Color(0xFF0F242D);
-const _line = Color(0xFF234654);
-const _ink = Color(0xFFE2F1F3);
-const _dim = Color(0xFF93B8C2);
-const _water = Color(0xFF44C8E6);
-const _ok = Color(0xFF5FD195);
-const _warn = Color(0xFFF0C254);
-const _alarm = Color(0xFFF26B6E);
+// Palet Clean Nordic / Porcelain Light:
+// porcelain white surface, slate 50 background, deep sky water accent.
+const _bg = Color(0xFFF8FAFC);
+const _panel = Color(0xFFFFFFFF);
+const _panel2 = Color(0xFFF1F5F9);
+const _line = Color(0xFFE2E8F0);
+const _ink = Color(0xFF0F172A);
+const _dim = Color(0xFF64748B);
+const _water = Color(0xFF0284C7);
+const _ok = Color(0xFF059669);
+const _warn = Color(0xFFD97706);
+const _alarm = Color(0xFFE11D48);
+
+const _cardShadow = [
+  BoxShadow(
+    color: Color(0x0A0F172A),
+    blurRadius: 18,
+    offset: Offset(0, 4),
+  ),
+  BoxShadow(
+    color: Color(0x050F172A),
+    blurRadius: 4,
+    offset: Offset(0, 1),
+  ),
+];
 
 const _display = 'SpaceGrotesk';
 const _mono = 'JetBrainsMono';
-// Jaring aman saja: data datang lewat stream SSE. Poll 20 dtk dipakai bila
-// stream mati (proxy memblokir event-stream). 2,5 dtk membakar kuota RTDB
-// tanpa menambah kesegaran, karena SSE sudah lebih cepat.
+
 const _pollInterval = Duration(seconds: 20);
-const _glassDisplayMl = 500.0; // skala tampilan gelas (gauge, bukan klaim volume)
-// Nilai aman sebelum node config pertama kali terbaca firmware
-// (BASE_INTERVAL_MS config.h = 30 menit; DEFAULT_EMPTY_CUP_G = 130 g).
+const _glassDisplayMl = 500.0;
+
 const _defaultCfg = CloudConfig(
   timerMode: 'AUTO_DHT',
   manualIntervalMin: 30,
@@ -54,8 +64,6 @@ TextStyle _monoStyle(double size, {Color? color, FontWeight? weight}) =>
       fontFeatures: _tabular,
     );
 
-/// Target siklus dalam satuan yang enak dibaca: demo memakai detik, sisanya
-/// menit tanpa ekor ",0" (Dart menulis 30.0 apa adanya).
 String _fmtTargetMnt(double m) {
   if (m < 1) return '${(m * 60).round()} detik';
   final n = (m * 10).round() / 10;
@@ -75,11 +83,11 @@ class CoasterApp extends StatelessWidget {
       title: 'Smart Hydration Coaster',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.dark,
+        brightness: Brightness.light,
         scaffoldBackgroundColor: _bg,
         fontFamily: _display,
-        colorScheme: const ColorScheme.dark(
-          surface: _bg,
+        colorScheme: const ColorScheme.light(
+          surface: _panel,
           primary: _water,
           secondary: _water,
           error: _alarm,
@@ -98,7 +106,7 @@ class CoasterApp extends StatelessWidget {
 // ── Root: pilih antara layar koneksi (URL RTDB) dan dashboard ───────────────
 
 class RootPage extends StatefulWidget {
-  final http.Client? client; // seam untuk pengujian (MockClient)
+  final http.Client? client;
   const RootPage({super.key, this.client});
 
   @override
@@ -124,9 +132,6 @@ class _RootPageState extends State<RootPage> {
       session = await refreshSession(session);
     }
     if (!mounted) return;
-    // Urutan: URL yang pernah diketik pengguna (SharedPreferences) menang, lalu
-    // tetapan build. Dengan begitu instalasi lama tetap jalan, dan instalasi baru
-    // tidak perlu mengetik URL sama sekali.
     final effective = (saved != null && saved.isNotEmpty) ? saved : kFirebaseUrl;
     if (!mounted) return;
     setState(() {
@@ -134,10 +139,7 @@ class _RootPageState extends State<RootPage> {
       _session = (session != null && session.valid) ? session : null;
       _url = (effective.isNotEmpty && _session != null) ? effective : null;
     });
-    // Tautan alat dipulihkan dari /links/<uid akun> setelah layar tampil, supaya
-    // menginstal ulang aplikasi tidak perlu mengetik kode alat lagi dan boot
-    // offline tidak tertahan menunggu jaringan. Gagal di sini bukan gagal boot:
-    // fallback ke node akun tetap dipakai sampai pengguna menautkan manual.
+
     final s = _session;
     if (s != null && s.deviceUid.isEmpty && effective.isNotEmpty) {
       discoverDevice(base: effective, session: s, client: widget.client)
@@ -155,9 +157,6 @@ class _RootPageState extends State<RootPage> {
       _session = session;
       _editingUrl = false;
     });
-    // Login baru tidak melewati _boot(), sedangkan signIn() tidak menghasilkan
-    // deviceUid. Tanpa penemuan di sini, akun yang sudah tertaut ke alat lain
-    // akan memakai node akun sampai aplikasi dijalankan ulang.
     if (session.deviceUid.isEmpty && url.isNotEmpty) {
       discoverDevice(base: url, session: session, client: widget.client)
           .then((found) {
@@ -169,9 +168,9 @@ class _RootPageState extends State<RootPage> {
   }
 
   bool _editingUrl = false;
+  bool _claiming = false;
 
   void _editUrl() => setState(() { _url = null; _editingUrl = true; });
-  bool _claiming = false;
 
   @override
   Widget build(BuildContext context) {
@@ -214,7 +213,7 @@ class ConnectScreen extends StatefulWidget {
   final AuthSession? initialSession;
   final bool showUrlField;
   final bool showKeyField;
-  final http.Client? client; // seam untuk pengujian (MockClient)
+  final http.Client? client;
   const ConnectScreen({super.key, required this.onConnect, this.initialUrl,
       this.initialSession, this.showUrlField = false, this.showKeyField = false,
       this.client});
@@ -239,15 +238,9 @@ class _ConnectScreenState extends State<ConnectScreen> {
     if (widget.initialUrl != null) _ctrl.text = widget.initialUrl!;
     final s = widget.initialSession;
     if (s != null) _email.text = s.email;
-    // _storedKeyMissing hanya mencerminkan penyimpanan, bukan isi kolom, supaya
-    // kolom tidak hilang saat pengguna sedang mengetik.
     loadApiKey().then((k) {
       if (!mounted) return;
       setState(() {
-        // Key tersimpan tidak pernah diketik pengguna; ia ditulis otomatis oleh
-        // saveApiKey(). Kalau dibiarkan menang atas tetapan build, build dengan
-        // key baru tetap memakai key lama yang salah, dan karena kolomnya
-        // tersembunyi tidak ada cara memperbaikinya selain hapus data aplikasi.
         _key.text = kFirebaseApiKey.isNotEmpty ? kFirebaseApiKey : k;
         _storedKeyMissing = _key.text.isEmpty;
       });
@@ -263,11 +256,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
     super.dispose();
   }
 
-  // URL dan API key boleh datang dari tetapan build; kolomnya disembunyikan
-  // supaya pengguna umum hanya melihat email dan password. Isian pengguna menang
-  // atas tetapan build, sama seperti _boot() mendahulukan
-  // URL tersimpan. Tanpa urutan ini, kolom yang muncul lewat "Ubah URL" akan
-  // tampak bisa diketik padahal nilainya diabaikan.
   String get _urlValue {
     final typed = _ctrl.text.trim();
     return typed.isNotEmpty ? typed : kFirebaseUrl;
@@ -278,9 +266,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
     return typed.isNotEmpty ? typed : kFirebaseApiKey;
   }
 
-  // Visibilitas kolom ditentukan sekali saat layar dibuka, bukan dari isi kolom.
-  // Kalau bergantung pada _key.text, kolomnya hilang begitu pengguna mengetik
-  // (setState saat _busy=true) sehingga key yang salah tidak bisa diperbaiki.
   late final bool _needsUrl = widget.showUrlField ||
       (kFirebaseUrl.isEmpty && (_ctrl.text.trim().isEmpty));
   bool _storedKeyMissing = true;
@@ -300,8 +285,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
     final url = raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
     setState(() { _busy = true; _authError = null; _error = null; });
     try {
-      // Simpan hanya kalau nilainya berasal dari pengguna, supaya tetapan build
-      // tidak membeku di penyimpanan.
       if (kFirebaseApiKey.isEmpty) await saveApiKey(_keyValue);
       var existing = await loadSession();
       if (existing != null && !existing.valid && existing.refreshToken.isNotEmpty) {
@@ -331,146 +314,173 @@ class _ConnectScreenState extends State<ConnectScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _bg,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Smart Hydration',
-                    style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w500,
-                        color: _ink,
-                        letterSpacing: .2)),
-                Text('Coaster',
-                    style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w500,
-                        color: _water,
-                        letterSpacing: .2)),
-                const SizedBox(height: 6),
-                Text(
-                  'Masuk untuk melihat tatakan gelasmu dari jauh.',
-                  style: TextStyle(fontSize: 14, color: _dim, height: 1.5),
-                ),
-                const SizedBox(height: 28),
-                if (_needsUrl) ...[
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Container(
+              decoration: BoxDecoration(
+                color: _panel,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _line),
+                boxShadow: _cardShadow,
+              ),
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Smart Hydration',
+                      style: TextStyle(
+                          fontFamily: _display,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w600,
+                          color: _ink,
+                          letterSpacing: -0.5)),
+                  Text('Coaster',
+                      style: TextStyle(
+                          fontFamily: _display,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w600,
+                          color: _water,
+                          letterSpacing: -0.5)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Masuk untuk melihat tatakan gelasmu dari jauh.',
+                    style: TextStyle(fontSize: 14, color: _dim, height: 1.5),
+                  ),
+                  const SizedBox(height: 28),
+                  if (_needsUrl) ...[
+                    TextField(
+                      controller: _ctrl,
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.go,
+                      onSubmitted: (_) => _submit(),
+                      style: _monoStyle(13, color: _ink),
+                      decoration: InputDecoration(
+                        labelText: 'URL Firebase RTDB',
+                        labelStyle: _monoStyle(12, color: _dim),
+                        hintText:
+                            'https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app',
+                        hintStyle: _monoStyle(11, color: _dim),
+                        filled: true,
+                        fillColor: _panel2,
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: _line)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: _water, width: 2)),
+                        errorText: _error,
+                        errorStyle: _monoStyle(11, color: _alarm),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Salin URL dari Firebase Console → Realtime Database. '
+                      'ESP32 menulis ke /users/<uid>/smart_coaster lewat Wi-Fi 2,4 GHz; '
+                      'aplikasi ini membaca telemetry dan mengatur config.',
+                      style: _monoStyle(11, color: _dim),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   TextField(
-                    controller: _ctrl,
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.go,
-                    onSubmitted: (_) => _submit(),
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.username],
                     style: _monoStyle(13, color: _ink),
                     decoration: InputDecoration(
-                      labelText: 'URL Firebase RTDB',
-                      labelStyle: _monoStyle(12),
-                      hintText:
-                          'https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app',
-                      hintStyle: _monoStyle(11, color: _dim),
-                      enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: _line)),
-                      focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: _water, width: 2)),
-                      errorText: _error,
-                      errorStyle: _monoStyle(11, color: _alarm),
+                      labelText: 'Email',
+                      labelStyle: _monoStyle(12, color: _dim),
+                      filled: true,
+                      fillColor: _panel2,
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: _line)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: _water, width: 2)),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Salin URL dari Firebase Console → Realtime Database. '
-                    'ESP32 menulis ke /users/<uid>/smart_coaster lewat Wi-Fi 2,4 GHz; '
-                    'aplikasi ini membaca telemetry dan mengatur config.',
-                    style: _monoStyle(11, color: _dim),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _pass,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.password],
+                    style: _monoStyle(13, color: _ink),
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      labelStyle: _monoStyle(12, color: _dim),
+                      filled: true,
+                      fillColor: _panel2,
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: _line)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: _water, width: 2)),
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
+                  if (_needsKey)
+                    TextField(
+                      controller: _key,
+                      autocorrect: false,
+                      style: _monoStyle(13, color: _ink),
+                      decoration: InputDecoration(
+                        labelText: 'Web API Key proyek Firebase',
+                        labelStyle: _monoStyle(12, color: _dim),
+                        helperText: 'Project settings → General → Web API Key',
+                        helperStyle: _monoStyle(11, color: _dim),
+                        filled: true,
+                        fillColor: _panel2,
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: _line)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: _water, width: 2)),
+                        errorText: _authError,
+                        errorStyle: _monoStyle(11, color: _alarm),
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+                  if (_authError != null) ...[
+                    Text(_authError!,
+                        style: _monoStyle(12, color: _alarm), textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                  ],
+                  FilledButton(
+                    onPressed: _busy ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _water,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      minimumSize: const Size.fromHeight(48),
+                      textStyle: TextStyle(
+                          fontFamily: _mono,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    child: Text(_busy
+                        ? 'Sebentar...'
+                        : (_registerMode ? 'Buat akun' : 'Masuk')),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() => _registerMode = !_registerMode),
+                    child: Text(
+                      _registerMode
+                          ? 'Sudah punya akun? Masuk'
+                          : 'Belum punya akun? Daftar',
+                      style: _monoStyle(12, color: _water, weight: FontWeight.w600),
+                    ),
+                  ),
                 ],
-                TextField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.username],
-                  style: _monoStyle(13, color: _ink),
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    labelStyle: _monoStyle(12),
-                    enabledBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _line)),
-                    focusedBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _water, width: 2)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pass,
-                  obscureText: true,
-                  autofillHints: const [AutofillHints.password],
-                  style: _monoStyle(13, color: _ink),
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    labelStyle: _monoStyle(12),
-                    enabledBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _line)),
-                    focusedBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _water, width: 2)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (_needsKey)
-                TextField(
-                  controller: _key,
-                  autocorrect: false,
-                  style: _monoStyle(13, color: _ink),
-                  decoration: InputDecoration(
-                    labelText: 'Web API Key proyek Firebase',
-                    labelStyle: _monoStyle(12),
-                    helperText: 'Project settings → General → Web API Key',
-                    helperStyle: _monoStyle(11, color: _dim),
-                    enabledBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _line)),
-                    focusedBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _water, width: 2)),
-                    errorText: _authError,
-                    errorStyle: _monoStyle(11, color: _alarm),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Kolom API key bisa disembunyikan oleh tetapan build, jadi pesan
-                // gagal masuk ditampilkan di sini supaya tidak hilang.
-                if (_authError != null) ...[
-                  Text(_authError!,
-                      style: _monoStyle(12, color: _alarm), textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                ],
-                FilledButton(
-                  onPressed: _busy ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _water,
-                    foregroundColor: _bg,
-                    minimumSize: const Size.fromHeight(48),
-                    textStyle: TextStyle(
-                        fontFamily: _mono,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600),
-                  ),
-                  child: Text(_busy
-                      ? 'Sebentar...'
-                      : (_registerMode ? 'Buat akun' : 'Masuk')),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() => _registerMode = !_registerMode),
-                  child: Text(
-                    _registerMode
-                        ? 'Sudah punya akun? Masuk'
-                        : 'Belum punya akun? Daftar',
-                    style: _monoStyle(11, color: _water),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -486,7 +496,7 @@ class DashboardScreen extends StatefulWidget {
   final AuthSession session;
   final VoidCallback onChangeUrl;
   final VoidCallback? onClaimDevice;
-  final http.Client? client; // seam untuk pengujian (MockClient)
+  final http.Client? client;
   const DashboardScreen(
       {super.key,
       required this.url,
@@ -499,15 +509,9 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-
-/// Cache node telemetry + penerapan event RTDB (`put`, `patch`) menurut `path`.
-/// Dipisah dari widget supaya bisa diuji tanpa jaringan: PATCH kiriman aplikasi
-/// dan web datang sebagai `event: patch` dengan path sebagian, dan kalau path
-/// diabaikan field lain ikut terhapus.
 class TlmStreamState {
   final Map<String, dynamic> json = <String, dynamic>{};
 
-  /// Menerapkan satu blok SSE. Mengembalikan true bila ada data yang berubah.
   bool apply(String block) {
     String type = '';
     String payload = '';
@@ -579,31 +583,20 @@ class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late AuthSession _session = widget.session;
   Telemetry? _t;
-  /// Target yang dipegang siklus berjalan saat pengaturan timer diubah, atau
-  /// null kalau tidak ada peringatan yang perlu ditampilkan. Pengaturan baru
-  /// dipakai pada siklus berikutnya (siklus berjalan memegang targetnya
-  /// sendiri), jadi tanpa ini pengguna menunggu dengan angka lama.
   double? _hintTargetLama;
   CloudConfig? _cfg;
   String? _error;
   bool _loading = true;
   bool _remindOn = false;
-  String? _remindSound;      // URI audio pilihan pengguna; null = nada bawaan
+  String? _remindSound;
   bool _remindVibrate = true;
   Duration? _remindLeft;
   bool _exactOk = true;
   Timer? _remindTick;
   bool _polling = false;
   DateTime? _lastSync;
-  // Saat snapshot ini pertama terlihat. Dipisah dari _lastSync: poll 20
-  // detik dan event config bisa mengirim ulang telemetri yang sama, dan
-  // memakai _lastSync sebagai jangkar membuat countdown melompat naik.
   DateTime? _frameAt;
-  // Waktu frame SSE terakhir diterapkan. Poll yang berangkat sebelum ini
-  // membawa data lebih lama, dan menerapkannya memundurkan countdown.
   DateTime? _streamFrameAt;
-  /// Penanda config terpisah: mute/mode dari stream tidak boleh ditimpa poll
-  /// yang berangkat sebelum frame itu tiba.
   DateTime? _cfgFrameAt;
   Timer? _timer;
   StreamSubscription<String>? _streamSub;
@@ -616,9 +609,6 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   String get _base => widget.url;
 
-  /// Dipanggil setelah pengaturan timer (mode atau interval dasar) dikirim.
-  /// Hanya TIMING yang butuh peringatan: di ALERT_*/LIFTED, aksi berikutnya
-  /// (minum, isi ulang, taruh kembali) sudah memulai siklus baru sendiri.
   void _catatUbahTimer() {
     setState(() {
       _hintTargetLama =
@@ -626,8 +616,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
-  /// Melepas peringatan begitu siklus baru benar-benar berjalan, yaitu ketika
-  /// target alat bergeser dari nilai yang dicatat, atau alat keluar dari TIMING.
   void _segarkanHintTimer() {
     final t = _t;
     final lama = _hintTargetLama;
@@ -653,9 +641,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _startPolling() {
-    // SSE dulu: satu request yang tetap terbuka, data berubah seketika tanpa
-    // jeda 2,5 dtk. Poll lambat tetap ada sebagai jaring aman bila stream mati
-    // di jaringan yang memblokir event-stream (mis. proxy kantor).
     _openStream();
     _timer ??= Timer.periodic(_pollInterval, (_) => _poll());
   }
@@ -671,9 +656,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     _streamRetry = null;
   }
 
-  // Stream telemetry: setiap event `put` langsung diterapkan. Token 1 jam
-  // ditangani dengan memperbarui sesi lalu membuka ulang stream — pengguna
-  // tidak perlu masuk lagi.
   Future<void> _openStream() async {
     await _streamSub?.cancel();
     _streamSub = null;
@@ -695,19 +677,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-
-
   final TlmStreamState _stream = TlmStreamState();
   final TlmStreamState _cfgState = TlmStreamState();
   String _streamBuf = '';
-
 
   StreamSubscription<String>? _cfgSub;
   final Map<String, dynamic> _cfgCache = {};
   String _cfgBuf = '';
 
-  /// Stream config terpisah: mute dan mode berasal dari sini, dan UI
-  /// mendahulukan _cfg, jadi tanpa stream ini tombol dari web terlihat basi.
   Future<void> _openCfgStream() async {
     await _cfgSub?.cancel();
     _cfgSub = null;
@@ -722,9 +699,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen(_onCfgLine, cancelOnError: true);
-    } catch (_) {
-      // Poll GET tetap menjadi cadangan.
-    }
+    } catch (_) {}
   }
 
   void _onCfgLine(String line) {
@@ -744,7 +719,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _onStreamLine(String line) {
-    // Blok SSE dipisah baris kosong; event: dan data: bisa lebih dari satu baris.
     if (line.isNotEmpty) {
       _streamBuf += '$line\n';
       return;
@@ -774,10 +748,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     _streamSub = null;
     _streamRetry?.cancel();
     if (!mounted) return;
-    // Simpan timer-nya supaya dispose() benar-benar membatalkan percobaan ulang.
     _streamRetry = Timer(const Duration(milliseconds: 800), () async {
       if (!mounted) return;
-      // Coba segarkan sesi; kalau berhasil, stream dibuka dengan token baru.
       try {
         final renewed = await refreshSession(_session, client: _client);
         if (renewed != null && mounted) setState(() => _session = renewed);
@@ -786,8 +758,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
-  // Ponsel di kantong tidak perlu mengunduh tiap 2,5 detik. Hentikan saat aplikasi
-  // tidak terlihat, dan langsung ambil data segar begitu pengguna kembali.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -818,9 +788,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (_polling) return;
     _polling = true;
     try {
-      // Hanya dua node kecil. Sebelumnya seluruh /smart_coaster ditarik tiap 2,5
-      // detik, termasuk daily/<tanggal> yang tumbuh tanpa batas, padahal _poll()
-      // tidak pernah membacanya. Web sudah memakai pola yang sama.
       final base = _session.coasterUrl(_base);
       final mulai = DateTime.now();
       final results = await Future.wait([
@@ -850,8 +817,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           }
         }
         if (!mounted) return;
-        // Frame SSE yang tiba setelah permintaan berangkat lebih baru daripada
-        // hasil poll. Config tetap dipakai, telemetrinya dibuang.
         final usang = _streamFrameAt != null && _streamFrameAt!.isAfter(mulai);
         final cfgUsang = _cfgFrameAt != null && _cfgFrameAt!.isAfter(mulai);
         setState(() {
@@ -866,9 +831,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           _lastSync = DateTime.now();
         });
         if (!cfgUsang && cMap != null) {
-          // Config hasil poll menjadi patokan merge untuk event patch
-          // berikutnya. Tanpa ini, patch satu bidang bisa memulihkan bidang
-          // lain dari salinan yang lebih tua.
           _cfgCache
             ..clear()
             ..addAll(cMap);
@@ -877,9 +839,6 @@ class _DashboardScreenState extends State<DashboardScreen>
             ..addAll(cMap);
         }
         if (!usang) {
-          // Peta merge untuk event stream harus memuat frame yang sama dengan
-          // _t. Kalau tidak, satu patch sebagian membangun ulang _t dari
-          // snapshot lama dan sisa waktunya mundur.
           _stream.json
             ..clear()
             ..addAll(Map<String, dynamic>.from(tRaw));
@@ -889,7 +848,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           _syncReminderOnData();
         }
       } else {
-        // Node kosong / telemetry belum pernah ditulis firmware.
         if (!mounted) return;
         setState(() {
           _error = null;
@@ -898,9 +856,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
     } catch (e) {
       if (!mounted) return;
-      // Error asli tampil dulu. Perpanjangan token hanya upaya lanjutan: kalau
-      // gagal (jaringan putus, atau plugin prefs tidak ada di test), pengguna
-      // tetap melihat penyebab sebenarnya, bukan dashboard basi tanpa pesan.
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -908,9 +863,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       try {
         final renewed = await refreshSession(_session, client: _client);
         if (renewed != null && mounted) setState(() => _session = renewed);
-      } catch (_) {
-        // perpanjangan gagal; error asli sudah ditampilkan dan timer poll mencoba lagi
-      }
+      } catch (_) {}
     } finally {
       _polling = false;
     }
@@ -933,8 +886,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  /// Sesi bergiliran, sama seperti web: owner berubah membuat alat mereset
-  /// statistik, dan active:false membuat alat tidur sampai sesi berikutnya.
   Future<bool> _setSession({required String ownerUid, required bool active}) async {
     try {
       final res = await _client
@@ -954,18 +905,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  /// Konfirmasi mode sebelum sesi dibuka: orang yang baru menyalakan alat tidak
-  /// perlu tahu di mana tombol mode berada.
   Future<void> _mulaiSesi() async {
     final pilih = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: _panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
               child: Text(
                   'Pilih mode timer dulu. Pilihan ini yang dipakai alat selama sesi berjalan.',
                   style: _monoStyle(12, color: _dim)),
@@ -976,17 +928,15 @@ class _DashboardScreenState extends State<DashboardScreen>
               ('MANUAL', 'Manual tetap'),
             ])
               ListTile(
-                title: Text(opt.$2, style: _monoStyle(13, color: _ink)),
+                title: Text(opt.$2, style: _monoStyle(13, color: _ink, weight: FontWeight.w500)),
                 onTap: () => Navigator.pop(ctx, opt.$1),
               ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
           ],
         ),
       ),
     );
     if (pilih == null || !mounted) return;
-    // Mode dikirim lebih dulu supaya alat sudah memakai target yang benar saat
-    // siklus pertama dimulai.
     await _setMode(pilih);
     final ok = await _setSession(ownerUid: _session.uid, active: true);
     if (!mounted) return;
@@ -1054,7 +1004,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       case 'ALERT_REFILL':
         return _warn;
       default:
-        return _dim; // IDLE, LIFTED
+        return _dim;
     }
   }
 
@@ -1085,9 +1035,15 @@ class _DashboardScreenState extends State<DashboardScreen>
             : _dim;
 
     return Scaffold(
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _panel2,
+        backgroundColor: _panel,
         surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: _line, height: 1),
+        ),
         titleSpacing: 16,
         title: Row(
           children: [
@@ -1104,10 +1060,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 maxLines: 1,
                 style: TextStyle(
                     fontFamily: _display,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                     color: _ink,
-                    letterSpacing: .2)),
+                    letterSpacing: .1)),
             ),
           ],
         ),
@@ -1127,111 +1083,119 @@ class _DashboardScreenState extends State<DashboardScreen>
             await _poll();
             await _syncReminder();
           },
-          child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _syncLine(),
-              const SizedBox(height: 12),
-              if (_loading)
-                _card(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 40),
-                    child: Column(
-                      children: [
-                        const CircularProgressIndicator(color: _water),
-                        const SizedBox(height: 16),
-                        Text('Menghubungkan ke Firebase…',
-                            style: _monoStyle(12)),
-                      ],
-                    ),
-                  ),
-                )
-              else if (t == null)
-                _card(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Column(
-                      children: [
-                        Icon(
-                          _error != null
-                              ? Icons.cloud_off
-                              : Icons.hourglass_empty,
-                          color: _error != null ? _alarm : _dim,
-                          size: 32,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _error != null
-                              ? 'Gagal membaca cloud:\n$_error'
-                              : 'Belum ada data telemetry.\n'
-                                  'Pastikan ESP32 menyala dan terhubung Wi-Fi 2,4 GHz.',
-                          textAlign: TextAlign.center,
-                          style: _monoStyle(12, color: _ink),
-                        ),
-                        const SizedBox(height: 16),
-                        OutlinedButton(
-                          onPressed: _poll,
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: _line),
-                            minimumSize: const Size(160, 44),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _syncLine(),
+                    const SizedBox(height: 14),
+                    if (_loading)
+                      _card(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Column(
+                            children: [
+                              const CircularProgressIndicator(color: _water),
+                              const SizedBox(height: 16),
+                              Text('Menghubungkan ke Firebase…',
+                                  style: _monoStyle(12, color: _dim)),
+                            ],
                           ),
-                          child: Text('Coba lagi',
-                              style: _monoStyle(12, color: _water)),
                         ),
+                      )
+                    else if (t == null)
+                      _card(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Column(
+                            children: [
+                              Icon(
+                                _error != null
+                                    ? Icons.cloud_off
+                                    : Icons.hourglass_empty,
+                                color: _error != null ? _alarm : _dim,
+                                size: 36,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _error != null
+                                    ? 'Gagal membaca cloud:\n$_error'
+                                    : 'Belum ada data telemetry.\n'
+                                        'Pastikan ESP32 menyala dan terhubung Wi-Fi 2,4 GHz.',
+                                textAlign: TextAlign.center,
+                                style: _monoStyle(12, color: _ink),
+                              ),
+                              const SizedBox(height: 16),
+                              OutlinedButton(
+                                onPressed: _poll,
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: _line),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  minimumSize: const Size(160, 44),
+                                ),
+                                child: Text('Coba lagi',
+                                    style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else ...[
+                      _glassCard(t),
+                      const SizedBox(height: 14),
+                      _badgeCard(t, reduceMotion),
+                      const SizedBox(height: 14),
+                      _countdownCard(t),
+                      const SizedBox(height: 14),
+                      _goalCard(t),
+                      const SizedBox(height: 14),
+                      _reminderCard(),
+                      const SizedBox(height: 14),
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: _envChip('Suhu', t.tempC, ' °C')),
+                            const SizedBox(width: 14),
+                            Expanded(
+                                child: _envChip('Kelembapan', t.humidityPct, ' %')),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _dailyCard(t),
+                      if (_history.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        _historyCard(),
                       ],
-                    ),
-                  ),
-                )
-              else ...[
-                _glassCard(t),
-                const SizedBox(height: 12),
-                _badgeCard(t, reduceMotion),
-                const SizedBox(height: 12),
-                _countdownCard(t),
-                const SizedBox(height: 12),
-                _goalCard(t),
-                const SizedBox(height: 12),
-                _reminderCard(),
-                const SizedBox(height: 12),
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: _envChip('Suhu', t.tempC, ' °C')),
-                      const SizedBox(width: 12),
-                      Expanded(
-                          child: _envChip('Kelembapan', t.humidityPct, ' %')),
+                      const SizedBox(height: 14),
+                      _controlsCard(),
+                      const SizedBox(height: 14),
+                      Text(
+                        'RTDB: ${Uri.parse(_base).host} · stream langsung · '
+                        'skala gelas tampilan ${_glassDisplayMl.toInt()} ml.',
+                        style: _monoStyle(11, color: _dim),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
                     ],
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                _dailyCard(t),
-                const SizedBox(height: 12),
-                _historyCard(),
-                _controlsCard(),
-                const SizedBox(height: 12),
-                Text(
-                  'RTDB: ${Uri.parse(_base).host} · stream langsung · '
-                  'skala gelas tampilan ${_glassDisplayMl.toInt()} ml.',
-                  style: _monoStyle(11, color: _dim),
-                ),
-              ],
-            ],
-          ),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
-
   // ── Pengingat minum ───────────────────────────────────────────────────────
-  // Pengingat dijadwalkan ulang setiap kali sisa waktu dari alat berubah, supaya
-  // alarm di ponsel mengikuti jadwal alat — bukan tebakan jam sendiri. Nilai
-  // disimpan di SharedPreferences agar tetap berlaku setelah aplikasi ditutup.
+
   Future<void> _loadReminder() async {
     final prefs = await SharedPreferences.getInstance();
     _remindOn = prefs.getBool('remind_on') ?? false;
@@ -1245,9 +1209,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     _startRemindTick();
   }
 
-  /// Sisa waktu yang benar-benar berjalan. Alat hanya mengirim snapshot
-  /// saat ada perubahan lain atau heartbeat, jadi angka mentah membeku lalu
-  /// melompat. Kurangi sendiri dengan waktu sejak snapshot tiba.
   int _liveRemaining(Telemetry t) {
     final at = _frameAt ?? _lastSync;
     if (at == null) return t.remainingSec;
@@ -1255,8 +1216,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     return rem < 0 ? 0 : rem;
   }
 
-  /// Apakah snapshot ini benar-benar baru. Counter hb adalah penanda yang
-  /// pasti; firmware lama tanpa hb dinilai dari sisa waktu yang naik.
   bool _frameIsNew(Telemetry t) {
     final prev = _t;
     if (prev == null) return true;
@@ -1271,8 +1230,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     _remindTick = Timer.periodic(const Duration(seconds: 1), (_) async {
       final left = await ReminderService.timeLeft();
       if (!mounted) return;
-      // Digambar ulang tiap detik: kartu sisa waktu menghitung sendiri dari
-      // snapshot terakhir, jadi angkanya harus ikut berjalan.
       setState(() => _remindLeft = left);
     });
   }
@@ -1288,11 +1245,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  /// Menjadwalkan alarm mengikuti sisa waktu yang dilaporkan alat. Dipanggil saat
-  /// data masuk dan saat pengguna menyalakan pengingat.
-
-  // Jadwal alarm dibandingkan lewat deadline absolut; aturannya ada di
-  // ReminderPlan/shouldScheduleReminder agar bisa diuji tanpa widget.
   ReminderPlan? _plan;
 
   void _syncReminderOnData() {
@@ -1324,8 +1276,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
     final t = _t;
     if (t == null) return;
-    // Tanpa sisa waktu tidak ada yang bisa dijadwalkan; alarm yang sudah ada
-    // dibatalkan supaya tidak berbunyi di waktu yang tidak lagi berlaku.
     final rem = _liveRemaining(t);
     if (rem <= 0) {
       await ReminderService.cancel();
@@ -1342,8 +1292,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _toggleRemind(bool on) async {
     HapticFeedback.selectionClick();
     if (on) {
-      // Izin notifikasi diminta di sini, saat pengguna jelas meminta pengingat.
-      // Tanpa izin, alarm berbunyi tanpa apa pun yang terlihat di layar.
       final allowed = await ReminderService.requestNotificationPermission();
       if (!allowed && mounted) {
         setState(() => _remindOn = false);
@@ -1368,9 +1316,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     final files = await FilePicker.pickFiles(type: FileType.audio);
     final picked = files.isEmpty ? null : files.first.path;
     if (picked == null) return;
-    // URI content:// dari pemilih Android hanya bisa dibaca selama izin sementara
-    // berlaku; alarm berbunyi berjam-jam kemudian, jadi berkasnya disalin dulu ke
-    // penyimpanan aplikasi. Tanpa salinan, alarm akan senyap.
     final dir = await getApplicationDocumentsDirectory();
     final ext = picked.contains('.') ? picked.split('.').last : 'audio';
     final dest = File('${dir.path}/remind_sound.$ext');
@@ -1401,9 +1346,13 @@ class _DashboardScreenState extends State<DashboardScreen>
           children: [
             Row(
               children: [
-                Text('Pengingat minum', style: _monoStyle(11)),
+                Text('Pengingat minum', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
                 const Spacer(),
-                Switch(value: _remindOn, onChanged: _toggleRemind),
+                Switch(
+                  value: _remindOn,
+                  activeThumbColor: _water,
+                  onChanged: _toggleRemind,
+                ),
               ],
             ),
             const SizedBox(height: 4),
@@ -1413,14 +1362,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ? 'Berbunyi dalam ${Telemetry.mmss(_remindLeft!.inSeconds)}'
                       : 'Menunggu jadwal dari alat…')
                   : 'Nonaktif',
-              style: _monoStyle(12, color: _remindOn ? _water : _dim),
+              style: _monoStyle(12, color: _remindOn ? _water : _dim, weight: FontWeight.w600),
             ),
             if (_remindOn) ...[
               const SizedBox(height: 10),
               Text(_remindSound == null
                       ? 'Nada: bawaan'
                       : 'Nada: ${_shortPath(_remindSound!)}',
-                  style: _monoStyle(11), overflow: TextOverflow.ellipsis),
+                  style: _monoStyle(11, color: _dim), overflow: TextOverflow.ellipsis),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -1429,25 +1378,28 @@ class _DashboardScreenState extends State<DashboardScreen>
                   OutlinedButton(
                     onPressed: _pickSound,
                     style: _reminderBtn(),
-                    child: Text('Pilih audio', style: _monoStyle(11, color: _water)),
+                    child: Text('Pilih audio', style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
                   ),
                   OutlinedButton(
                     onPressed: _useDefaultSound,
                     style: _reminderBtn(),
-                    child: Text('Nada bawaan', style: _monoStyle(11, color: _water)),
+                    child: Text('Nada bawaan', style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
                   ),
                   OutlinedButton(
                     onPressed: () => ReminderService.preview(_remindSound),
                     style: _reminderBtn(),
-                    child: Text('Uji', style: _monoStyle(11, color: _water)),
+                    child: Text('Uji', style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
                   ),
                 ],
               ),
+              const SizedBox(height: 6),
               Row(
                 children: [
-                  Text('Getar', style: _monoStyle(11)),
+                  Text('Getar', style: _monoStyle(11, color: _dim)),
+                  const Spacer(),
                   Switch(
                     value: _remindVibrate,
+                    activeThumbColor: _water,
                     onChanged: (v) async {
                       setState(() => _remindVibrate = v);
                       await _saveReminderPrefs();
@@ -1472,7 +1424,8 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   ButtonStyle _reminderBtn() => OutlinedButton.styleFrom(
         side: const BorderSide(color: _line),
-        minimumSize: const Size(0, 44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        minimumSize: const Size(0, 40),
         padding: const EdgeInsets.symmetric(horizontal: 12),
       );
 
@@ -1481,31 +1434,21 @@ class _DashboardScreenState extends State<DashboardScreen>
     return name.length > 28 ? '…${name.substring(name.length - 26)}' : name;
   }
 
-  // Firmware menaikkan `hb` tiap push. Angka berat dan suhu bisa identik
-  // antar-kiriman, jadi hanya counter ini yang membedakan alat diam dari mati.
   int? _lastHb;
   DateTime? _lastHbAt;
 
   void _trackHeartbeat(Telemetry t) {
-    if (t.heartbeat == 0) return; // firmware lama: belum mengirim hb
+    if (t.heartbeat == 0) return;
     if (t.heartbeat != _lastHb) {
       _lastHb = t.heartbeat;
       _lastHbAt = DateTime.now();
     }
   }
 
-
-  // Riwayat harian: klien cloud (web) menulis /daily/<tanggal> saat statistik
-  // berubah; alat tidak bisa menulisnya karena tidak punya jam. App memuatnya
-  // saat dashboard dibuka, lalu memuat ulang saat jumlah tegukan berubah —
-  // sekali saja tidak cukup: daftar yang dibuka sebelum web sempat menulis
-  // tidak pernah terisi sampai aplikasi dijalankan ulang.
   List<MapEntry<String, Map<String, dynamic>>> _history = const [];
   bool _historyLoading = false;
   int? _historyDrinks;
 
-  /// Muat ulang hanya saat ada tegukan baru: node ini hanya berubah pada
-  /// peristiwa itu, dan memuatnya tiap detak poll membuang kuota.
   void _maybeReloadHistory(Telemetry t) {
     if (_historyDrinks == t.drinkCount) return;
     final pertama = _historyDrinks == null;
@@ -1531,17 +1474,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (!mounted) return;
       setState(() => _history = entries.take(7).toList());
     } catch (_) {
-      // Riwayat tidak wajib: dashboard tetap jalan tanpa node ini.
     } finally {
       _historyLoading = false;
     }
   }
 
-
-  // ── Target harian ─────────────────────────────────────────────────────────
-  // Alat tidak punya jam (tanpa NTP): angka dari alat kumulatif sejak reset
-  // manual. "Hari ini" = selisih terhadap nilai saat tanggal berganti, disimpan
-  // di perangkat. Tanpa baseline, hari baru langsung terisi semua air kemarin.
   int _goalMl = 2000;
   DateTime? _dayKey;
   double _dayBaseMl = 0;
@@ -1574,19 +1511,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     _dayBaseDrink = drink;
   }
 
-  /// Angka harian. Baseline dipasang ulang saat tanggal berganti atau saat
-  /// hitungan alat turun (reset statistik di alat), supaya selisih tidak negatif.
   double _computeDayMl(Telemetry t) {
     final turun = t.totalMl < _dayBaseMl || t.drinkCount < _dayBaseDrink;
     if (_dayKey == null || turun) {
-      // Baseline baru dipasang pada nilai saat ini, jadi hari ini dimulai dari
-      // nol. Mengembalikan totalMl di sini akan mengklaim semua air yang diminum
-      // berhari-hari lalu sebagai milik hari ini.
-      //
-      // Batas yang disadari: alat tidak punya jam, jadi aplikasi yang tertutup
-      // semalaman tidak tahu angka alat saat tengah malam. Air yang diminum pagi
-      // ini sebelum aplikasi dibuka karena itu tidak bisa dipisahkan dan tidak
-      // ikut terhitung. Kasus itu diberitahukan ke pengguna, bukan disembunyikan.
       _setDayFresh(_dayKey == null && !turun && t.totalMl > 0);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _saveDayBase(t.totalMl, t.drinkCount);
@@ -1597,10 +1524,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     return (t.totalMl - _dayBaseMl).clamp(0, double.infinity).toDouble();
   }
 
-  /// Penanda catatan "hari baru": dipasang hanya saat angkanya memang tidak bisa
-  /// dihitung penuh, jadi catatan tidak muncul pada hari yang baseline-nya sudah
-  /// ada. Perubahan penanda butuh setState: _computeDayMl dipanggil dari jalur
-  /// stream di luar setState.
   void _setDayFresh(bool nilai) {
     if (_dayFresh == nilai) return;
     _dayFresh = nilai;
@@ -1621,18 +1544,25 @@ class _DashboardScreenState extends State<DashboardScreen>
         children: [
           Row(
             children: [
-              Text('Hari ini', style: _monoStyle(11)),
+              Text('Hari ini', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
               const Spacer(),
-              Text('${(pct * 100).round()}%  ${ml.toStringAsFixed(0)} / $_goalMl ml',
-                  style: _monoStyle(11, color: _water)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _water.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('${(pct * 100).round()}%  ${ml.toStringAsFixed(0)} / $_goalMl ml',
+                    style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
+              ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: pct,
-              minHeight: 8,
+              minHeight: 10,
               backgroundColor: _panel2,
               valueColor: const AlwaysStoppedAnimation(_water),
             ),
@@ -1655,17 +1585,24 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Riwayat', style: _monoStyle(11, color: _dim)),
-          const SizedBox(height: 8),
+          Text('Riwayat', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
+          const SizedBox(height: 10),
           for (final e in _history)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
                   Expanded(child: Text(e.key, style: _monoStyle(12, color: _ink))),
-                  Text(
-                    '${(e.value['total_ml'] as num? ?? 0).toStringAsFixed(1)} ml',
-                    style: _monoStyle(12, color: _water),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _water.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${(e.value['total_ml'] as num? ?? 0).toStringAsFixed(1)} ml',
+                      style: _monoStyle(12, color: _water, weight: FontWeight.w600),
+                    ),
                   ),
                 ],
               ),
@@ -1678,48 +1615,70 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _syncLine() {
     final stale = _lastHbAt != null &&
         DateTime.now().difference(_lastHbAt!).inSeconds > 90;
-    return Row(
-      children: [
-        Text('CLOUD',
-            style: _monoStyle(11, color: stale ? _alarm : _water)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            stale
-                ? 'Alat tidak mengirim data (${DateTime.now().difference(_lastHbAt!).inSeconds} detik)'
-                : _lastSync == null
-                    ? 'menunggu sinkron pertama…'
-                    : 'sinkron ${TimeOfDay.fromDateTime(_lastSync!).format(context)}',
-            style: _monoStyle(11, color: stale ? _alarm : _ink),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _line),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x050F172A),
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
-        ),
-      ],
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: (stale ? _alarm : _water).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text('CLOUD',
+                style: _monoStyle(10, color: stale ? _alarm : _water, weight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              stale
+                  ? 'Alat tidak mengirim data (${DateTime.now().difference(_lastHbAt!).inSeconds} detik)'
+                  : _lastSync == null
+                      ? 'menunggu sinkron pertama…'
+                      : 'sinkron ${TimeOfDay.fromDateTime(_lastSync!).format(context)}',
+              style: _monoStyle(11, color: stale ? _alarm : _ink),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _card({required Widget child}) => Container(
+  Widget _card({required Widget child, EdgeInsetsGeometry? padding, Color? color}) => Container(
         decoration: BoxDecoration(
-          color: _panel,
+          color: color ?? _panel,
           border: Border.all(color: _line),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: _cardShadow,
         ),
-        padding: const EdgeInsets.all(16),
+        padding: padding ?? const EdgeInsets.all(18),
         child: child,
       );
 
   Widget _glassCard(Telemetry t) {
-    final fill =
-        (t.waterMl / _glassDisplayMl).clamp(0.0, 1.0);
+    final fill = (t.waterMl / _glassDisplayMl).clamp(0.0, 1.0);
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               SizedBox(
                 width: 110,
-                height: 150,
+                height: 156,
                 child: CustomPaint(
                   painter: _GlassPainter(
                     fill: fill,
@@ -1729,34 +1688,49 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                 ),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 20),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Berat', style: _monoStyle(11)),
-                    const SizedBox(height: 4),
-                    Text(t.weightG.toStringAsFixed(1),
-                        style: _monoStyle(34,
-                            color: _ink, weight: FontWeight.w600)),
-                    Text('gram', style: _monoStyle(11)),
+                    Text('Berat', style: _monoStyle(11, color: _dim)),
+                    const SizedBox(height: 2),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(t.weightG.toStringAsFixed(1),
+                            style: _monoStyle(34,
+                                color: _ink, weight: FontWeight.w700)),
+                        const SizedBox(width: 4),
+                        Text('gram', style: _monoStyle(11, color: _dim)),
+                      ],
+                    ),
                     const SizedBox(height: 14),
-                    Text('Air terdeteksi', style: _monoStyle(11)),
-                    const SizedBox(height: 4),
+                    Text('Air terdeteksi', style: _monoStyle(11, color: _dim)),
+                    const SizedBox(height: 2),
                     Text('${t.waterMl.toStringAsFixed(0)} ml',
-                        style: _monoStyle(15, color: _water)),
-                    const SizedBox(height: 14),
-                    if (!t.cupPresent)
-                      Text('Gelas tidak di tatakan',
-                          style: _monoStyle(11, color: _warn)),
+                        style: _monoStyle(18, color: _water, weight: FontWeight.w600)),
+                    if (!t.cupPresent) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _warn.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('Gelas tidak di tatakan',
+                            style: _monoStyle(11, color: _warn, weight: FontWeight.w600)),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text('Skala gelas tampilan: ${_glassDisplayMl.toInt()} ml',
-              style: _monoStyle(11)),
+              style: _monoStyle(11, color: _dim)),
         ],
       ),
     );
@@ -1775,9 +1749,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           decoration: BoxDecoration(
             color: _panel,
             border: Border.all(color: c, width: 2),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: _cardShadow,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1785,7 +1760,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   style: TextStyle(
                       fontFamily: _display,
                       fontSize: 24,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                       color: color,
                       letterSpacing: .4)),
               const SizedBox(height: 4),
@@ -1801,8 +1776,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     final targetSec = (t.targetIntervalMin * 60).round();
     final timing = t.canonicalState == 'TIMING';
     final rem = _liveRemaining(t);
-    // Sisa 0 saat timer belum mulai bukan berarti waktunya habis: tanpa
-    // gerbang ini bar terlihat penuh dan seolah alarm sudah lewat.
     final progress = (timing && targetSec > 0)
         ? (1 - rem / targetSec).clamp(0.0, 1.0)
         : 0.0;
@@ -1813,21 +1786,29 @@ class _DashboardScreenState extends State<DashboardScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('Sisa waktu', style: _monoStyle(11)),
+              Text('Sisa waktu', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
               const Spacer(),
-              Text('target ${_fmtTargetMnt(t.targetIntervalMin)}',
-                  style: _monoStyle(11)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _panel2,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _line),
+                ),
+                child: Text('target ${_fmtTargetMnt(t.targetIntervalMin)}',
+                    style: _monoStyle(11, color: _dim)),
+              ),
             ],
           ),
           const SizedBox(height: 6),
           Text(timing ? Telemetry.mmss(rem) : '--:--',
-              style: _monoStyle(34, color: _ink, weight: FontWeight.w600)),
+              style: _monoStyle(36, color: _ink, weight: FontWeight.w700)),
           const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 8,
+              minHeight: 10,
               backgroundColor: _panel2,
               valueColor: const AlwaysStoppedAnimation(_water),
             ),
@@ -1838,13 +1819,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _envChip(String label, double value, String unit) => _card(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: _monoStyle(11)),
+            Text(label, style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
             const SizedBox(height: 6),
             Text('${value.toStringAsFixed(1)}$unit',
-                style: _monoStyle(20, color: _ink, weight: FontWeight.w600)),
+                style: _monoStyle(22, color: _ink, weight: FontWeight.w700)),
           ],
         ),
       );
@@ -1856,44 +1838,45 @@ class _DashboardScreenState extends State<DashboardScreen>
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('Akumulasi sesi', style: _monoStyle(11)),
+                Text('Akumulasi sesi', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
                 const Spacer(),
                 Text('${t.totalMl.toStringAsFixed(1)} ml',
-                    style: _monoStyle(20, color: _water, weight: FontWeight.w600)),
+                    style: _monoStyle(20, color: _water, weight: FontWeight.w700)),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Row(
               children: [
-                _countCell('Minum', '${t.drinkCount}', _ok),
+                _countCell('Minum', '${t.drinkCount}', _ok, isFirst: true),
                 _countCell('Isi ulang', '${t.refillCount}', _water),
-                _countCell('Tegukan kecil', '${t.cheatCount}', _alarm),
+                _countCell('Tegukan kecil', '${t.cheatCount}', _alarm, isLast: true),
               ],
             ),
           ],
         ),
       );
 
-  // Tanpa Semantics, pembaca layar membacakan angka dan label sebagai dua teks
-  // lepas tanpa hubungan. Label gabungan membuat satu sel terbaca utuh.
-  Widget _countCell(String label, String value, Color color) => Expanded(
+  Widget _countCell(String label, String value, Color color, {bool isFirst = false, bool isLast = false}) => Expanded(
         child: Semantics(
           label: '$label: $value',
           excludeSemantics: true,
           child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            margin: EdgeInsets.only(
+              left: isFirst ? 0 : 4,
+              right: isLast ? 0 : 4,
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
               color: _panel2,
               border: Border.all(color: _line),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Column(
               children: [
                 Text(value,
-                    style: _monoStyle(18, color: color, weight: FontWeight.w600)),
+                    style: _monoStyle(20, color: color, weight: FontWeight.w700)),
                 const SizedBox(height: 2),
-                Text(label, style: _monoStyle(11)),
+                Text(label, style: _monoStyle(11, color: _dim)),
               ],
             ),
           ),
@@ -1908,13 +1891,21 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Kontrol', style: _monoStyle(11, color: _water)),
+          Text('Kontrol', style: _monoStyle(11, color: _water, weight: FontWeight.w700)),
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: Text('Buzzer', style: _monoStyle(12, color: _ink))),
-              Text(muted ? 'OFF' : 'ON',
-                  style: _monoStyle(11, color: muted ? _warn : _ok)),
+              Expanded(child: Text('Buzzer', style: _monoStyle(13, color: _ink, weight: FontWeight.w500))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (muted ? _warn : _ok).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(muted ? 'OFF' : 'ON',
+                    style: _monoStyle(11, color: muted ? _warn : _ok, weight: FontWeight.w700)),
+              ),
+              const SizedBox(width: 8),
               Switch(
                 value: muted,
                 activeThumbColor: _water,
@@ -1922,8 +1913,8 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ],
           ),
-          const Divider(color: _line, height: 20),
-          Text('Mode timer', style: _monoStyle(12, color: _ink)),
+          const Divider(color: _line, height: 24),
+          Text('Mode timer', style: _monoStyle(12, color: _ink, weight: FontWeight.w600)),
           const SizedBox(height: 8),
           SegmentedButton<String>(
             segments: const [
@@ -1940,7 +1931,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             selected: {mode},
             style: ButtonStyle(
               backgroundColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected) ? _water.withValues(alpha: 0.18) : _panel2),
+                  states.contains(WidgetState.selected) ? _water.withValues(alpha: 0.12) : _panel2),
               foregroundColor: WidgetStateProperty.resolveWith((states) =>
                   states.contains(WidgetState.selected) ? _water : _dim),
               side: WidgetStateProperty.all(const BorderSide(color: _line)),
@@ -1948,7 +1939,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             onSelectionChanged: (s) => _setMode(s.first),
           ),
           if (mode == 'MANUAL') ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
@@ -1959,11 +1950,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                     decoration: InputDecoration(
                       isDense: true,
                       labelText: 'Interval dasar (menit)',
-                      labelStyle: _monoStyle(11),
-                      enabledBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: _line)),
-                      focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: _water, width: 2)),
+                      labelStyle: _monoStyle(11, color: _dim),
+                      filled: true,
+                      fillColor: _panel2,
+                      enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: _line)),
+                      focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: _water, width: 2)),
                     ),
                   ),
                 ),
@@ -1972,14 +1967,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                   onPressed: _sendInterval,
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: _line),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     minimumSize: const Size(88, 44),
                   ),
-                  child: Text('Kirim', style: _monoStyle(12, color: _water)),
+                  child: Text('Kirim', style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
                 ),
               ],
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
@@ -1990,11 +1986,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                   decoration: InputDecoration(
                     isDense: true,
                     labelText: 'Berat gelas kosong (g)',
-                    labelStyle: _monoStyle(11),
-                    enabledBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _line)),
-                    focusedBorder: const OutlineInputBorder(
-                        borderSide: BorderSide(color: _water, width: 2)),
+                    labelStyle: _monoStyle(11, color: _dim),
+                    filled: true,
+                    fillColor: _panel2,
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _line)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _water, width: 2)),
                   ),
                 ),
               ),
@@ -2003,9 +2003,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                 onPressed: _sendEmptyCup,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: _line),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   minimumSize: const Size(88, 44),
                 ),
-                child: Text('Simpan', style: _monoStyle(12, color: _water)),
+                child: Text('Simpan', style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
               ),
             ],
           ),
@@ -2016,8 +2017,8 @@ class _DashboardScreenState extends State<DashboardScreen>
               style: _monoStyle(11, color: _warn),
             ),
           ],
-          const Divider(color: _line, height: 20),
-          Text('Sesi', style: _monoStyle(12, color: _ink)),
+          const Divider(color: _line, height: 24),
+          Text('Sesi', style: _monoStyle(12, color: _ink, weight: FontWeight.w600)),
           const SizedBox(height: 8),
           if (_t?.standby == true)
             Padding(
@@ -2032,9 +2033,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                   onPressed: _mulaiSesi,
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: _line),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     minimumSize: const Size(0, 44),
                   ),
-                  child: Text('Mulai sesi', style: _monoStyle(12, color: _water)),
+                  child: Text('Mulai sesi', style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -2043,9 +2045,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                   onPressed: _akhiriSesi,
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: _line),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     minimumSize: const Size(0, 44),
                   ),
-                  child: Text('Akhiri sesi', style: _monoStyle(12, color: _dim)),
+                  child: Text('Akhiri sesi', style: _monoStyle(12, color: _dim, weight: FontWeight.w500)),
                 ),
               ),
             ],
@@ -2054,14 +2057,14 @@ class _DashboardScreenState extends State<DashboardScreen>
           Text('Kalibrasi bobot kosong dapat disimpan via cloud atau USB.',
               style: _monoStyle(11, color: _dim)),
           if (widget.onClaimDevice != null) ...[
-            const Divider(color: _line, height: 20),
-            Text('Alat', style: _monoStyle(12, color: _ink)),
+            const Divider(color: _line, height: 24),
+            Text('Alat', style: _monoStyle(12, color: _ink, weight: FontWeight.w600)),
             const SizedBox(height: 2),
             Text(
               _session.hasDevice
                   ? 'tertaut: ${_session.deviceUid}'
                   : 'belum tertaut ke alat',
-              style: _monoStyle(11, color: _session.hasDevice ? _ok : _warn),
+              style: _monoStyle(11, color: _session.hasDevice ? _ok : _warn, weight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
             Align(
@@ -2070,11 +2073,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                 onPressed: widget.onClaimDevice,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: _line),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   minimumSize: const Size(0, 44),
                 ),
                 child: Text(_session.hasDevice ? 'Ganti alat' : 'Tautkan alat',
-                    style: _monoStyle(12, color: _water)),
+                    style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
               ),
             ),
           ],
@@ -2085,8 +2089,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 }
 
 // ── Layar klaim alat ────────────────────────────────────────────────────────
-// Kode 8 karakter dibaca dari Serial Monitor alat, lalu ditukar jadi tautan supaya akun
-// ini boleh membaca node alat. Sama seperti alur di web/login.html.
+
 class ClaimScreen extends StatefulWidget {
   final String url;
   final AuthSession session;
@@ -2124,107 +2127,232 @@ class _ClaimScreenState extends State<ClaimScreen> {
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: _bg,
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-            children: [
-              Text('Tautkan alat',
-                  style: TextStyle(fontFamily: _display, fontSize: 30,
-                      fontWeight: FontWeight.w500, color: _ink, height: 1.15)),
-              const SizedBox(height: 10),
-              Text('Masukkan kode 8 karakter dari alat.',
-                  style: _monoStyle(12, color: _ink)),
-              const SizedBox(height: 6),
-              // Tatakan tidak punya layar. Kode hanya dicetak firmware ke Serial,
-              // jadi arahkan ke sana daripada mencari tampilan yang tidak ada.
-              Text('Masukkan 8 karakter kode alat dari stiker perangkat atau log koneksi. '
-                  'Kode yang sama dapat digunakan di aplikasi web.',
-                  style: _monoStyle(11, color: _dim)),
-              const SizedBox(height: 28),
-              TextField(
-                controller: _code,
-                textCapitalization: TextCapitalization.characters,
-                textInputAction: TextInputAction.go,
-                onSubmitted: (_) => _submit(),
-                maxLength: 8,
-                style: _monoStyle(20, color: _ink, weight: FontWeight.w600),
-                decoration: InputDecoration(
-                  counterText: '',
-                  hintText: 'A1B2C3D4',
-                  hintStyle: _monoStyle(20, color: _dim),
-                  enabledBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: _line)),
-                  focusedBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: _water, width: 2)),
-                  errorText: _error,
-                  errorStyle: _monoStyle(11, color: _alarm),
-                ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _panel,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _line),
+                      boxShadow: _cardShadow,
+                    ),
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('Tautkan alat',
+                            style: TextStyle(fontFamily: _display, fontSize: 28,
+                                fontWeight: FontWeight.w600, color: _ink, height: 1.15)),
+                        const SizedBox(height: 10),
+                        Text('Masukkan kode 8 karakter dari alat.',
+                            style: _monoStyle(12, color: _ink, weight: FontWeight.w500)),
+                        const SizedBox(height: 6),
+                        Text('Masukkan 8 karakter kode alat dari stiker perangkat atau log koneksi. '
+                            'Kode yang sama dapat digunakan di aplikasi web.',
+                            style: _monoStyle(11, color: _dim)),
+                        const SizedBox(height: 24),
+                        TextField(
+                          controller: _code,
+                          textCapitalization: TextCapitalization.characters,
+                          textInputAction: TextInputAction.go,
+                          onSubmitted: (_) => _submit(),
+                          maxLength: 8,
+                          style: _monoStyle(22, color: _ink, weight: FontWeight.w700),
+                          decoration: InputDecoration(
+                            counterText: '',
+                            hintText: 'A1B2C3D4',
+                            hintStyle: _monoStyle(22, color: _dim.withValues(alpha: 0.5)),
+                            filled: true,
+                            fillColor: _panel2,
+                            enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: _line)),
+                            focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(color: _water, width: 2)),
+                            errorText: _error,
+                            errorStyle: _monoStyle(11, color: _alarm),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: _busy ? null : _submit,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _water,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: Text(_busy ? 'Menautkan…' : 'Tautkan',
+                                style: _monoStyle(13, color: Colors.white, weight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text('Sudah ditautkan di perangkat lain? Cukup masukkan kodenya sekali lagi.',
+                            style: _monoStyle(11, color: _dim), textAlign: TextAlign.center),
+                        if (widget.onCancel != null) ...[
+                          const SizedBox(height: 16),
+                          TextButton(
+                            onPressed: _busy ? null : widget.onCancel,
+                            child: Text('Lewati untuk sekarang',
+                                style: _monoStyle(12, color: _dim)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 48,
-                child: FilledButton(
-                  onPressed: _busy ? null : _submit,
-                  style: FilledButton.styleFrom(backgroundColor: _water),
-                  child: Text(_busy ? 'Menautkan…' : 'Tautkan',
-                      style: _monoStyle(13, color: _bg, weight: FontWeight.w600)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text('Sudah ditautkan di perangkat lain? Cukup masukkan kodenya sekali lagi.',
-                  style: _monoStyle(11, color: _dim)),
-              if (widget.onCancel != null) ...[
-                const SizedBox(height: 24),
-                TextButton(
-                  onPressed: _busy ? null : widget.onCancel,
-                  child: Text('Lewati untuk sekarang',
-                      style: _monoStyle(11, color: _dim)),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       );
 }
 
-// ── Gelas: outline + kolom air proporsional water_ml ────────────────────────
+// ── Gelas: Nordic tumbler visualizer + coaster pedestal ─────────────────────
 
 class _GlassPainter extends CustomPainter {
   final double fill; // 0..1
   final bool present;
   final Color water;
   final Color line;
-  _GlassPainter(
-      {required this.fill,
-      required this.present,
-      required this.water,
-      required this.line});
+
+  _GlassPainter({
+    required this.fill,
+    required this.present,
+    required this.water,
+    required this.line,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final inset = 8.0;
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(inset, inset, w - inset * 2, h - inset * 2),
-      const Radius.circular(10),
+
+    // Coaster pedestal di bagian bawah
+    final coasterRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(w * 0.08, h - 14, w * 0.84, 8),
+      const Radius.circular(4),
+    );
+    final coasterPaint = Paint()
+      ..color = present ? line : line.withValues(alpha: 0.5)
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(coasterRect, coasterPaint);
+
+    final coasterRim = Paint()
+      ..color = present ? line.withValues(alpha: 0.8) : line.withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawRRect(coasterRect, coasterRim);
+
+    // Dimensi tumbler kaca
+    const insetX = 14.0;
+    const topY = 12.0;
+    final bottomY = h - 16.0;
+    final glassRect = RRect.fromRectAndRadius(
+      Rect.fromLTRB(insetX, topY, w - insetX, bottomY),
+      const Radius.circular(12),
     );
 
-    final outline = Paint()
+    // Latar belakang frost porselen saat gelas ada
+    if (present) {
+      final frostPaint = Paint()
+        ..color = const Color(0xFFF1F5F9).withValues(alpha: 0.6)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(glassRect, frostPaint);
+    }
+
+    // Kolom air dengan Nordic water gradient
+    if (present && fill > 0) {
+      final totalWaterHeight = (bottomY - topY - 4) * fill;
+      final waterTopY = bottomY - totalWaterHeight;
+      final waterRect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(insetX + 2, waterTopY, w - insetX - 2, bottomY - 2),
+        const Radius.circular(10),
+      );
+
+      canvas.save();
+      canvas.clipRRect(glassRect);
+
+      final waterPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF38BDF8),
+            water,
+          ],
+        ).createShader(Rect.fromLTRB(insetX, waterTopY, w - insetX, bottomY));
+      canvas.drawRRect(waterRect, waterPaint);
+
+      // Garis permukaan meniskus air
+      final meniscusPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+      canvas.drawLine(
+        Offset(insetX + 6, waterTopY + 1),
+        Offset(w - insetX - 6, waterTopY + 1),
+        meniscusPaint,
+      );
+
+      // Refleksi vertikal halus pada sisi kiri tumbler
+      final reflectPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(insetX + 5, waterTopY + 4, 3, totalWaterHeight - 8),
+          const Radius.circular(2),
+        ),
+        reflectPaint,
+      );
+
+      canvas.restore();
+    }
+
+    // Garis luar kontur gelas
+    final glassOutline = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..color = present ? line : line.withValues(alpha: 0.4);
-    canvas.drawRRect(rect, outline);
 
-    if (present && fill > 0) {
-      final waterH = (h - inset * 2) * fill;
-      final waterRect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(inset, h - inset - waterH, w - inset * 2, waterH),
-        const Radius.circular(8),
+    if (present) {
+      canvas.drawRRect(glassRect, glassOutline);
+
+      // Garis ketebalan dasar gelas khas Nordic glassware
+      final baseLine = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = line.withValues(alpha: 0.6);
+      canvas.drawLine(
+        Offset(insetX + 4, bottomY - 6),
+        Offset(w - insetX - 4, bottomY - 6),
+        baseLine,
       );
-      canvas.save();
-      canvas.clipRRect(rect);
-      canvas.drawRRect(waterRect, Paint()..color = water.withValues(alpha: 0.85));
-      canvas.restore();
+
+      // Skala takaran halus di samping gelas (25%, 50%, 75%)
+      final tickPaint = Paint()
+        ..color = line.withValues(alpha: 0.7)
+        ..strokeWidth = 1;
+      for (final fraction in [0.25, 0.50, 0.75]) {
+        final tickY = bottomY - (bottomY - topY) * fraction;
+        canvas.drawLine(
+          Offset(w - insetX - 6, tickY),
+          Offset(w - insetX - 2, tickY),
+          tickPaint,
+        );
+      }
+    } else {
+      final dashPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = line.withValues(alpha: 0.5);
+      canvas.drawRRect(glassRect, dashPaint);
     }
   }
 

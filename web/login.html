@@ -3,75 +3,246 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0C1F27">
-<title>Masuk — Smart Hydration Coaster</title>
+<meta name="theme-color" content="#F8FAFC">
+<title>Masuk - Smart Hydration Coaster</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  color-scheme:dark;
-  --bg:#0C1F27; --panel:#132B35; --panel2:#0F242D; --line:#234654;
-  --ink:#E2F1F3; --dim:#93B8C2; --water:#44C8E6; --ok:#5FD195;
-  --warn:#F0C254; --alarm:#F26B6E;
-  --mono:'JetBrains Mono',ui-monospace,'Consolas',monospace;
-  --disp:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+  color-scheme: light;
+  --bg: #F8FAFC;
+  --panel: #FFFFFF;
+  --panel2: #F1F5F9;
+  --line: #E2E8F0;
+  --line-strong: #CBD5E1;
+  --ink: #0F172A;
+  --dim: #475569;
+  --muted: #94A3B8;
+  --water: #0284C7;
+  --water-hover: #0369A1;
+  --water-tint: #E0F2FE;
+  --water-light: #F0F9FF;
+  --ok: #10B981;
+  --ok-bg: #ECFDF5;
+  --ok-border: #A7F3D0;
+  --warn: #F59E0B;
+  --alarm: #EF4444;
+  --alarm-bg: #FEF2F2;
+  --alarm-border: #FECACA;
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 4px 20px -4px rgba(15, 23, 42, 0.05), 0 2px 6px -2px rgba(15, 23, 42, 0.03);
+  --shadow-float: 0 12px 30px -4px rgba(15, 23, 42, 0.07), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
+  --disp: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font-family:var(--disp);min-height:100dvh;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 18px}
+body{
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--disp);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 18px;
+  -webkit-font-smoothing: antialiased;
+}
 button,input{font:inherit;touch-action:manipulation}
-.brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.brand{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
 .brand-mark{display:block;flex:none;border-radius:10px}
-h1{font-size:20px;font-weight:700;letter-spacing:.2px}
+h1{
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
 h1 span{color:var(--water)}
-main{width:100%;max-width:520px}
+main{width:100%;max-width:480px}
 
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
-.card + .card{margin-top:14px}
-.card h2{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:2px}
-.card p{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.55}
-label{display:block;font-size:11px;font-family:var(--mono);color:var(--dim);margin:10px 0 4px}
-input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);
-  font-family:var(--mono);font-size:13px;padding:9px 11px;border-radius:6px;min-height:40px}
-input:focus-visible,button:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+.pill-row{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  justify-content: center;
+}
+a.pill{
+  font-family: var(--disp);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  text-decoration: none;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+}
+a.pill:hover{
+  border-color: var(--water);
+  color: var(--water);
+  background: var(--water-light);
+}
+
+.card{
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 26px;
+  box-shadow: var(--shadow-card);
+}
+.card + .card{margin-top:16px}
+.card h2{
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+.card p{
+  font-size: 13px;
+  color: var(--dim);
+  margin-bottom: 16px;
+  line-height: 1.55;
+}
+
+label{
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  margin: 14px 0 6px;
+}
+input{
+  width: 100%;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  min-height: 42px;
+  transition: all 0.15s ease;
+}
+input:focus-visible{
+  outline: 2px solid var(--water);
+  border-color: var(--water);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
 input:disabled{opacity:.45;cursor:not-allowed}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
-button{font-family:var(--mono);font-size:12px;padding:9px 14px;border-radius:6px;
-  border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer;min-height:42px}
-button:hover{border-color:var(--water)}
-button.primary{background:var(--water);border-color:var(--water);color:#041217;font-weight:700}
+
+.actions{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+button{
+  font-family: var(--disp);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+button:hover{
+  border-color: var(--water);
+  color: var(--water);
+  background: var(--water-light);
+}
+button.primary{
+  background: var(--water);
+  border-color: var(--water);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px 0 rgba(2, 132, 199, 0.25);
+}
+button.primary:hover{
+  background: var(--water-hover);
+  border-color: var(--water-hover);
+  color: #FFFFFF;
+}
 button:disabled{opacity:.45;cursor:not-allowed}
 
-.status{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--dim);
-  font-family:var(--mono);line-height:1.6;margin-bottom:6px}
-.status-dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--dim);margin-top:5px}
+.status{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--panel2);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+.status-dot{
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
 .status-dot.ok{background:var(--ok)}
 .status-dot.err{background:var(--alarm)}
 
-.pill-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
-a.pill{font-family:var(--mono);font-size:11px;padding:7px 11px;border-radius:6px;
-  border:1px solid var(--line);color:var(--dim);text-decoration:none;min-height:36px;
-  display:inline-flex;align-items:center}
-a.pill:hover{border-color:var(--water);color:var(--ink)}
-a.pill.off{opacity:.55}
-.foot{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:18px;text-align:center;line-height:1.6}
-.foot a{color:var(--water)}
-/* Layar sentuh: kontrol utama naik ke 44 px supaya jempol tidak salah tekan. */
+details summary{
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--dim);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s ease;
+}
+details summary:hover{color:var(--water)}
+
+.foot{
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 24px;
+  text-align: center;
+  line-height: 1.6;
+}
+.foot a{
+  color: var(--water);
+  text-decoration: none;
+  font-weight: 500;
+}
+.foot a:hover{text-decoration:underline}
+
 @media(pointer:coarse){
-  /* iOS Safari memperbesar halaman saat input difokus kalau font < 16px. */
   input{font-size:16px}
   button,a.pill,input{min-height:44px}
-  label{margin-top:14px}
   .actions button{flex:1 1 auto}
 }
-/* Layar sangat sempit: buang hiasan, rapatkan padding, jangan biarkan teks melimpah. */
-@media(max-width:420px){
-  body{padding:18px 14px;justify-content:flex-start}
-  h1{font-size:18px}
-  .card{padding:16px;border-radius:8px}
-  .pill-row{gap:6px}
-  a.pill{font-size:10.5px;padding:6px 9px}
+@media(max-width:480px){
+  body{padding:20px 14px}
+  .card{padding:20px;border-radius:16px}
   .actions{flex-direction:column}
   .actions button,.actions a.pill{width:100%;justify-content:center}
 }
@@ -80,7 +251,7 @@ a.pill.off{opacity:.55}
 <body>
 <main>
   <div class="brand">
-    <img class="brand-mark" src="icon.svg" alt="" width="40" height="40">
+    <img class="brand-mark" src="icon.svg" alt="" width="36" height="36">
     <h1>Smart Hydration <span>Coaster</span></h1>
   </div>
 
@@ -106,9 +277,8 @@ a.pill.off{opacity:.55}
       </div>
     </form>
 
-    <!-- Hanya untuk pemasangan proyek lain. Kosong = pakai tetapan di auth.js. -->
-    <details id="advancedBox" style="margin-top:14px;">
-      <summary style="cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim);min-height:44px;display:flex;align-items:center;">Pengaturan lanjutan (proyek Firebase lain)</summary>
+    <details id="advancedBox" style="margin-top:16px;">
+      <summary>Pengaturan lanjutan (proyek Firebase lain)</summary>
       <label for="authUrlIn">URL database</label>
       <input type="url" id="authUrlIn" placeholder="https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app"
              aria-label="URL dasar Firebase Realtime Database" autocomplete="off">
@@ -116,7 +286,7 @@ a.pill.off{opacity:.55}
       <label for="authKeyIn">Web API Key proyek</label>
       <input type="text" id="authKeyIn" placeholder="AIza..." aria-label="Firebase Web API Key" autocomplete="off">
 
-      <button type="button" id="bResetConfig" style="margin-top:10px;min-height:44px;">Kembalikan ke proyek bawaan</button>
+      <button type="button" id="bResetConfig" style="margin-top:12px;width:100%;">Kembalikan ke proyek bawaan</button>
     </details>
   </section>
 
@@ -136,7 +306,7 @@ a.pill.off{opacity:.55}
 
   <section class="card" id="signedInCard" hidden aria-label="Akun aktif">
     <h2>Sudah masuk</h2>
-    <p id="signedInLine">—</p>
+    <p id="signedInLine">-</p>
     <div class="actions">
       <a class="pill" href="index.html?mode=cloud" style="border-color:var(--water);color:var(--water)">Buka dashboard</a>
       <button type="button" id="bAuthLogout">Keluar</button>
@@ -166,7 +336,7 @@ function render(){
   setStatus($('authStatus'), $('authDot'), ok ? ('Masuk sebagai ' + email) : 'Belum masuk.', ok ? 'ok' : 'err');
   $('authForm').hidden = ok;
   $('signedInCard').hidden = !ok;
-  $('signedInLine').textContent = ok ? ('Akun: ' + email) : '—';
+  $('signedInLine').textContent = ok ? ('Akun: ' + email) : '-';
 
   const device = shcDeviceUid();
   $('claimForm').hidden = !ok || !!device;
@@ -176,7 +346,6 @@ function render(){
 }
 
 async function doAuth(kind){
-  // Isian di "Pengaturan lanjutan" menang; kalau kosong, pakai tetapan auth.js.
   const typedUrl = cleanUrl($('authUrlIn').value);
   const url = typedUrl || SHC_DEFAULT_URL;
   const email = ($('authEmailIn').value || '').trim();
@@ -190,9 +359,6 @@ async function doAuth(kind){
   $('bAuthRegister').disabled = true;
   setStatus($('authStatus'), $('authDot'), 'Menghubungi Firebase…', '');
   try {
-    // Kolom lanjutan adalah satu-satunya sumber nilai tersimpan. Dikosongkan =
-    // kembali ke tetapan auth.js, jadi nilai lama harus ikut dihapus; tanpa ini
-    // URL proyek yang salah akan terus dipakai tanpa cara mengembalikannya.
     const typedKey = ($('authKeyIn').value || '').trim();
     if (typedUrl) localStorage.setItem('shc_fb_url', url);
     else localStorage.removeItem('shc_fb_url');
@@ -255,7 +421,6 @@ $('bClaim').addEventListener('click', async () => {
   }
 });
 
-// Keluar dari proyek lain tanpa harus mengosongkan dua kolom satu per satu.
 $('bResetConfig').addEventListener('click', () => {
   localStorage.removeItem('shc_fb_url');
   localStorage.removeItem('shc_api_key');
@@ -271,9 +436,6 @@ $('bAuthLogout').addEventListener('click', () => {
   setStatus($('authStatus'), $('authDot'), 'Sudah keluar.', '');
 });
 
-// Isi ulang kolom dari penyimpanan lokal, lalu arahkan ke dashboard kalau
-// pengguna datang dari tautan "Buka dashboard".
-// Tampilkan nilai yang benar-benar dipakai, bukan hanya yang tersimpan.
 $('authUrlIn').value = localStorage.getItem('shc_fb_url') || '';
 $('authEmailIn').value = localStorage.getItem(SHC_EMAIL_KEY) || '';
 $('authKeyIn').value = localStorage.getItem('shc_api_key') || '';
