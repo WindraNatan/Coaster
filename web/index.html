@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
   color-scheme: light;
@@ -19,26 +19,31 @@
   --panel-hover: #F8FAFC;
   --line: #E2E8F0;
   --line-strong: #CBD5E1;
+  --line-focus: #94A3B8;
   --ink: #0F172A;
-  --dim: #475569;
+  --dim: #64748B;
   --muted: #94A3B8;
   --water: #0284C7;
   --water-hover: #0369A1;
   --water-tint: #E0F2FE;
   --water-light: #F0F9FF;
-  --ok: #059669;
+  --ok: #10B981;
   --ok-tint: #ECFDF5;
   --ok-line: #A7F3D0;
-  --warn: #D97706;
+  --warn: #F59E0B;
   --warn-tint: #FFFBEB;
   --warn-line: #FDE68A;
-  --alarm: #DC2626;
+  --alarm: #EF4444;
   --alarm-tint: #FEF2F2;
   --alarm-line: #FECACA;
-  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
-  --shadow-card: 0 4px 16px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+  --radius-card: 20px;
+  --radius-tile: 16px;
+  --radius-btn: 12px;
+  --radius-pill: 9999px;
+  --shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
+  --shadow-card: 0 4px 20px -4px rgba(15, 23, 42, 0.05), 0 2px 6px -2px rgba(15, 23, 42, 0.03);
   --shadow-float: 0 12px 30px -4px rgba(15, 23, 42, 0.07), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
-  --disp: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --disp: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -52,8 +57,9 @@ body{
 }
 button,input{font:inherit;touch-action:manipulation}
 b,strong{font-weight:600}
+.font-mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-/* Header & Nav */
+/* Header & Connection Bar */
 header{
   position: sticky;
   top: 0;
@@ -63,7 +69,7 @@ header{
   gap: 12px;
   flex-wrap: wrap;
   padding: 12px 24px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
@@ -81,7 +87,7 @@ header{
 .brand-name{
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -92,9 +98,19 @@ header{
   font-family: var(--mono);
   background: var(--water-tint);
   color: var(--water);
-  padding: 3px 8px;
-  border-radius: 9999px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.brand-badge .live-dot{
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .conn-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .conn-pill{
@@ -102,7 +118,7 @@ header{
   font-size: 13px;
   font-weight: 500;
   padding: 8px 14px;
-  border-radius: 9999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--dim);
@@ -133,7 +149,7 @@ button.act,a.act{
   font-size: 13px;
   font-weight: 500;
   padding: 8px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-btn);
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink);
@@ -274,72 +290,24 @@ body:not([data-view="app"]) .conn-bar{display:none}
 
 /* Main Dashboard Container */
 main{
-  max-width: 1140px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 24px 20px 48px;
   min-height: calc(100dvh - 65px);
 }
 
-/* Tabs Navigation Bar (Apple Health Segmented Control) */
-.tabs-nav{
-  display: flex;
-  justify-content: center;
-  margin-bottom: 24px;
-}
-.tabs-list{
-  display: inline-flex;
-  align-items: center;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 9999px;
-  padding: 4px;
-  gap: 4px;
-  max-width: 100%;
-  overflow-x: auto;
-}
-.tab-btn{
-  font-family: var(--disp);
-  font-size: 13px;
-  font-weight: 500;
-  padding: 8px 18px;
-  border-radius: 9999px;
-  border: none;
-  background: transparent;
-  color: var(--dim);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-  min-height: 38px;
-  transition: all 0.15s ease;
-}
-.tab-btn:hover{color:var(--ink)}
-.tab-btn.active{
-  background: #FFFFFF;
-  color: var(--ink);
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-}
-.tab-btn.active svg{stroke:var(--water)}
-
-/* Tab Panels */
-.tab-panel{display:none}
-.tab-panel.active{display:block}
-
 /* Porcelain Card Component */
 .card{
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   padding: 24px;
 }
-.card + .card{margin-top:16px}
 .card-header{
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 16px;
 }
 .card-title{
@@ -351,44 +319,285 @@ main{
 .card-sub{
   font-size: 12px;
   color: var(--dim);
+  margin-top: 2px;
+  display: block;
 }
 
-/* Dashboard Live Layout */
-.live-grid{
+/* 1. Baris Atas Ring Gauge Trio */
+.ring-trio-grid{
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  gap: 20px;
-  align-items: start;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
 }
 @media(max-width:960px){
-  .live-grid{grid-template-columns:1fr}
+  .ring-trio-grid{grid-template-columns: repeat(2, 1fr)}
 }
-
-/* Centerpiece Tumbler & Coaster Visualizer Card */
-.visualizer-card{
+@media(max-width:640px){
+  .ring-trio-grid{grid-template-columns: 1fr}
+}
+.ring-card{
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 32px 24px;
+  transition: all 0.2s ease;
+}
+.ring-card:hover{
+  border-color: var(--line-focus);
+  box-shadow: var(--shadow-float);
+}
+.ring-card-header{
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.ring-card-title{
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.ring-card-badge{
+  font-size: 10.5px;
+  font-family: var(--mono);
+  background: var(--panel2);
+  color: var(--dim);
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+}
+.ring-stage{
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0;
+}
+.ring-wrap{
+  position: relative;
+  width: 116px;
+  height: 116px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ring-svg{
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.ring-track{
+  fill: none;
+  stroke: var(--panel2);
+  stroke-width: 8;
+}
+.ring-progress{
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-dasharray: 251.327;
+  stroke-dashoffset: 251.327;
+  transform: rotate(-90deg 50 50);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.45s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.25s ease;
+}
+.ring-center{
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.ring-center-val{
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.ring-center-val small{
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dim);
+  margin-left: 1px;
+}
+.ring-center-sub{
+  font-size: 11px;
+  color: var(--dim);
+  font-weight: 500;
+  margin-top: 3px;
+}
+.ring-detail{
+  margin-top: 14px;
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.ring-detail-val{
+  display: block;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ring-detail-desc{
+  display: block;
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
+/* 2. 4 Kartu KPI Tremor (Bento Grid) */
+.tremor-kpi-grid{
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 20px;
+}
+@media(max-width:960px){
+  .tremor-kpi-grid{grid-template-columns:repeat(2, 1fr)}
+}
+@media(max-width:540px){
+  .tremor-kpi-grid{grid-template-columns:1fr}
+}
+.kpi-card{
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-tile);
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
+}
+.kpi-card::before{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+.kpi-card:hover::before{
+  background: var(--water);
+}
+.kpi-caption{
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.kpi-val{
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.kpi-unit{
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dim);
+  margin-left: 2px;
+}
+.kpi-footer{
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--dim);
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.kpi-note{font-size:11.5px;color:var(--dim)}
+.kpi-subtag{
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--panel2);
+  color: var(--water);
+  font-weight: 600;
+}
+.kpi-stats{font-family:var(--mono);font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+
+/* 3. Main Bento Grid 8:4 */
+.main-bento-grid{
+  display: grid;
+  grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+  gap: 20px;
+  margin-top: 20px;
+  align-items: start;
+}
+@media(max-width:960px){
+  .main-bento-grid{grid-template-columns: 1fr}
+}
+.bento-col-8{
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.bento-col-4{
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Visualizer Card */
+.visualizer-card{
+  position: relative;
+  overflow: hidden;
+}
+.visualizer-content{
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+  margin-top: 8px;
+}
+@media(max-width:680px){
+  .visualizer-content{grid-template-columns: 1fr; text-align: center}
 }
 .visualizer-stage{
   position: relative;
   width: 100%;
-  max-width: 280px;
   height: 210px;
   display: flex;
   justify-content: center;
   align-items: center;
-  margin: 12px 0 8px;
 }
 .coaster-halo-glow{
   position: absolute;
-  bottom: 18px;
-  width: 140px;
-  height: 24px;
+  bottom: 20px;
+  width: 150px;
+  height: 26px;
   border-radius: 50%;
   background: var(--water);
   filter: blur(16px);
@@ -404,134 +613,55 @@ main{
 .coaster-led-ring{
   transition: stroke 0.25s ease, filter 0.25s ease;
 }
-
-/* Live Weight & Status readouts */
-.readout-wrap{margin-top:4px}
-.gram{
-  font-size: 44px;
-  font-weight: 700;
-  font-family: var(--mono);
-  line-height: 1;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-.gram small{
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--dim);
-  margin-left: 2px;
+.visualizer-info{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 .water-ml{
   font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--water);
-  margin-top: 6px;
   font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
 }
-.cup-absent{
-  font-family: var(--disp);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--warn);
-  background: var(--warn-tint);
-  border: 1px solid var(--warn-line);
-  padding: 4px 12px;
-  border-radius: 9999px;
-  margin-top: 8px;
-  display: none;
-}
-
-/* Precision stability bar */
-.stab-wrap{width:100%;max-width:260px;margin-top:16px}
-.stab-bar{
-  height: 6px;
-  background: var(--panel2);
-  border-radius: 9999px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-}
-.stab-bar i{
-  display: block;
-  height: 100%;
-  width: 0;
-  background: var(--ok);
-  border-radius: 9999px;
-  transition: width 0.15s ease;
-}
-.stab-lab{
-  font-family: var(--mono);
-  font-size: 11.5px;
+.fsm-why{
+  font-size: 13.5px;
   color: var(--dim);
-  margin-top: 6px;
-  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  margin-bottom: 16px;
+  min-height: 24px;
 }
-
-/* Quick Coaster Actions */
-.quick-actions{
+.quick-tactile-bar{
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 8px;
-  margin-top: 24px;
-  width: 100%;
 }
-.quick-actions button.act{
+.quick-tactile-bar button.act{
   font-size: 12px;
   padding: 7px 12px;
-  border-radius: 8px;
   min-height: 36px;
 }
 
-/* State Badge & Countdown */
+/* FSM Badge Component */
 .badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 20px 24px;
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
   background: #FFFFFF;
-  box-shadow: var(--shadow-card);
   transition: all 0.2s ease;
 }
-.badge-top{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
 .badge .nm{
-  font-size: 24px;
+  font-size: 13.5px;
   font-weight: 700;
   letter-spacing: -0.01em;
   font-family: var(--disp);
   color: var(--ink);
 }
-.badge .why{
-  font-size: 13px;
-  color: var(--dim);
-  margin-top: 4px;
-  min-height: 18px;
-  line-height: 1.4;
-}
-.badge .count{
-  font-family: var(--mono);
-  font-size: 14px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-.badge .count b{
-  color: var(--ink);
-  font-size: 28px;
-  font-weight: 700;
-}
-
-/* State Specific Styling */
 .badge.st-IDLE{background:#FFFFFF;border-color:var(--line)}
 .badge.st-IDLE .nm{color:var(--dim)}
 .badge.st-STABLE{background:var(--ok-tint);border-color:var(--ok-line)}
@@ -547,37 +677,65 @@ main{
 .badge.st-ALERT_REFILL{background:var(--warn-tint);border-color:var(--warn-line)}
 .badge.st-ALERT_REFILL .nm{color:var(--warn)}
 .badge.alert{animation:pulse var(--pulse,500ms) steps(2,jump-none) infinite}
-@keyframes pulse{50%{box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.25)}}
+@keyframes pulse{50%{box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.25)}}
 @media (prefers-reduced-motion: reduce){.badge.alert{animation:none}}
 
-/* Apple Health Hydration Goal Card */
-.goal-box{
-  margin-top: 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 20px 24px;
-  box-shadow: var(--shadow-card);
+.cup-absent{
+  font-family: var(--disp);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warn);
+  background: var(--warn-tint);
+  border: 1px solid var(--warn-line);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  display: none;
 }
-.goal-head{
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+.stab-wrap{width:100%;max-width:180px}
+.stab-bar{
+  height: 5px;
+  background: var(--panel2);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.stab-bar i{
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ok);
+  border-radius: var(--radius-pill);
+  transition: width 0.15s ease;
+}
+.stab-lab{
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* History Card & Chart */
+.history-card{
+  position: relative;
+}
+.goal-head-chip{
+  font-family: var(--mono);
   font-size: 13px;
   color: var(--dim);
+  background: var(--panel2);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
   font-variant-numeric: tabular-nums;
-  margin-bottom: 10px;
 }
-.goal-head-label{font-weight: 600; color: var(--ink)}
-.goal-head b{
-  font-family: var(--mono);
-  color: var(--ink);
-  font-size: 14px;
+.goal-head-chip b{color:var(--ink)}
+.goal-bar-wrap{
+  margin: 8px 0 16px;
 }
 .goal-bar{
-  height: 10px;
+  height: 8px;
   background: var(--panel2);
-  border-radius: 9999px;
+  border-radius: var(--radius-pill);
   overflow: hidden;
   border: 1px solid var(--line);
 }
@@ -586,91 +744,173 @@ main{
   height: 100%;
   width: 0;
   background: linear-gradient(90deg, #0284C7, #38BDF8);
-  border-radius: 9999px;
+  border-radius: var(--radius-pill);
   transition: width 0.3s ease;
 }
-
-/* Session Metrics Bento Tiles */
-.counts{
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-top: 16px;
-}
-.count-card{
-  background: var(--panel);
+.daily-chart-wrap{
+  background: var(--panel2);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px 12px;
-  text-align: center;
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-tile);
+  padding: 14px 16px 10px;
+  margin-bottom: 16px;
+}
+.hist-list{
+  display: grid;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-.count-card b{
-  display: block;
-  font-family: var(--mono);
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--ink);
-  line-height: 1.1;
-  margin-bottom: 4px;
-}
-.count-card span{
-  font-size: 11.5px;
-  color: var(--dim);
-  font-weight: 500;
-}
-@media(max-width:640px){
-  .counts{grid-template-columns:repeat(2,1fr)}
-}
-
-/* Simulation Tab Components */
-.sim-grid{
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 20px;
-}
-@media(max-width:960px){
-  .sim-grid{grid-template-columns:1fr}
-}
-
-.sim-box{
-  background: var(--panel);
+.hist-row{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  background: var(--panel2);
+  border-radius: 8px;
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: var(--shadow-card);
 }
-.sim-box + .sim-box{margin-top:16px}
 
-/* Tactile Range Slider */
-input[type=range]{
-  width: 100%;
-  accent-color: var(--water);
-  margin-top: 14px;
-  height: 28px;
-  cursor: pointer;
-  background: transparent;
+/* Control Card (Right 4-Column) */
+.control-card{
+  position: relative;
 }
-.slider-row{
+.ctrl-section{
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.ctrl-section:last-child{
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+.ctrl-subhead{
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  margin-bottom: 10px;
+}
+.ctrl-btn-row{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ctrl-toggle-stack{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.ctrl-row{
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
   flex-wrap: wrap;
-  justify-content: space-between;
-  margin-top: 8px;
 }
-.slider-cap{
-  display: flex;
-  justify-content: space-between;
+.ctrl-row label{
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+  flex: 1 1 120px;
+}
+.input-unit-wrap{
+  display: inline-flex;
+  align-items: center;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 8px;
+  height: 38px;
+}
+.input-unit-wrap input{
+  width: 70px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
+  font-size: 13.5px;
+  outline: none;
+  font-variant-numeric: tabular-nums;
 }
-.slider-cap span{flex:1;text-align:center}
-.slider-cap span:first-child{text-align:left}
-.slider-cap span:last-child{text-align:right}
+.input-unit-wrap .unit{
+  font-size: 11.5px;
+  color: var(--dim);
+  font-family: var(--mono);
+}
+.input-unit-wrap:focus-within{
+  border-color: var(--water);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 2px var(--water-tint);
+}
+.hint{
+  font-size: 12px;
+  color: var(--warn);
+  background: var(--warn-tint);
+  border: 1px solid var(--warn-line);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-top: 10px;
+  line-height: 1.45;
+}
 
+/* 4. Bottom Tab Section */
+.bottom-tabs-section{
+  margin-top: 24px;
+}
+.bottom-tabs-header{
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.bottom-tabs-list{
+  display: inline-flex;
+  align-items: center;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  gap: 4px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.bottom-tab-btn{
+  font-family: var(--disp);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  min-height: 38px;
+  transition: all 0.15s ease;
+}
+.bottom-tab-btn:hover{color: var(--ink)}
+.bottom-tab-btn.active{
+  background: #FFFFFF;
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+.bottom-tab-btn.active svg{stroke: var(--water)}
+.bottom-tab-panel{display: none}
+.bottom-tab-panel.active{display: block}
+
+/* Simulator controls inside bottom tab */
+.sim-box{
+  background: var(--panel);
+}
 .sim-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .clock{
   font-family: var(--mono);
@@ -703,12 +943,41 @@ input[type=range]{
   background: var(--water);
   font-weight: 600;
 }
+input[type=range]{
+  width: 100%;
+  accent-color: var(--water);
+  margin-top: 14px;
+  height: 28px;
+  cursor: pointer;
+  background: transparent;
+}
+.slider-cap{
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.slider-cap span{flex:1;text-align:center}
+.slider-cap span:first-child{text-align:left}
+.slider-cap span:last-child{text-align:right}
 
+.scen-wrapper{
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.scen-title{
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
 .scen{
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
-  margin-top: 12px;
 }
 .scen button{
   text-align: left;
@@ -734,7 +1003,44 @@ input[type=range]{
   margin-top: 3px;
 }
 
-/* Adaptive Climate Sensing */
+/* Log Box inside bottom tab */
+.log-tools{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.log{
+  margin-top: 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  padding: 12px 14px;
+  height: 240px;
+  overflow-y: auto;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.log .t{color:var(--muted);font-weight:500}
+.log .ev-STABLE{color:var(--ok);font-weight:600}
+.log .ev-TIMING{color:var(--water);font-weight:600}
+.log .ev-LIFTED{color:var(--dim)}
+.log .ev-ALERT_DRINK{color:var(--warn);font-weight:600}
+.log .ev-ALERT_CHEAT{color:var(--alarm);font-weight:600}
+.log .ev-ALERT_REFILL{color:var(--warn);font-weight:600}
+
+/* Telemetry & Climate inside bottom tab */
+.tele-grid{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 20px;
+}
+@media(max-width:960px){
+  .tele-grid{grid-template-columns: 1fr}
+}
 .adaptive{
   font-family: var(--disp);
   font-size: 13px;
@@ -750,12 +1056,14 @@ input[type=range]{
   border-radius: 12px;
   margin-bottom: 16px;
 }
+.adaptive-lbl{font-size:12px;color:var(--dim);display:block}
 .adaptive-target b{
   color: var(--water);
   font-size: 20px;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
+.adaptive-why{font-size:12px;color:var(--dim);text-align:right}
 .adaptive label{
   display: flex;
   justify-content: space-between;
@@ -776,151 +1084,21 @@ input[type=range]{
   line-height: 1.5;
 }
 .adaptive-note.show{display:block}
-
-/* Device Configuration Grid */
-.cfg-grid{display:grid;gap:12px;margin-top:16px}
-.cfg-row{
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: 13px;
-  color: var(--dim);
-}
-.cfg-row label{min-width:160px;color:var(--ink);font-weight:500}
-.cfg-row input{
-  width: 90px;
+.telemetry-chart-container{
   background: var(--panel2);
   border: 1px solid var(--line);
-  color: var(--ink);
-  font-family: var(--mono);
-  padding: 8px 10px;
-  border-radius: 8px;
-  min-height: 38px;
-  font-variant-numeric: tabular-nums;
-}
-.cfg-row input:focus-visible{
-  outline: 2px solid var(--water);
-  border-color: var(--water);
-  background: #FFFFFF;
-}
-.hint{
-  font-size: 12px;
-  color: var(--warn);
-  background: var(--warn-tint);
-  border: 1px solid var(--warn-line);
-  padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-tile);
+  padding: 14px 16px 10px;
   margin-top: 8px;
-  line-height: 1.5;
 }
-
-/* History Tab & Log Components */
-.hist-box{
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: var(--shadow-card);
-}
-.hist-head{
+.chart-legend{
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: var(--dim);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-.hist-head h2{font-size:15px;font-weight:700;color:var(--ink);margin:0}
-.hist-list{
-  display: grid;
-  gap: 8px;
-  font-family: var(--mono);
+  gap: 12px;
   font-size: 12px;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.hist-row{
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background: var(--panel2);
-  border-radius: 8px;
-  border: 1px solid var(--line);
-}
-
-.log-box{
-  margin-top: 20px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: var(--shadow-card);
-}
-.log-tools{
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.log{
-  margin-top: 8px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
   font-family: var(--mono);
-  font-size: 11.5px;
-  line-height: 1.65;
-  padding: 12px 14px;
-  height: 220px;
-  overflow-y: auto;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
 }
-.log .t{color:var(--muted);font-weight:500}
-.log .ev-STABLE{color:var(--ok);font-weight:600}
-.log .ev-TIMING{color:var(--water);font-weight:600}
-.log .ev-LIFTED{color:var(--dim)}
-.log .ev-ALERT_DRINK{color:var(--warn);font-weight:600}
-.log .ev-ALERT_CHEAT{color:var(--alarm);font-weight:600}
-.log .ev-ALERT_REFILL{color:var(--warn);font-weight:600}
-
-/* Details Fold */
-.fold{margin-top:20px;border-top:1px solid var(--line);padding-top:12px}
-.fold summary{
-  font-family: var(--disp);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--dim);
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-}
-.fold summary::-webkit-details-marker{display:none}
-.fold summary::before{content:"+";font-size:14px;font-weight:700;color:var(--water);width:12px;text-align:center}
-.fold[open] summary::before{content:"\2212"}
-.fold summary:hover{color:var(--ink)}
-.fold summary:focus-visible{outline:2px solid var(--water);outline-offset:2px;border-radius:4px}
-.fold[open] summary{margin-bottom:12px}
-
-/* Accessibility sr-only */
-.sr-only{
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
+.legend-item{display:inline-flex;align-items:center;gap:5px;color:var(--dim)}
+.legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
 
 /* Session Start Modal Dialog */
 #startDlg{
@@ -956,10 +1134,23 @@ input[type=range]{
 .start-actions{display:flex;gap:10px;justify-content:flex-end}
 .start-actions button{min-height:42px;padding:8px 16px}
 
-/* Touch targets */
+/* Accessibility sr-only */
+.sr-only{
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media(pointer:coarse){
-  input,.conn-drawer input,.cfg-row input{font-size:16px}
-  button.act,a.act,.conn-pill,.warp button,.cfg-row input,.fold summary{min-height:44px}
+  input,.conn-drawer input,.input-unit-wrap input{font-size:16px}
+  button.act,a.act,.conn-pill,.warp button,.bottom-tab-btn{min-height:44px}
   input[type=range]{height:44px;padding-block:8px}
 }
 @media(max-width:760px){
@@ -973,11 +1164,15 @@ input[type=range]{
 </style>
 </head>
 <body>
+<!-- 1. Top Header Bar -->
 <header>
   <a class="brand" href="index.html" aria-label="Smart Hydration Coaster, beranda">
     <img class="brand-mark" src="icon.svg" alt="" width="28" height="28">
     <span class="brand-name">Smart Hydration Coaster</span>
-    <span class="brand-badge">Nordic Light</span>
+    <span class="brand-badge" id="headerLiveBadge">
+      <i class="live-dot"></i>
+      <span id="headerLiveText">Simulator Aktif</span>
+    </span>
   </a>
   <div class="conn-bar" role="group" aria-label="Mode koneksi perangkat">
     <button class="conn-pill on" data-mode="sim" id="mSim">Simulator</button>
@@ -1065,271 +1260,425 @@ input[type=range]{
 <main>
   <h1 class="sr-only">Smart Hydration Coaster - status dan kendali</h1>
 
-  <!-- Navigation Segmented Tabs (Clean Nordic View Separation) -->
-  <nav class="tabs-nav" aria-label="Navigasi tampilan antarmuka">
-    <div class="tabs-list" role="tablist">
-      <button class="tab-btn active" data-tab="tab-live" role="tab" aria-selected="true" id="tabBtnLive">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
-        <span>Dashboard Live</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-sim" role="tab" aria-selected="false" id="tabBtnSim">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>Simulasi & Kontrol</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-hist" role="tab" aria-selected="false" id="tabBtnHist">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-        <span>Riwayat & Telemetri</span>
-      </button>
-    </div>
-  </nav>
-
-  <!-- TAB 1: DASHBOARD LIVE -->
-  <section id="tab-live" class="tab-panel active" aria-labelledby="tabBtnLive">
-    <div class="live-grid">
-      <!-- Left Column: Visualizer Stage & Tactile Actions -->
-      <div class="card visualizer-card">
-        <div class="card-header" style="width:100%;margin-bottom:0">
-          <span class="card-title">Tatakan & Gelas</span>
-          <span class="brand-badge">Sensor Presisi</span>
-        </div>
-        
-        <div class="visualizer-stage">
-          <div class="coaster-halo-glow" id="coasterHaloGlow"></div>
-          <svg id="glassSvg" width="150" height="180" viewBox="0 0 120 170" aria-hidden="true">
+  <!-- 2. Baris Atas: Ring Gauge Trio (Vibe Prompts style.ai.id) -->
+  <section class="ring-trio-grid" aria-label="Indikator instrumen hidrasi melingkar">
+    <!-- Ring 1: Target Harian % -->
+    <div class="ring-card">
+      <div class="ring-card-header">
+        <span class="ring-card-title">Target Hidrasi Harian</span>
+        <span class="ring-card-badge">Hari Ini</span>
+      </div>
+      <div class="ring-stage">
+        <div class="ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true">
             <defs>
-              <clipPath id="cupClip">
-                <path d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z"/>
-              </clipPath>
-              <linearGradient id="cupWaterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stop-color="#38BDF8"/>
-                <stop offset="100%" stop-color="#0284C7"/>
-              </linearGradient>
-              <linearGradient id="porcelainGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="#FFFFFF"/>
-                <stop offset="45%" stop-color="#F8FAFC"/>
-                <stop offset="100%" stop-color="#E2E8F0"/>
+              <linearGradient id="ringWaterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0284C7"/>
+                <stop offset="100%" stop-color="#38BDF8"/>
               </linearGradient>
             </defs>
-
-            <!-- Ember Style Precision Coaster Base -->
-            <g id="coasterBase">
-              <ellipse cx="60" cy="156" rx="48" ry="12" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="1.5"/>
-              <ellipse cx="60" cy="153" rx="44" ry="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
-              <ellipse id="coasterLedRing" cx="60" cy="153" rx="40" ry="8" fill="none" stroke="#0284C7" stroke-width="2" class="coaster-led-ring"/>
-            </g>
-
-            <!-- Ghost cup outline on coaster when cup is absent/lifted -->
-            <ellipse id="cupGhost" cx="60" cy="148" rx="30" ry="5.5" fill="none"
-                     stroke="#94A3B8" stroke-dasharray="4 4" stroke-width="1.5"/>
-
-            <!-- Modern Tumbler Body -->
-            <g id="tumblerGroup">
-              <path d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z"
-                    fill="url(#porcelainGrad)" stroke="#CBD5E1" stroke-width="2.5"/>
-              <rect id="waterRect" x="30" y="148" width="60" height="0" fill="url(#cupWaterGrad)"
-                    opacity="0.9" clip-path="url(#cupClip)"/>
-              <ellipse cx="60" cy="18" rx="30" ry="5" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.5"/>
-              <line x1="31" y1="26" x2="89" y2="26" stroke="#CBD5E1" stroke-width="1"/>
-              <path d="M35 24 L39 136" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.75"/>
-            </g>
+            <circle class="ring-track" cx="50" cy="50" r="40" />
+            <circle id="ringDailyCircle" class="ring-progress" cx="50" cy="50" r="40" stroke="url(#ringWaterGrad)" />
           </svg>
+          <div class="ring-center">
+            <div class="ring-center-val"><span id="goalPct">0</span><small>%</small></div>
+            <div class="ring-center-sub">tercapai</div>
+          </div>
         </div>
+      </div>
+      <div class="ring-detail">
+        <span class="ring-detail-val"><span id="goalCur">0</span> / <span id="goalMax">2000</span> ml</span>
+        <span class="ring-detail-desc">Air diminum hari ini</span>
+      </div>
+    </div>
 
-        <div class="readout-wrap">
-          <div class="gram"><span id="wOut">0.0</span><small>g</small></div>
-          <div class="water-ml" id="wMl">air 0 ml</div>
-          <div class="cup-absent" id="cupAbsent">gelas tidak ada di tatakan</div>
+    <!-- Ring 2: Volume Gelas ml -->
+    <div class="ring-card">
+      <div class="ring-card-header">
+        <span class="ring-card-title">Volume Air Gelas</span>
+        <span class="ring-card-badge">Tumbler 500 ml</span>
+      </div>
+      <div class="ring-stage">
+        <div class="ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <linearGradient id="ringCupGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#10B981"/>
+                <stop offset="100%" stop-color="#34D399"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-track" cx="50" cy="50" r="40" />
+            <circle id="ringCupCircle" class="ring-progress" cx="50" cy="50" r="40" stroke="url(#ringCupGrad)" />
+          </svg>
+          <div class="ring-center">
+            <div class="ring-center-val"><span id="ringCupMl">0</span><small>ml</small></div>
+            <div class="ring-center-sub">dalam tumbler</div>
+          </div>
         </div>
+      </div>
+      <div class="ring-detail">
+        <span class="ring-detail-val"><span id="ringCupPct">0</span>% isi gelas</span>
+        <span class="ring-detail-desc">Kapasitas wadah 500 ml</span>
+      </div>
+    </div>
 
+    <!-- Ring 3: Hitung Mundur Waktu Minum -->
+    <div class="ring-card">
+      <div class="ring-card-header">
+        <span class="ring-card-title">Minum Berikutnya</span>
+        <span class="ring-card-badge" id="ringTimerBadge">Siklus Aktif</span>
+      </div>
+      <div class="ring-stage">
+        <div class="ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <linearGradient id="ringTimerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0284C7"/>
+                <stop offset="100%" stop-color="#60A5FA"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-track" cx="50" cy="50" r="40" />
+            <circle id="ringCdCircle" class="ring-progress" cx="50" cy="50" r="40" stroke="url(#ringTimerGrad)" />
+          </svg>
+          <div class="ring-center">
+            <div class="ring-center-val font-mono" id="cd">--:--</div>
+            <div class="ring-center-sub">sisa waktu</div>
+          </div>
+        </div>
+      </div>
+      <div class="ring-detail">
+        <span class="ring-detail-val">Target: <span id="ringCycleTarget">--</span></span>
+        <span class="ring-detail-desc" id="ringCycleWhy">Interval minum terjadwal</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 4 Kartu KPI Tremor (Bento Grid) -->
+  <section class="tremor-kpi-grid" aria-label="Metrik KPI penting">
+    <!-- KPI 1: Beban Aktual -->
+    <div class="kpi-card">
+      <div class="kpi-caption">BEBAN AKTUAL TATAKAN</div>
+      <div class="kpi-val"><span id="wOut">0.0</span> <span class="kpi-unit">g</span></div>
+      <div class="kpi-footer">
         <div class="stab-wrap">
           <div class="stab-bar" aria-hidden="true"><i id="stabFill"></i></div>
           <div class="stab-lab" id="stabLab">menunggu gelas</div>
         </div>
+        <div class="cup-absent" id="cupAbsent">gelas tidak ada di tatakan</div>
+      </div>
+    </div>
 
-        <!-- Quick Tactile Coaster Actions directly on Live Dashboard -->
-        <div class="quick-actions" role="group" aria-label="Aksi cepat gelas">
-          <button class="act" id="bLift">Angkat gelas</button>
-          <button class="act" id="bPlace">Taruh kembali</button>
-          <button class="act" id="bSip">Sedot -30 g</button>
-          <button class="act" id="bPour">Tuang +50 g</button>
-          <button class="act" id="bEmpty">Kosongkan</button>
+    <!-- KPI 2: Suhu Ruangan -->
+    <div class="kpi-card">
+      <div class="kpi-caption">SUHU RUANGAN</div>
+      <div class="kpi-val"><span id="kpiTemp">27.0</span> <span class="kpi-unit">°C</span></div>
+      <div class="kpi-footer">
+        <span class="kpi-note">Sensor iklim DHT11</span>
+        <span class="kpi-subtag">Adaptif</span>
+      </div>
+    </div>
+
+    <!-- KPI 3: Kelembapan Ruang -->
+    <div class="kpi-card">
+      <div class="kpi-caption">KELEMBAPAN RUANG</div>
+      <div class="kpi-val"><span id="kpiHum">60</span> <span class="kpi-unit">% RH</span></div>
+      <div class="kpi-footer">
+        <span class="kpi-note">Kondisi kelembapan ruang</span>
+        <span class="kpi-subtag">Nyaman</span>
+      </div>
+    </div>
+
+    <!-- KPI 4: Tegukan Sesi -->
+    <div class="kpi-card">
+      <div class="kpi-caption">TEGUKAN SESI INI</div>
+      <div class="kpi-val"><span id="cDrink">0</span> <span class="kpi-unit">kali</span></div>
+      <div class="kpi-footer">
+        <span class="kpi-stats"><span id="cCheat">0</span> tegukan kecil · <span id="cRefill">0</span> isi ulang · <span id="cTotal">0</span> ml</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Main Bento Grid 8:4 -->
+  <section class="main-bento-grid">
+    <!-- Left Column (8 of 12) -->
+    <div class="bento-col-8">
+      <!-- Visualizer Card: Tumbler & Halo LED -->
+      <div class="card visualizer-card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Panggung Tatakan & Gelas</h2>
+            <span class="card-sub">Sensor Load Cell Presisi & Cincin Status FSM</span>
+          </div>
+          <div class="badge st-IDLE" id="badge" role="status" aria-live="polite">
+            <div class="nm" id="stName">IDLE</div>
+          </div>
+        </div>
+
+        <div class="visualizer-content">
+          <div class="visualizer-stage">
+            <div class="coaster-halo-glow" id="coasterHaloGlow"></div>
+            <svg id="glassSvg" width="160" height="190" viewBox="0 0 120 170" aria-hidden="true">
+              <defs>
+                <clipPath id="cupClip">
+                  <path d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z"/>
+                </clipPath>
+                <linearGradient id="cupWaterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#38BDF8"/>
+                  <stop offset="100%" stop-color="#0284C7"/>
+                </linearGradient>
+                <linearGradient id="porcelainGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#FFFFFF"/>
+                  <stop offset="45%" stop-color="#F8FAFC"/>
+                  <stop offset="100%" stop-color="#E2E8F0"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Coaster Base -->
+              <g id="coasterBase">
+                <ellipse cx="60" cy="156" rx="48" ry="12" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="1.5"/>
+                <ellipse cx="60" cy="153" rx="44" ry="10" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1"/>
+                <ellipse id="coasterLedRing" cx="60" cy="153" rx="40" ry="8" fill="none" stroke="#0284C7" stroke-width="2" class="coaster-led-ring"/>
+              </g>
+
+              <!-- Ghost cup outline when absent -->
+              <ellipse id="cupGhost" cx="60" cy="148" rx="30" ry="5.5" fill="none"
+                       stroke="#94A3B8" stroke-dasharray="4 4" stroke-width="1.5"/>
+
+              <!-- Nordic Tumbler Body -->
+              <g id="tumblerGroup">
+                <path d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z"
+                      fill="url(#porcelainGrad)" stroke="#CBD5E1" stroke-width="2.5"/>
+                <rect id="waterRect" x="30" y="148" width="60" height="0" fill="url(#cupWaterGrad)"
+                      opacity="0.9" clip-path="url(#cupClip)"/>
+                <ellipse cx="60" cy="18" rx="30" ry="5" fill="#F1F5F9" stroke="#94A3B8" stroke-width="1.5"/>
+                <line x1="31" y1="26" x2="89" y2="26" stroke="#CBD5E1" stroke-width="1"/>
+                <path d="M35 24 L39 136" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.75"/>
+              </g>
+            </svg>
+          </div>
+
+          <div class="visualizer-info">
+            <div class="water-ml" id="wMl">air 0 ml</div>
+            <div class="fsm-why" id="stWhy">Letakkan gelas di tatakan untuk mulai</div>
+            <div class="quick-tactile-bar" role="group" aria-label="Aksi fisik gelas">
+              <button class="act" id="bLift">Angkat gelas</button>
+              <button class="act" id="bPlace">Taruh kembali</button>
+              <button class="act" id="bSip">Sedot -30 g</button>
+              <button class="act" id="bPour">Tuang +50 g</button>
+              <button class="act" id="bEmpty">Kosongkan</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Right Column: Status Banner, Apple Health Goal, Session Metrics -->
-      <div>
-        <div class="badge st-IDLE" id="badge" role="status" aria-live="polite" aria-atomic="true">
-          <div class="badge-top">
-            <span class="card-title">Status Alat</span>
-            <div class="nm" id="stName">IDLE</div>
+      <!-- Intake History & SVG Bar Chart Card -->
+      <div class="card history-card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Riwayat Asupan Harian</h2>
+            <span class="card-sub" id="todayKeyLab">Hari ini: 2026-11-14</span>
           </div>
-          <div class="why" id="stWhy"></div>
-          <div class="count">
-            <span>sisa waktu minum</span>
-            <b id="cd">--:--</b>
+          <div class="goal-head-chip">
+            Hari ini: <b><span id="goalCurBar">0</span> / <span id="goalMaxBar">2000</span> ml</b>
           </div>
         </div>
 
-        <!-- Apple Health Hydration Goal Card -->
-        <div class="goal-box">
-          <div class="goal-head">
-            <span class="goal-head-label">Target Hidrasi Hari Ini</span>
-            <b><span id="goalPct">0</span>% (<span id="goalCur">0</span> / <span id="goalMax">2000</span> ml)</b>
-          </div>
+        <div class="goal-bar-wrap">
           <div class="goal-bar" aria-hidden="true"><i id="goalFill"></i></div>
         </div>
 
-        <!-- Bento Grid for Session Counts -->
-        <div class="counts">
-          <div class="count-card">
-            <b id="cDrink">0</b>
-            <span>Minum (x)</span>
+        <!-- 7-Day Interactive SVG Intake Chart -->
+        <div class="daily-chart-wrap">
+          <svg id="dailyChartSvg" viewBox="0 0 540 130" width="100%" height="130" preserveAspectRatio="none" aria-label="Grafik batang asupan 7 hari terakhir">
+            <!-- Dynamically rendered by JS -->
+          </svg>
+        </div>
+
+        <!-- Daily Log List -->
+        <div class="hist-list" id="histList"></div>
+      </div>
+    </div>
+
+    <!-- Right Column (4 of 12) -->
+    <div class="bento-col-4">
+      <div class="card control-card">
+        <div class="card-header">
+          <h2 class="card-title">Kontrol & Konfigurasi Cepat</h2>
+        </div>
+
+        <div class="ctrl-section">
+          <div class="ctrl-subhead">Timbangan & Gelas</div>
+          <div class="ctrl-btn-row">
+            <button class="act" id="bQuickTare" style="width:100%" title="Nol-kan timbangan tatakan">Nol-kan Timbangan</button>
           </div>
-          <div class="count-card">
-            <b id="cCheat">0</b>
-            <span>Tegukan Kecil</span>
+          <div class="ctrl-row">
+            <label for="emptyIn">Berat Gelas Kosong</label>
+            <div class="input-unit-wrap">
+              <input type="number" id="emptyIn" min="35" max="300" step="1" value="130" aria-label="Berat gelas kosong dalam gram">
+              <span class="unit">g</span>
+            </div>
+            <button class="act" id="bCal">Simpan Gelas</button>
           </div>
-          <div class="count-card">
-            <b id="cRefill">0</b>
-            <span>Isi Ulang</span>
+        </div>
+
+        <div class="ctrl-section">
+          <div class="ctrl-subhead">Mode Timer & Pengingat</div>
+          <div class="ctrl-toggle-stack">
+            <button class="act active-btn" id="bAutoMode">Timer: Otomatis</button>
+            <button class="act active-btn" id="bDemo">Demo 15 dtk: ON</button>
+            <button class="act" id="bMute" title="Buzzer hening, motor getar tetap aktif">Buzzer: ON</button>
           </div>
-          <div class="count-card">
-            <b id="cTotal">0</b>
-            <span>Total (ml)</span>
+          <div class="ctrl-row">
+            <label for="baseMinIn">Interval Dasar</label>
+            <div class="input-unit-wrap">
+              <input type="number" id="baseMinIn" min="1" max="180" step="1" value="30" aria-label="Interval dasar dalam menit">
+              <span class="unit">mnt</span>
+            </div>
+            <button class="act" id="bApplyInt">Atur Interval</button>
+          </div>
+          <p class="hint" id="timerHint" hidden></p>
+        </div>
+
+        <div class="ctrl-section">
+          <div class="ctrl-subhead">Target Hidrasi & Sesi</div>
+          <div class="ctrl-row">
+            <label for="goalIn">Target Harian</label>
+            <div class="input-unit-wrap">
+              <input type="number" id="goalIn" min="250" max="6000" step="50" value="2000" aria-label="Target harian dalam mililiter">
+              <span class="unit">ml</span>
+            </div>
+            <button class="act" id="bSaveGoal">Simpan Target</button>
+          </div>
+          <div class="ctrl-btn-row" style="margin-top:14px">
+            <button class="act" id="bReset" style="width:100%;color:var(--alarm);border-color:var(--alarm-line)">Reset Harian</button>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- TAB 2: SIMULASI & KONTROL -->
-  <section id="tab-sim" class="tab-panel" aria-labelledby="tabBtnSim">
-    <div class="sim-grid">
-      <!-- Left Column: Slider, Warp, Automated Scenarios -->
-      <div>
-        <div class="sim-box" id="simControls">
-          <div class="card-header">
-            <span class="card-title">Simulasi Timbangan</span>
-            <div class="sim-tools">
-              <span class="clock">T+<b id="simClock">00:00</b></span>
-              <div class="warp" id="warpBox" role="group" aria-label="Percepatan waktu simulasi">
-                <button data-warp="1" class="on">x1</button>
-                <button data-warp="10">x10</button>
-                <button data-warp="60">x60</button>
-                <button data-warp="600">x600</button>
-              </div>
+  <!-- 5. Tab Bawah: Skenario Demo, Log Sensor Real-time, dan Grafik Telemetri -->
+  <section class="bottom-tabs-section">
+    <div class="bottom-tabs-header">
+      <div class="bottom-tabs-list" role="tablist">
+        <button class="bottom-tab-btn tab-btn active" data-tab="tab-scen" role="tab" aria-selected="true" id="tabBtnScen">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Skenario Demo FSM (8 Tombol)</span>
+        </button>
+        <button class="bottom-tab-btn tab-btn" data-tab="tab-log" role="tab" aria-selected="false" id="tabBtnLog">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>Log Sensor Real-time</span>
+        </button>
+        <button class="bottom-tab-btn tab-btn" data-tab="tab-tele" role="tab" aria-selected="false" id="tabBtnTele">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>Grafik Telemetri & Iklim</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Panel 1: Skenario Demo FSM -->
+    <div id="tab-scen" class="bottom-tab-panel tab-panel active" aria-labelledby="tabBtnScen">
+      <div class="card sim-box" id="simControls">
+        <div class="card-header">
+          <div>
+            <h3 class="card-title">Simulator Beban & Skenario Demo Laboratorium</h3>
+            <span class="card-sub">Injeksi bobot tatakan dan pengujian otomatis FSM 8 skenario evaluasi</span>
+          </div>
+          <div class="sim-tools">
+            <span class="clock">T+<b id="simClock">00:00</b></span>
+            <div class="warp" id="warpBox" role="group" aria-label="Percepatan waktu simulasi">
+              <button data-warp="1" class="on">x1</button>
+              <button data-warp="10">x10</button>
+              <button data-warp="60">x60</button>
+              <button data-warp="600">x600</button>
             </div>
           </div>
+        </div>
 
-          <label for="wSlider" class="sr-only">Berat di tatakan (gram)</label>
-          <input type="range" id="wSlider" min="0" max="500" step="1" value="0"
-                 aria-label="Berat di tatakan (gram)">
-          <div class="slider-cap">
-            <span>0 g (diangkat)</span>
-            <span>berat aktual tatakan</span>
-            <span>500 g</span>
+        <label for="wSlider" class="sr-only">Berat di tatakan (gram)</label>
+        <input type="range" id="wSlider" min="0" max="500" step="1" value="0" aria-label="Berat di tatakan (gram)">
+        <div class="slider-cap">
+          <span>0 g (diangkat)</span>
+          <span>beban timbangan aktual</span>
+          <span>500 g</span>
+        </div>
+
+        <div class="scen-wrapper">
+          <div class="scen-title">8 Skenario Uji Otomatis Demo Dosen</div>
+          <div class="scen">
+            <button class="act" data-sc="0">1. Taruh gelas terisi<small>Stabil 1,5 s menuju siklus minum</small></button>
+            <button class="act" data-sc="1">2. Timer habis<small>Peringatan minum aktif</small></button>
+            <button class="act" data-sc="2">3. Tegukan kecil<small>Penurunan &lt; 20 ml memicu pengingat</small></button>
+            <button class="act" data-sc="3">4. Minum tercatat<small>Penurunan 120 ml terverifikasi</small></button>
+            <button class="act" data-sc="4">5. Gelas kosong<small>Peringatan isi ulang aktif</small></button>
+            <button class="act" data-sc="5">6. Isi ulang<small>Penambahan air terdeteksi</small></button>
+            <button class="act" data-sc="6">7. Gelas diangkat<small>Peringatan gelas belum kembali</small></button>
+            <button class="act" data-sc="7">8. Isi ulang di tatakan<small>+50 ml tanpa mengangkat gelas</small></button>
           </div>
-
-          <details class="fold" open>
-            <summary>Skenario Uji Otomatis</summary>
-            <div class="scen">
-              <button class="act" data-sc="0">1. Taruh gelas terisi<small>Stabil 1,5 s menuju siklus minum</small></button>
-              <button class="act" data-sc="1">2. Timer habis<small>Peringatan minum aktif</small></button>
-              <button class="act" data-sc="2">3. Tegukan kecil<small>Penurunan &lt; 20 ml memicu pengingat</small></button>
-              <button class="act" data-sc="3">4. Minum tercatat<small>Penurunan 120 ml terverifikasi</small></button>
-              <button class="act" data-sc="4">5. Gelas kosong<small>Peringatan isi ulang aktif</small></button>
-              <button class="act" data-sc="5">6. Isi ulang<small>Penambahan air terdeteksi</small></button>
-              <button class="act" data-sc="6">7. Gelas diangkat<small>Peringatan gelas belum kembali</small></button>
-              <button class="act" data-sc="7">8. Isi ulang di tatakan<small>+50 ml tanpa mengangkat gelas</small></button>
-            </div>
-          </details>
         </div>
       </div>
+    </div>
 
-      <!-- Right Column: Environmental Adaptive Sensing & Configuration -->
-      <div>
-        <div class="sim-box">
+    <!-- Panel 2: Log Sensor Real-time -->
+    <div id="tab-log" class="bottom-tab-panel tab-panel" aria-labelledby="tabBtnLog">
+      <div class="card log-box">
+        <div class="log-tools">
+          <div>
+            <h3 class="card-title">Log Aktivitas dan Telemetri Real-time</h3>
+            <span class="card-sub">Total terdata: <span id="csvCount">0</span> rekaman</span>
+          </div>
+          <button class="act" id="bExportCsv">Unduh CSV</button>
+        </div>
+        <div class="log" id="log"></div>
+        <div id="logLive" class="sr-only" aria-live="polite" aria-atomic="false"></div>
+      </div>
+    </div>
+
+    <!-- Panel 3: Grafik Telemetri & Iklim -->
+    <div id="tab-tele" class="bottom-tab-panel tab-panel" aria-labelledby="tabBtnTele">
+      <div class="tele-grid">
+        <div class="card climate-card">
           <div class="card-header">
-            <span class="card-title">Sensor Iklim & Target Adaptif</span>
+            <h3 class="card-title">Sensor Iklim & Target Adaptif</h3>
           </div>
           <div class="adaptive">
             <div class="adaptive-target">
               <div>
-                <span style="font-size:12px;color:var(--dim);display:block">Target Interval Minum</span>
+                <span class="adaptive-lbl">Target Interval Minum Terhitung</span>
                 <b id="interval">--</b>
               </div>
-              <div id="intervalWhy" style="font-size:12px;color:var(--dim);text-align:right"></div>
+              <div id="intervalWhy" class="adaptive-why"></div>
             </div>
             
-            <label for="sTemp"><span>Suhu Ruangan</span><span id="tVal">27.0 °C</span></label>
+            <label for="sTemp"><span>Suhu Lingkungan</span><span id="tVal">27.0 °C</span></label>
             <input type="range" id="sTemp" min="18" max="40" step="0.5" value="27">
             
-            <label for="sHum"><span>Kelembapan Ruangan</span><span id="tHum">60 %</span></label>
+            <label for="sHum"><span>Kelembapan Udara</span><span id="tHum">60 %</span></label>
             <input type="range" id="sHum" min="20" max="95" step="1" value="60">
             
             <p class="adaptive-note" id="adaptiveNote">Slider hanya aktif pada mode simulator.</p>
           </div>
         </div>
 
-        <div class="sim-box">
+        <div class="card graph-card">
           <div class="card-header">
-            <span class="card-title">Pengaturan Parameter Alat</span>
+            <div>
+              <h3 class="card-title">Grafik Aliran Telemetri Sensor</h3>
+              <span class="card-sub">Tren beban tatakan (g) dan volume air (ml)</span>
+            </div>
+            <div class="chart-legend">
+              <span class="legend-item"><i class="legend-dot" style="background:#0284C7"></i> Beban (g)</span>
+              <span class="legend-item"><i class="legend-dot" style="background:#10B981"></i> Air (ml)</span>
+            </div>
           </div>
-          <div class="cfg-grid">
-            <div class="cfg-row">
-              <button class="act active-btn" id="bAutoMode">Timer: Otomatis</button>
-              <button class="act active-btn" id="bDemo">Demo 15 dtk: ON</button>
-              <button class="act" id="bMute" title="Buzzer hening, motor getar tetap aktif">Buzzer: ON</button>
-              <button class="act" id="bReset">Reset Harian</button>
-            </div>
-            
-            <div class="cfg-row">
-              <label for="baseMinIn">Interval Dasar (menit):</label>
-              <input type="number" id="baseMinIn" min="1" max="180" step="1" value="30">
-              <button class="act" id="bApplyInt">Atur Interval</button>
-            </div>
-            
-            <p class="hint" id="timerHint" hidden></p>
-            
-            <div class="cfg-row">
-              <label for="emptyIn">Berat Gelas Kosong (g):</label>
-              <input type="number" id="emptyIn" min="35" max="300" step="1" value="130">
-              <button class="act" id="bCal">Simpan Gelas</button>
-            </div>
-            
-            <div class="cfg-row">
-              <label for="goalIn">Target Harian (ml):</label>
-              <input type="number" id="goalIn" min="250" max="6000" step="50" value="2000">
-              <button class="act" id="bSaveGoal">Simpan Target</button>
-            </div>
+          <div class="telemetry-chart-container">
+            <svg id="teleChartSvg" viewBox="0 0 540 180" width="100%" height="180" preserveAspectRatio="none" aria-label="Grafik telemetri beban dan air">
+              <!-- Dynamically rendered by JS -->
+            </svg>
           </div>
         </div>
       </div>
     </div>
-  </section>
-
-  <!-- TAB 3: RIWAYAT & LOG -->
-  <section id="tab-hist" class="tab-panel" aria-labelledby="tabBtnHist">
-    <div class="sim-grid">
-      <!-- Daily History List -->
-      <div class="hist-box">
-        <div class="hist-head">
-          <h2>Riwayat harian</h2>
-          <span id="todayKeyLab"></span>
-        </div>
-        <div class="hist-list" id="histList"></div>
-      </div>
-
-      <!-- Activity & Telemetry Log with CSV Export -->
-      <div class="log-box" style="margin-top:0">
-        <div class="log-tools">
-          <h2 style="font-size:15px;font-weight:700;color:var(--ink)">Log aktivitas dan telemetri (<span id="csvCount">0</span> baris)</h2>
-          <button class="act" id="bExportCsv">Unduh CSV</button>
-        </div>
-        <div class="log" id="log"></div>
-      </div>
-    </div>
-    <div id="logLive" class="sr-only" aria-live="polite" aria-atomic="false"></div>
   </section>
 </main>
 
@@ -1356,19 +1705,19 @@ $('goalIn').value = dailyGoalMl;
 $('emptyIn').value = fsm.emptyCup;
 $('espSsidIn').value = localStorage.getItem('shc_wifi_ssid') || '';
 
-// Tab Navigation Controller
-function switchTab(tabId){
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+// Tab Navigation Controller for Bottom Tabs
+function switchBottomTab(tabId){
+  document.querySelectorAll('.bottom-tab-btn').forEach(btn => {
     const active = btn.dataset.tab === tabId;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-selected', active ? 'true' : 'false');
   });
-  document.querySelectorAll('.tab-panel').forEach(panel => {
+  document.querySelectorAll('.bottom-tab-panel').forEach(panel => {
     panel.classList.toggle('active', panel.id === tabId);
   });
 }
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+document.querySelectorAll('.bottom-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchBottomTab(btn.dataset.tab));
 });
 
 function todayKey(){
@@ -1415,6 +1764,45 @@ function saveTodayStatsToHistory(){
   localStorage.setItem('shc_daily_history', JSON.stringify(hist));
   renderHistoryList(hist);
 }
+
+function renderDailyChart(histObj){
+  const svg = $('dailyChartSvg');
+  if (!svg) return;
+  const hist = histObj || loadDailyHistory();
+  const w = 540, h = 130;
+  const days = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i--){
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const dayName = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'][d.getDay()];
+    const entry = hist[k] || { total_ml: 0, drink_count: 0 };
+    days.push({ key: k, label: dayName, dateStr: String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0'), ml: entry.total_ml || 0, isToday: i === 0 });
+  }
+  const maxCap = Math.max(dailyGoalMl * 1.25, 2500);
+  const targetY = h - 26 - Math.round(((dailyGoalMl) / maxCap) * (h - 48));
+  
+  let out = '';
+  // Grid line for target
+  out += '<line x1="30" y1="' + targetY + '" x2="520" y2="' + targetY + '" stroke="#94A3B8" stroke-dasharray="4 4" stroke-width="1" opacity="0.6"/>';
+  out += '<text x="522" y="' + (targetY + 4) + '" fill="#64748B" font-size="9" font-family="JetBrains Mono" text-anchor="end">Target ' + dailyGoalMl + 'ml</text>';
+  
+  const colW = (500 - 30) / 7;
+  days.forEach((d, idx) => {
+    const cx = 35 + idx * colW + colW / 2;
+    const barW = Math.min(28, colW - 10);
+    const barH = Math.max(3, Math.round((d.ml / maxCap) * (h - 48)));
+    const barY = h - 24 - barH;
+    const isGoalMet = d.ml >= dailyGoalMl;
+    const barColor = isGoalMet ? '#10B981' : (d.isToday ? '#0284C7' : '#94A3B8');
+    out += '<rect x="' + (cx - barW/2) + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" rx="4" ry="4" fill="' + barColor + '" opacity="' + (d.isToday ? '1' : '0.85') + '"/>';
+    out += '<text x="' + cx + '" y="' + (barY - 4) + '" fill="#0F172A" font-size="9.5" font-family="JetBrains Mono" font-weight="600" text-anchor="middle">' + Math.round(d.ml) + '</text>';
+    out += '<text x="' + cx + '" y="' + (h - 8) + '" fill="' + (d.isToday ? '#0284C7' : '#64748B') + '" font-size="10.5" font-family="Inter" font-weight="' + (d.isToday ? '700' : '500') + '" text-anchor="middle">' + d.label + '</text>';
+  });
+  svg.innerHTML = out;
+}
+
 function renderHistoryList(histObj){
   const hist = histObj || loadDailyHistory();
   const keys = Object.keys(hist).sort().reverse().slice(0, 5);
@@ -1426,20 +1814,21 @@ function renderHistoryList(histObj){
     empty.className = 'hist-row';
     empty.textContent = 'Belum ada catatan minum hari ini.';
     box.appendChild(empty);
-    return;
+  } else {
+    keys.forEach(k => {
+      const r = hist[k];
+      const row = document.createElement('div');
+      row.className = 'hist-row';
+      const left = document.createElement('span');
+      left.textContent = k;
+      const right = document.createElement('span');
+      right.textContent = r.total_ml + ' ml (' + r.drink_count + 'x minum, ' + r.refill_count + 'x refill, ' + r.cheat_count + 'x cheat)';
+      row.appendChild(left);
+      row.appendChild(right);
+      box.appendChild(row);
+    });
   }
-  keys.forEach(k => {
-    const r = hist[k];
-    const row = document.createElement('div');
-    row.className = 'hist-row';
-    const left = document.createElement('span');
-    left.textContent = k;
-    const right = document.createElement('span');
-    right.textContent = r.total_ml + ' ml (' + r.drink_count + 'x minum, ' + r.refill_count + 'x refill, ' + r.cheat_count + 'x cheat)';
-    row.appendChild(left);
-    row.appendChild(right);
-    box.appendChild(row);
-  });
+  renderDailyChart(hist);
 }
 
 (function restoreTodayOnBoot(){
@@ -1507,7 +1896,7 @@ function notifyAlertTransition(stStr){
 
   const messages = {
     ALERT_DRINK: 'Waktunya minum air (minimal 20 ml).',
-    ALERT_CHEAT: 'Terdeteksi sentuhan tipuan (< 20 g). Silakan minum sungguhan.',
+    ALERT_CHEAT: 'Terdeteksi tegukan terlalu kecil (< 20 ml). Silakan minum wajar.',
     ALERT_EMPTY_CUP: 'Air di gelas habis. Silakan isi ulang.',
     ALERT_MISSING_CUP: 'Gelas belum kembali ke tatakan melebihi batas waktu.'
   };
@@ -1622,6 +2011,13 @@ $('bPlace').addEventListener('click', () => { sc = null; setWeight(lastFull); })
 $('bSip').addEventListener('click', () => { sc = null; setWeight(weight - 30); });
 $('bPour').addEventListener('click', () => { sc = null; setWeight(weight + 50); });
 $('bEmpty').addEventListener('click', () => { sc = null; setWeight(fsm.emptyCup + 5); });
+$('bQuickTare').addEventListener('click', () => {
+  if (connMode === 'usb') sendSerialCmd('t');
+  else if (connMode === 'sim') {
+    setWeight(0);
+    log('Timbangan di-nolkan (Tare)', 'ev-STABLE');
+  }
+});
 
 let timerHint = null;
 let timerHintShown = null;
@@ -1763,6 +2159,7 @@ $('bUsbConnect').addEventListener('click', async () => {
     $('bUsbTare').disabled = true;
     $('bUsbCalSensor').disabled = true;
     $('bUsbPushWifi').disabled = true;
+    updateHeaderBadge();
     return;
   }
   try {
@@ -1776,10 +2173,12 @@ $('bUsbConnect').addEventListener('click', async () => {
     $('bUsbCalSensor').disabled = false;
     $('bUsbPushWifi').disabled = false;
     log('USB Serial ESP32 terhubung.', 'ev-STABLE');
+    updateHeaderBadge();
     serialLoop = readSerialLoop();
   } catch (err){
     $('usbDot').className = 'status-dot err';
     $('usbStatus').textContent = 'Gagal membuka port: ' + (err.message || err);
+    updateHeaderBadge();
   }
 });
 $('bUsbTare').addEventListener('click', () => sendSerialCmd('t'));
@@ -2285,6 +2684,32 @@ async function pollCloudBody(){
     $('cloudStatus').textContent = 'Gagal baca Cloud: ' + (err.message || err);
   }
 }
+
+function updateHeaderBadge(){
+  const badge = $('headerLiveBadge');
+  const txt = $('headerLiveText');
+  if (!badge || !txt) return;
+  if (connMode === 'sim'){
+    txt.textContent = 'Simulator Aktif';
+    badge.style.background = 'var(--water-tint)';
+    badge.style.color = 'var(--water)';
+  } else if (connMode === 'usb'){
+    if (serialPort){
+      txt.textContent = 'Live Connected ESP32';
+      badge.style.background = 'var(--ok-tint)';
+      badge.style.color = 'var(--ok)';
+    } else {
+      txt.textContent = 'USB Siaga (Putus)';
+      badge.style.background = 'var(--warn-tint)';
+      badge.style.color = 'var(--warn)';
+    }
+  } else if (connMode === 'cloud'){
+    txt.textContent = 'Cloud Firebase Sinkron';
+    badge.style.background = 'var(--ok-tint)';
+    badge.style.color = 'var(--ok)';
+  }
+}
+
 function setConnMode(mode){
   if (connMode !== mode) cloudGen++;
   connMode = mode;
@@ -2305,6 +2730,7 @@ function setConnMode(mode){
     liveRemSec = null; liveWaterMl = null;
     applyTimerConfig();
   }
+  updateHeaderBadge();
   render();
 }
 document.querySelectorAll('.conn-pill').forEach(b =>
@@ -2316,9 +2742,54 @@ function fmtClock(ms){
 }
 function fmt(ms){ return ms >= 60000 ? fmtClock(ms) : (ms/1000).toFixed(1) + ' s'; }
 
+function setRingProgress(circleId, pct){
+  const el = $(circleId);
+  if (!el) return;
+  const p = Math.min(100, Math.max(0, pct));
+  const offset = 251.327 * (1 - p / 100);
+  el.style.strokeDashoffset = offset.toFixed(2);
+}
+
+// Live telemetry buffer for real-time sensor chart
+let teleBuffer = [];
+function updateTelemetryChart(curW, curMl){
+  const svg = $('teleChartSvg');
+  if (!svg) return;
+  teleBuffer.push({ w: curW, ml: curMl });
+  if (teleBuffer.length > 40) teleBuffer.shift();
+  if (teleBuffer.length < 2) return;
+
+  const w = 540, h = 180;
+  const maxVal = 500;
+  const stepX = (w - 50) / (39);
+  
+  let out = '';
+  // Horizontal grid lines
+  for (let grid = 100; grid <= 500; grid += 100){
+    const gy = h - 25 - Math.round((grid / maxVal) * (h - 45));
+    out += '<line x1="40" y1="' + gy + '" x2="530" y2="' + gy + '" stroke="#E2E8F0" stroke-width="1"/>';
+    out += '<text x="35" y="' + (gy + 3) + '" fill="#94A3B8" font-size="9" font-family="JetBrains Mono" text-anchor="end">' + grid + '</text>';
+  }
+
+  let ptsW = [], ptsMl = [];
+  teleBuffer.forEach((pt, i) => {
+    const x = 45 + i * stepX;
+    const yW = h - 25 - Math.min(h - 45, Math.max(0, Math.round((pt.w / maxVal) * (h - 45))));
+    const yMl = h - 25 - Math.min(h - 45, Math.max(0, Math.round((pt.ml / maxCapWater(pt.ml)) * (h - 45))));
+    ptsW.push(x.toFixed(1) + ',' + yW);
+    ptsMl.push(x.toFixed(1) + ',' + yMl);
+  });
+
+  out += '<polyline points="' + ptsW.join(' ') + '" fill="none" stroke="#0284C7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  out += '<polyline points="' + ptsMl.join(' ') + '" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  svg.innerHTML = out;
+}
+function maxCapWater(v){ return 500; }
+
 function render(){
   syncModeLabels_();
   renderTimerHint();
+  updateHeaderBadge();
   const w = weight, st = fsm.stateString;
   const badge = $('badge');
   badge.className = 'badge st-' + fsm.state + (fsm.alertActive ? ' alert' : '');
@@ -2326,46 +2797,58 @@ function render(){
                    ALERT_REFILL: 'REFILL', ALERT_CHEAT: 'CHEAT' };
   $('stName').textContent = namaSt[st] || st.replace('ALERT_', 'ALERT ');
   $('stWhy').textContent = {
-    IDLE: 'Letakkan gelas di tatakan untuk mulai',
-    STABLE: 'Menstabilkan timbangan...',
-    TIMING: 'Gelas terdeteksi (' + fsm.baseline.toFixed(0) + ' g)',
-    LIFTED: 'Gelas diangkat (' + Math.floor((simMs - fsm.liftStart)/1000) + 's / ' + Math.round(fsm.maxLift/1000) + 's)',
-    ALERT_DRINK: 'Waktunya minum air!',
-    ALERT_CHEAT: 'Tegukan belum cukup (minimal 20 ml)',
-    ALERT_REFILL: fsm.missing ? 'Gelas belum kembali ke tatakan' : 'Gelas kosong, silakan isi ulang'
+    IDLE: 'Letakkan gelas di tatakan untuk mulai memantau hidrasi',
+    STABLE: 'Timbangan stabil. Mempersiapkan siklus pemantauan...',
+    TIMING: 'Gelas terdeteksi (' + fsm.baseline.toFixed(0) + ' g). Menghitung mundur jadwal minum.',
+    LIFTED: 'Gelas sedang diangkat (' + Math.floor((simMs - fsm.liftStart)/1000) + 's / ' + Math.round(fsm.maxLift/1000) + 's). Silakan nikmati air minummu.',
+    ALERT_DRINK: 'Waktunya minum air! Segarkan tubuhmu dengan satu tegukan sehat.',
+    ALERT_CHEAT: 'Tegukan terlalu kecil (< 20 ml). Minumlah setidaknya satu tegukan wajar.',
+    ALERT_REFILL: fsm.missing ? 'Gelas belum kembali ke tatakan melebihi batas waktu' : 'Air di dalam gelas hampir habis. Silakan isi ulang gelasmu.'
   }[fsm.state] || '';
+
   if (fsm.alertActive){
     badge.style.setProperty('--pulse',
       (fsm.state === 'ALERT_CHEAT' ? 150 : fsm.state === 'ALERT_REFILL' ? 750 : 500) + 'ms');
     badge.classList.add('alert');
   } else badge.classList.remove('alert');
 
-  // Coaster LED Halo visual styling based on state
+  // Coaster Halo Glow & LED Ring reaktif FSM status
   const haloGlow = $('coasterHaloGlow');
   const ledRing = $('coasterLedRing');
   const stateColors = {
     IDLE: '#94A3B8',
-    STABLE: '#059669',
+    STABLE: '#10B981',
     TIMING: '#0284C7',
     LIFTED: '#64748B',
-    ALERT_DRINK: '#D97706',
-    ALERT_CHEAT: '#DC2626',
-    ALERT_REFILL: '#D97706'
+    ALERT_DRINK: '#F59E0B',
+    ALERT_CHEAT: '#EF4444',
+    ALERT_REFILL: '#F59E0B'
   };
   const activeColor = stateColors[fsm.state] || '#0284C7';
   if (haloGlow) haloGlow.style.background = activeColor;
   if (ledRing) ledRing.setAttribute('stroke', activeColor);
 
+  // 1. Ring Gauge Countdown
+  let remRatio = 0;
   if (connMode === 'sim'){
     const rem = fsm.remaining(simMs);
     $('cd').textContent = rem === null ? '--:--' : fmt(rem);
+    const tot = fsm.targetIntervalMs();
+    remRatio = (rem !== null && tot > 0) ? Math.min(1, Math.max(0, rem / tot)) : 0;
   } else {
     const remLive = liveRemSec === null ? null
       : Math.max(0, liveRemSec - (performance.now() - liveRemAt) / 1000);
     $('cd').textContent = (fsm.state === 'TIMING' && remLive !== null)
       ? fmtClock(remLive * 1000) : '--:--';
+    const totLive = (liveTargetSec || 15) * 1000;
+    remRatio = (fsm.state === 'TIMING' && remLive !== null && totLive > 0) ? Math.min(1, Math.max(0, (remLive * 1000) / totLive)) : 0;
   }
+  setRingProgress('ringCdCircle', remRatio * 100);
+  $('ringCycleTarget').textContent = fmtTargetMnt(targetEfektifMnt());
+  $('ringCycleWhy').textContent = demo ? 'Mode demo 15 detik' : (autoDht ? 'Adaptif suhu ruangan' : 'Manual tetap');
+  $('ringTimerBadge').textContent = fsm.state === 'TIMING' ? 'Siklus Aktif' : (fsm.state.startsWith('ALERT_') ? 'Peringatan' : 'Siaga');
 
+  // 2. Ring Gauge Daily Goal
   $('cDrink').textContent = fsm.drinkCount;
   $('cCheat').textContent = fsm.cheatCount;
   $('cRefill').textContent = fsm.refillCount;
@@ -2375,14 +2858,27 @@ function render(){
   const dayMl = connMode === 'cloud'
     ? todayDelta(totMl, fsm.drinkCount, fsm.refillCount, fsm.cheatCount).total_ml
     : totMl;
-  const pct = Math.min(100, Math.round((dayMl / dailyGoalMl) * 100));
+  const pct = Math.min(100, Math.max(0, Math.round((dayMl / dailyGoalMl) * 100)));
   $('goalPct').textContent = pct;
   $('goalCur').textContent = dayMl;
   $('goalMax').textContent = dailyGoalMl;
+  $('goalCurBar').textContent = dayMl;
+  $('goalMaxBar').textContent = dailyGoalMl;
   $('goalFill').style.width = pct + '%';
+  setRingProgress('ringDailyCircle', pct);
 
+  // 3. Ring Gauge Cup Volume
   const ml = liveWaterMl !== null ? liveWaterMl : fsm.waterMl(w);
+  const cupCap = 500;
+  const cupPct = Math.min(100, Math.max(0, Math.round((ml / cupCap) * 100)));
+  $('ringCupMl').textContent = Math.round(ml);
+  $('ringCupPct').textContent = cupPct;
+  setRingProgress('ringCupCircle', cupPct);
+
+  // 4. Tremor KPI & Tumbler visualizer
   $('wOut').textContent = w.toFixed(1);
+  $('kpiTemp').textContent = roomT.toFixed(1);
+  $('kpiHum').textContent = Math.round(roomHum);
   $('wMl').textContent = 'air ' + ml.toFixed(0) + ' ml';
   $('cupAbsent').style.display = w < CFG.CUP_OFF ? 'inline-block' : 'none';
   const h = Math.min(118, Math.max(0, 118 * ml / 400));
@@ -2408,6 +2904,8 @@ function render(){
     ? 'mode demo 15 detik (tetap)'
     : (autoDht ? (baseLabel + ' (menyesuaikan suhu ruang)')
                : (baseLabel + ' (mode manual tetap)'));
+  
+  updateTelemetryChart(w, ml);
 }
 
 setInterval(() => {

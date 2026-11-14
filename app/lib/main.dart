@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1146,13 +1147,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                       )
                     else ...[
+                      _goalCard(t),
+                      const SizedBox(height: 14),
                       _glassCard(t),
                       const SizedBox(height: 14),
                       _badgeCard(t, reduceMotion),
                       const SizedBox(height: 14),
                       _countdownCard(t),
-                      const SizedBox(height: 14),
-                      _goalCard(t),
                       const SizedBox(height: 14),
                       _reminderCard(),
                       const SizedBox(height: 14),
@@ -1538,33 +1539,90 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _goalCard(Telemetry t) {
     final ml = _dayMl;
     final pct = _goalMl > 0 ? (ml / _goalMl).clamp(0.0, 1.0) : 0.0;
+    final percentInt = (pct * 100).round();
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('Hari ini', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: _water,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text('Hari ini', style: _monoStyle(12, color: _ink, weight: FontWeight.w700)),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _water.withValues(alpha: 0.1),
+                  color: _panel2,
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _line),
                 ),
-                child: Text('${(pct * 100).round()}%  ${ml.toStringAsFixed(0)} / $_goalMl ml',
-                    style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
+                child: Text('Target $_goalMl ml',
+                    style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: pct,
-              minHeight: 10,
-              backgroundColor: _panel2,
-              valueColor: const AlwaysStoppedAnimation(_water),
+          const SizedBox(height: 18),
+          Center(
+            child: SizedBox(
+              width: 148,
+              height: 148,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CustomPaint(
+                    size: const Size(148, 148),
+                    painter: _RadialRingPainter(
+                      progress: pct,
+                      trackColor: _panel2,
+                      progressColor: _water,
+                      strokeWidth: 11,
+                    ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$percentInt%',
+                        style: _monoStyle(30, color: _ink, weight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${ml.toStringAsFixed(0)} / $_goalMl ml',
+                        style: _monoStyle(12, color: _water, weight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _panel2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _line),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Status Hidrasi', style: _monoStyle(11, color: _dim)),
+                Text(
+                  pct >= 1.0
+                      ? 'Target harian terpenuhi'
+                      : '${(_goalMl - ml > 0 ? (_goalMl - ml) : 0).toStringAsFixed(0)} ml lagi',
+                  style: _monoStyle(11, color: pct >= 1.0 ? _ok : _ink, weight: FontWeight.w600),
+                ),
+              ],
             ),
           ),
           if (_dayFresh) ...[
@@ -1784,15 +1842,24 @@ class _DashboardScreenState extends State<DashboardScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text('Sisa waktu', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: timing ? _water : _dim,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text('Sisa waktu', style: _monoStyle(12, color: _ink, weight: FontWeight.w700)),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: _panel2,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: _line),
                 ),
                 child: Text('target ${_fmtTargetMnt(t.targetIntervalMin)}',
@@ -1800,7 +1867,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Text(timing ? Telemetry.mmss(rem) : '--:--',
               style: _monoStyle(36, color: _ink, weight: FontWeight.w700)),
           const SizedBox(height: 12),
@@ -1808,7 +1875,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 10,
+              minHeight: 8,
               backgroundColor: _panel2,
               valueColor: const AlwaysStoppedAnimation(_water),
             ),
@@ -1823,10 +1890,26 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
-            const SizedBox(height: 6),
+            Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: label == 'Suhu' ? _warn : _water,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(label, style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text('${value.toStringAsFixed(1)}$unit',
                 style: _monoStyle(22, color: _ink, weight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(label == 'Suhu' ? 'Sensor DHT11' : 'Kelembapan ruang',
+                style: _monoStyle(10, color: _dim)),
           ],
         ),
       );
@@ -1836,15 +1919,24 @@ class _DashboardScreenState extends State<DashboardScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('Akumulasi sesi', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: _ok,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('Akumulasi sesi', style: _monoStyle(12, color: _ink, weight: FontWeight.w700)),
                 const Spacer(),
                 Text('${t.totalMl.toStringAsFixed(1)} ml',
                     style: _monoStyle(20, color: _water, weight: FontWeight.w700)),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Row(
               children: [
                 _countCell('Minum', '${t.drinkCount}', _ok, isFirst: true),
@@ -2362,4 +2454,59 @@ class _GlassPainter extends CustomPainter {
       old.present != present ||
       old.water != water ||
       old.line != line;
+}
+
+// ── Visualizer Cincin Hidrasi Melingkar (Circular Radial Progress Ring) ──────
+class _RadialRingPainter extends CustomPainter {
+  final double progress;
+  final Color trackColor;
+  final Color progressColor;
+  final double strokeWidth;
+
+  const _RadialRingPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.progressColor,
+    this.strokeWidth = 11.0,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (math.min(size.width, size.height) - strokeWidth) / 2;
+
+    // Lingkar latar porselen
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, trackPaint);
+
+    // Lingkar progres aktif
+    if (progress > 0) {
+      final sweepAngle = 2 * math.pi * progress.clamp(0.0, 1.0);
+      final progressPaint = Paint()
+        ..color = progressColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2, // Mulai tepat dari arah jam 12 (-90 derajat)
+        sweepAngle,
+        false,
+        progressPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RadialRingPainter old) =>
+      old.progress != progress ||
+      old.trackColor != trackColor ||
+      old.progressColor != progressColor ||
+      old.strokeWidth != strokeWidth;
 }
