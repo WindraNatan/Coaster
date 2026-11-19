@@ -2,19 +2,16 @@
   "name": "web",
   "version": "1.0.0",
   "description": "Smart Hydration Coaster Web PWA",
-  "main": "auth.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node fsm.test.js && node daily-history.test.js && node daily-cloud.test.js"
+    "test": "node fsm.test.js && node daily-history.test.js && node daily-cloud.test.js && node protocol.test.js"
   },
   "dependencies": {
-    "clsx": "^2.1.1",
     "lucide-react": "^1.73.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "tailwind-merge": "^3.7.0"
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.3.0",

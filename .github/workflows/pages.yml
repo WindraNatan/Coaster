@@ -37,6 +37,7 @@ jobs:
           node web/fsm.test.js
           node web/daily-history.test.js
           node web/daily-cloud.test.js
+          node web/protocol.test.js
       - name: Build web (Vite)
         run: |
           cd web && npm ci && npm run build

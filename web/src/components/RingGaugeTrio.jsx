@@ -5,26 +5,45 @@ export default function RingGaugeTrio({
   goalMax = 2000,
   cupMl = 0,
   cupMax = 500,
+  weight = 0,
   remSec = null,
   targetSec = 15,
   stateString = 'IDLE',
+  standby = false,
   targetMntStr = '15 detik'
 }) {
   const C = 251.327; // 2 * PI * 40
 
-  // 1. Daily goal percentage & dashoffset
+  // 1. Target Hidrasi Harian
   const dailyPct = goalMax > 0 ? Math.min(100, Math.max(0, (goalCur / goalMax) * 100)) : 0;
   const dailyOffset = C * (1 - dailyPct / 100);
 
-  // 2. Cup volume percentage & dashoffset
-  const cupPct = cupMax > 0 ? Math.min(100, Math.max(0, (cupMl / cupMax) * 100)) : 0;
+  // 2. Volume Air Gelas (jujur terhadap status gelas)
+  const isLifted = stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP';
+  const isNoCup = !isLifted && (stateString === 'IDLE' || weight < 25);
+  const isCupEmptyAlert = stateString === 'ALERT_EMPTY_CUP' || (!isNoCup && !isLifted && cupMl <= 15);
+  const effectiveCupMl = (isNoCup || isLifted) ? 0 : Math.max(0, Math.round(cupMl));
+  const cupPct = cupMax > 0 ? Math.min(100, Math.max(0, (effectiveCupMl / cupMax) * 100)) : 0;
   const cupOffset = C * (1 - cupPct / 100);
-  const isCupLow = cupMl < 50 && stateString === 'ALERT_EMPTY_CUP';
 
-  // 3. Countdown timer
+  const cupCenterText = isLifted
+    ? 'Angkat'
+    : isNoCup
+      ? '0'
+      : String(effectiveCupMl);
+
+  const cupSubText = isLifted
+    ? 'Gelas sedang diangkat'
+    : isNoCup
+      ? 'Belum ada gelas di tatakan'
+      : isCupEmptyAlert
+        ? 'Air hampir habis, isi ulang'
+        : `${Math.round(cupPct)}% dari kapasitas ${cupMax} ml`;
+
+  // 3. Hitung Mundur Waktu Minum
   let cdText = '--:--';
   let cdPct = 0;
-  if (remSec !== null && remSec !== undefined && !isNaN(remSec)) {
+  if (!standby && remSec !== null && remSec !== undefined && !isNaN(remSec)) {
     const s = Math.max(0, Math.floor(remSec));
     const m = Math.floor(s / 60);
     const sec = s % 60;
@@ -34,187 +53,138 @@ export default function RingGaugeTrio({
     }
   }
   const cdOffset = C * (1 - cdPct / 100);
-  const isAlertOrLowTimer = stateString === 'ALERT_DRINK' || (remSec !== null && remSec <= 3);
+  const isAlertOrLowTimer = !standby && (stateString === 'ALERT_DRINK' || (remSec !== null && remSec <= 3));
 
   return (
-    <section className="grid grid-cols-1 md:grid-cols-3 gap-4" aria-label="Indikator instrumen hidrasi melingkar">
-      {/* Ring 1: Target Hidrasi Harian */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all flex flex-col items-center">
-        <div className="w-full flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Target Harian
-          </span>
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-100">
-            Hari Ini
-          </span>
-        </div>
+    <section
+      className="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 sm:p-5"
+      aria-label="Indikator utama hidrasi"
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/80">
+        {/* Ring 1: Hidrasi Hari Ini */}
+        <div className="py-3 sm:py-0 sm:pr-4 flex flex-col items-center">
+          <div className="text-xs font-semibold text-slate-700 tracking-tight mb-2">
+            Hidrasi Hari Ini
+          </div>
 
-        <div className="relative w-36 h-36 flex items-center justify-center my-1">
-          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
-            <defs>
-              <linearGradient id="ringWaterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#0284C7" />
-                <stop offset="100%" stopColor="#38BDF8" />
-              </linearGradient>
-            </defs>
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
-              stroke="#E0F2FE"
-              strokeWidth="8"
-            />
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
-              stroke="url(#ringWaterGrad)"
-              strokeWidth="8"
-              strokeDasharray={C}
-              strokeDashoffset={dailyOffset}
-              strokeLinecap="round"
-              className="transition-[stroke-dashoffset] duration-500 ease-out"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums leading-none">
-              {Math.round(dailyPct)}
-              <span className="text-sm font-semibold text-slate-500 ml-0.5">%</span>
+          <div className="relative w-32 h-32 flex items-center justify-center">
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#E0F2FE" strokeWidth="8" />
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                fill="none"
+                stroke="#0284C7"
+                strokeWidth="8"
+                strokeDasharray={C}
+                strokeDashoffset={dailyOffset}
+                strokeLinecap="round"
+                className="transition-[stroke-dashoffset] duration-300 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums leading-none">
+                {Math.round(dailyPct)}
+                <span className="text-sm font-semibold text-slate-600 ml-0.5">%</span>
+              </div>
+              <span className="text-[11px] font-medium text-slate-600 mt-1">tercapai</span>
             </div>
-            <span className="text-[11px] font-medium text-slate-400 mt-1">tercapai</span>
+          </div>
+
+          <div className="mt-2.5 text-center">
+            <div className="text-sm font-bold text-slate-900 font-mono tabular-nums">
+              {Math.round(goalCur)} <span className="text-slate-600 font-normal">/</span> {goalMax} ml
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">Akumulasi minum harian</p>
           </div>
         </div>
 
-        <div className="mt-3 text-center">
-          <div className="text-sm font-semibold text-slate-800 font-mono tabular-nums">
-            {Math.round(goalCur)} <span className="text-slate-400 font-normal">/</span> {goalMax} ml
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">Air diminum hari ini</p>
-        </div>
-      </div>
-
-      {/* Ring 2: Volume Air Gelas */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all flex flex-col items-center">
-        <div className="w-full flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        {/* Ring 2: Volume Air Gelas */}
+        <div className="py-3 sm:py-0 sm:px-4 flex flex-col items-center">
+          <div className="text-xs font-semibold text-slate-700 tracking-tight mb-2">
             Volume Air Gelas
-          </span>
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
-            Tumbler {cupMax} ml
-          </span>
-        </div>
+          </div>
 
-        <div className="relative w-36 h-36 flex items-center justify-center my-1">
-          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
-            <defs>
-              <linearGradient id="ringCupGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor={isCupLow ? '#EF4444' : '#10B981'} />
-                <stop offset="100%" stopColor={isCupLow ? '#F87171' : '#34D399'} />
-              </linearGradient>
-            </defs>
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
-              stroke="#F1F5F9"
-              strokeWidth="8"
-            />
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
-              stroke="url(#ringCupGrad)"
-              strokeWidth="8"
-              strokeDasharray={C}
-              strokeDashoffset={cupOffset}
-              strokeLinecap="round"
-              className="transition-[stroke-dashoffset] duration-500 ease-out"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums leading-none">
-              {Math.max(0, Math.round(cupMl))}
-              <span className="text-xs font-semibold text-slate-500 ml-0.5">ml</span>
+          <div className="relative w-32 h-32 flex items-center justify-center">
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#F1F5F9" strokeWidth="8" />
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                fill="none"
+                stroke={isCupEmptyAlert ? '#DC2626' : '#059669'}
+                strokeWidth="8"
+                strokeDasharray={C}
+                strokeDashoffset={cupOffset}
+                strokeLinecap="round"
+                className="transition-[stroke-dashoffset] duration-300 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <div className="text-2xl font-bold text-slate-900 font-mono tabular-nums leading-none">
+                {cupCenterText}
+                {!isLifted && (
+                  <span className="text-xs font-semibold text-slate-600 ml-0.5">ml</span>
+                )}
+              </div>
+              <span className="text-[11px] font-medium text-slate-600 mt-1">
+                {isLifted ? 'di luar tatakan' : 'isi bersih'}
+              </span>
             </div>
-            <span className="text-[11px] font-medium text-slate-400 mt-1">dalam tumbler</span>
+          </div>
+
+          <div className="mt-2.5 text-center">
+            <div className={`text-xs font-semibold ${isCupEmptyAlert ? 'text-rose-800' : 'text-slate-800'}`}>
+              {cupSubText}
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">Berat air di atas gelas kosong</p>
           </div>
         </div>
 
-        <div className="mt-3 text-center">
-          <div className="text-sm font-semibold text-slate-800 font-mono tabular-nums">
-            {Math.round(cupPct)}% <span className="text-slate-500 font-normal">isi gelas</span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">Kapasitas wadah {cupMax} ml</p>
-        </div>
-      </div>
-
-      {/* Ring 3: Hitung Mundur Waktu Minum */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all flex flex-col items-center">
-        <div className="w-full flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        {/* Ring 3: Minum Berikutnya */}
+        <div className="py-3 sm:py-0 sm:pl-4 flex flex-col items-center">
+          <div className="text-xs font-semibold text-slate-700 tracking-tight mb-2">
             Minum Berikutnya
-          </span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
-              isAlertOrLowTimer
-                ? 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
-                : 'bg-sky-50 text-sky-700 border-sky-100'
-            }`}
-          >
-            {isAlertOrLowTimer ? 'Waktunya Minum' : 'Siklus Aktif'}
-          </span>
-        </div>
+          </div>
 
-        <div className="relative w-36 h-36 flex items-center justify-center my-1">
-          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
-            <defs>
-              <linearGradient id="ringTimerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor={isAlertOrLowTimer ? '#F59E0B' : '#0284C7'} />
-                <stop offset="100%" stopColor={isAlertOrLowTimer ? '#FBBF24' : '#60A5FA'} />
-              </linearGradient>
-            </defs>
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
-              stroke="#F1F5F9"
-              strokeWidth="8"
-            />
-            <circle
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
-              stroke="url(#ringTimerGrad)"
-              strokeWidth="8"
-              strokeDasharray={C}
-              strokeDashoffset={cdOffset}
-              strokeLinecap="round"
-              className="transition-[stroke-dashoffset] duration-500 ease-out"
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <div
-              className={`text-2xl font-bold font-mono tabular-nums leading-none tracking-tight ${
-                isAlertOrLowTimer ? 'text-amber-600 animate-pulse' : 'text-slate-900'
-              }`}
-            >
-              {cdText}
+          <div className="relative w-32 h-32 flex items-center justify-center">
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#F1F5F9" strokeWidth="8" />
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                fill="none"
+                stroke={isAlertOrLowTimer ? '#D97706' : '#0284C7'}
+                strokeWidth="8"
+                strokeDasharray={C}
+                strokeDashoffset={cdOffset}
+                strokeLinecap="round"
+                className="transition-[stroke-dashoffset] duration-300 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <div
+                className={`text-2xl font-bold font-mono tabular-nums leading-none tracking-tight ${
+                  isAlertOrLowTimer ? 'text-amber-800' : 'text-slate-900'
+                }`}
+              >
+                {cdText}
+              </div>
+              <span className="text-[11px] font-medium text-slate-600 mt-1">
+                {standby ? 'sesi tidur' : isAlertOrLowTimer ? 'waktunya minum' : 'sisa waktu'}
+              </span>
             </div>
-            <span className="text-[11px] font-medium text-slate-400 mt-1">sisa waktu</span>
           </div>
-        </div>
 
-        <div className="mt-3 text-center">
-          <div className="text-sm font-semibold text-slate-800">
-            Target: <span className="font-mono text-water-700">{targetMntStr}</span>
+          <div className="mt-2.5 text-center">
+            <div className="text-sm font-semibold text-slate-800">
+              Target: <span className="font-mono text-water-800 font-bold">{targetMntStr}</span>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">Interval siklus berjalan</p>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">Interval minum terjadwal</p>
         </div>
       </div>
     </section>

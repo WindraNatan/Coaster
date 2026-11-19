@@ -1,766 +1,1211 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import CoasterFSM, { CFG, computeAdaptiveIntervalMs, mutedFrom } from './fsm';
-import Header from './components/Header';
-import RingGaugeTrio from './components/RingGaugeTrio';
-import TremorKpiCards from './components/TremorKpiCards';
-import VisualTumblerCoaster from './components/VisualTumblerCoaster';
-import QuickControls from './components/QuickControls';
-import FsmDemoTabs from './components/FsmDemoTabs';
-import LoginModal from './components/LoginModal';
+import { CoasterFSM, CFG, mutedFrom } from './fsm';
+import {
+  defaultTodayKey,
+  loadDailyHistory,
+  todayDelta,
+  saveTodayStatsToHistory,
+  resetDailyStatsGuarded,
+  createDailyCloudPusher
+} from './daily';
+import {
+  parseCloudTelemetry,
+  parseCloudConfig,
+  buildConfigPatch,
+  formatEmptyCupSerialCmd,
+  parseSerialLine,
+  computeEffectiveIntervalMs
+} from './protocol';
 import {
   shcEnsureToken,
   shcAuthSuffix,
   shcCoasterUrl,
+  shcDiscoverDevice,
+  shcSetSession,
   shcUid,
-  shcDeviceUid,
   getCleanFbUrl
 } from './auth';
 
-function todayKey() {
-  const d = new Date();
-  return (
-    d.getFullYear() +
-    '-' +
-    String(d.getMonth() + 1).padStart(2, '0') +
-    '-' +
-    String(d.getDate()).padStart(2, '0')
-  );
-}
-
-function loadStoredDailyHistory() {
-  try {
-    return JSON.parse(localStorage.getItem('shc_daily_history') || '{}');
-  } catch (_) {
-    return {};
-  }
-}
-
-function getDayBaseline() {
-  try {
-    return JSON.parse(localStorage.getItem('shc_day_base') || 'null');
-  } catch (_) {
-    return null;
-  }
-}
-
-function ensureBaseline(totMl, drink, refill, cheat) {
-  const k = todayKey();
-  const b = getDayBaseline();
-  const turun = b && (totMl < b.total_ml || drink < b.drink_count);
-  if (b && b.date === k && !turun) return b;
-  const next = { date: k, total_ml: totMl, drink_count: drink, refill_count: refill, cheat_count: cheat };
-  localStorage.setItem('shc_day_base', JSON.stringify(next));
-  return next;
-}
-
-function calculateTodayDelta(totMl, drink, refill, cheat) {
-  const b = ensureBaseline(totMl, drink, refill, cheat);
-  return {
-    total_ml: Math.max(0, totMl - b.total_ml),
-    drink_count: Math.max(0, drink - b.drink_count),
-    refill_count: Math.max(0, refill - b.refill_count),
-    cheat_count: Math.max(0, cheat - b.cheat_count)
-  };
-}
+import Header from './components/Header';
+import VisualTumblerCoaster from './components/VisualTumblerCoaster';
+import RingGaugeTrio from './components/RingGaugeTrio';
+import EnvironmentSessionBar from './components/EnvironmentSessionBar';
+import QuickControls from './components/QuickControls';
+import HistoryActivityPanel from './components/HistoryActivityPanel';
+import LabSimulatorPanel from './components/LabSimulatorPanel';
+import LoginModal from './components/LoginModal';
+import SessionModeModal from './components/SessionModeModal';
 
 export default function App() {
-  // Modes & settings
-  const [connMode, setConnMode] = useState('sim');
-  const [weight, setWeightState] = useState(0);
-  const [warp, setWarp] = useState(1);
-  const [demo, setDemo] = useState(true);
-  const [autoDht, setAutoDht] = useState(true);
-  const [buzzerMuted, setBuzzerMuted] = useState(false);
-  const [customBaseMin, setCustomBaseMin] = useState(
-    +(localStorage.getItem('shc_base_min') || 30)
-  );
-  const [dailyGoalMl, setDailyGoalMl] = useState(
-    +(localStorage.getItem('shc_goal_ml') || 2000)
-  );
-  const [roomT, setRoomT] = useState(27.0);
-  const [roomHum, setRoomHum] = useState(60);
+  const fsmRef = useRef(null);
+  if (!fsmRef.current) {
+    fsmRef.current = new CoasterFSM();
+  }
+  const fsm = fsmRef.current;
 
-  // FSM instance & telemetry states
-  const fsmRef = useRef(
-    new CoasterFSM(+(localStorage.getItem('shc_empty_cup') || CFG.DEFAULT_EMPTY), CFG.DEMO_INTERVAL)
-  );
-  const simMsRef = useRef(0);
-  const lastFullRef = useRef(380);
-  const lastDailyJsonRef = useRef('');
-
-  const [fsmState, setFsmState] = useState('IDLE');
-  const [remSec, setRemSec] = useState(null);
-  const [targetSec, setTargetSec] = useState(15);
-  const [cupMl, setCupMl] = useState(0);
-  const [todayDrank, setTodayDrank] = useState(0);
-  const [drinkCount, setDrinkCount] = useState(0);
-  const [cheatCount, setCheatCount] = useState(0);
-  const [refillCount, setRefillCount] = useState(0);
-  const [stableSamples, setStableSamples] = useState(0);
-  const [isStable, setIsStable] = useState(false);
-  const [isLifted, setIsLifted] = useState(false);
-
-  // Serial & Cloud state
+  const [connMode, setConnMode] = useState('sim'); // 'sim' | 'usb' | 'cloud'
   const [usbConnected, setUsbConnected] = useState(false);
   const [cloudConnected, setCloudConnected] = useState(false);
-  const [userEmail, setUserEmail] = useState(localStorage.getItem('shc_auth_email') || '');
-  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  const [weight, setWeight] = useState(0);
+  const [temp, setTemp] = useState(27.0);
+  const [hum, setHum] = useState(60);
+  const [warp, setWarp] = useState(1);
+
+  const [stateString, setStateString] = useState('IDLE');
+  const [isStable, setIsStable] = useState(false);
+  const [standby, setStandby] = useState(false);
+  const [cupMl, setCupMl] = useState(0);
+  const [remSec, setRemSec] = useState(null);
+  const [targetSec, setTargetSec] = useState(15);
+
+  const [sessionMl, setSessionMl] = useState(0);
+  const [drinkCount, setDrinkCount] = useState(0);
+  const [refillCount, setRefillCount] = useState(0);
+  const [cheatCount, setCheatCount] = useState(0);
+
+  const [emptyCup, setEmptyCup] = useState(() => {
+    const saved = parseFloat(localStorage.getItem('shc_empty_cup'));
+    return !isNaN(saved) && saved >= 35 && saved <= 300 ? saved : CFG.DEFAULT_EMPTY;
+  });
+  const [baseMin, setBaseMin] = useState(() => {
+    const saved = parseInt(localStorage.getItem('shc_base_min'), 10);
+    return !isNaN(saved) && saved >= 1 && saved <= 180 ? saved : 30;
+  });
+  const [autoDht, setAutoDht] = useState(true);
+  const [demo, setDemo] = useState(true);
+  const [buzzerMuted, setBuzzerMuted] = useState(false);
+  const [dailyGoal, setDailyGoal] = useState(() => {
+    const saved = parseInt(localStorage.getItem('shc_daily_goal'), 10);
+    return !isNaN(saved) && saved >= 500 && saved <= 6000 ? saved : 2000;
+  });
   const [timerHint, setTimerHint] = useState(null);
 
-  // Logs & stream
-  const [logs, setLogs] = useState([
-    {
-      time: new Date().toLocaleTimeString('id-ID'),
-      msg: 'Sistem Smart Hydration Coaster siap. Mode awal: Simulator.',
-      type: 'info'
-    }
-  ]);
-  const [dailyHistory, setDailyHistory] = useState(loadStoredDailyHistory());
-  const [telemetryStream, setTelemetryStream] = useState([]);
+  const [dailyHistory, setDailyHistory] = useState(() => loadDailyHistory());
+  const [weightHistory, setWeightHistory] = useState(() => Array(30).fill(0));
+  const [logs, setLogs] = useState([]);
 
-  // Hardware serial refs
+  const [simClockSec, setSimClockSec] = useState(0);
+  const [activeScenario, setActiveScenario] = useState(null);
+  const [scenarioStepText, setScenarioStepText] = useState('');
+
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [sessionModalOpen, setSessionModalOpen] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [userEmail, setUserEmail] = useState(() => localStorage.getItem('shc_auth_email') || '');
+
+  const simClockRef = useRef(0);
+  const lastPlacedWeightRef = useRef(350);
+  const prevFsmStateRef = useRef('IDLE');
+  const scenarioTimerRef = useRef(null);
   const serialPortRef = useRef(null);
   const serialReaderRef = useRef(null);
-  const serialWriterRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const lastBeepMsRef = useRef(0);
 
-  const addLog = useCallback((msg, type = 'info') => {
-    const time = new Date().toLocaleTimeString('id-ID');
-    setLogs((prev) => [...prev.slice(-99), { time, msg, type }]);
+  const cloudCfgCacheRef = useRef(null);
+  const cloudTlmCacheRef = useRef(null);
+  const sseTlmRef = useRef(null);
+  const sseCfgRef = useRef(null);
+
+  const simParamsRef = useRef({
+    weight: 0,
+    temp: 27.0,
+    hum: 60,
+    warp: 1,
+    standby: false,
+    demo: true,
+    autoDht: true,
+    baseMin: 30,
+    buzzerMuted: false
+  });
+  useEffect(() => {
+    simParamsRef.current = {
+      weight,
+      temp,
+      hum,
+      warp,
+      standby,
+      demo,
+      autoDht,
+      baseMin,
+      buzzerMuted
+    };
+  }, [weight, temp, hum, warp, standby, demo, autoDht, baseMin, buzzerMuted]);
+
+  const connModeRef = useRef(connMode);
+  useEffect(() => {
+    connModeRef.current = connMode;
+  }, [connMode]);
+
+  const addLog = useCallback((tag, msg) => {
+    const now = new Date();
+    const time =
+      String(now.getHours()).padStart(2, '0') +
+      ':' +
+      String(now.getMinutes()).padStart(2, '0') +
+      ':' +
+      String(now.getSeconds()).padStart(2, '0');
+    setLogs((prev) => [{ time, tag, msg }, ...prev.slice(0, 79)]);
   }, []);
 
-  const playChime = useCallback(() => {
-    if (buzzerMuted) return;
+  const playBeep = useCallback((freq = 880, durMs = 110) => {
+    if (simParamsRef.current.buzzerMuted) return;
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durMs / 1000);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.36);
+      osc.stop(ctx.currentTime + durMs / 1000);
     } catch (_) {}
-  }, [buzzerMuted]);
-
-  // Serial communication helper
-  const sendSerialCmd = async (str) => {
-    if (!serialWriterRef.current) return;
-    try {
-      const enc = new TextEncoder();
-      await serialWriterRef.current.write(enc.encode(str));
-    } catch (e) {
-      addLog('Gagal mengirim perintah serial: ' + e.message, 'error');
-    }
-  };
-
-  // Sync daily delta to localStorage
-  const syncDailyStats = useCallback(() => {
-    const f = fsmRef.current;
-    const hist = loadStoredDailyHistory();
-    const k = todayKey();
-    const d = calculateTodayDelta(Math.round(f.totalDrank), f.drinkCount, f.refillCount, f.cheatCount);
-    hist[k] = {
-      total_ml: d.total_ml,
-      drink_count: d.drink_count,
-      refill_count: d.refill_count,
-      cheat_count: d.cheat_count
-    };
-    const keys = Object.keys(hist).sort().reverse();
-    if (keys.length > 30) keys.slice(30).forEach((old) => delete hist[old]);
-    localStorage.setItem('shc_daily_history', JSON.stringify(hist));
-    setDailyHistory(hist);
-    setTodayDrank(d.total_ml);
   }, []);
 
-  // Cloud push daily
-  const pushDailyCloud = useCallback(async () => {
-    if (connMode !== 'cloud') return;
-    const base = getCleanFbUrl();
-    const url = shcCoasterUrl(base);
-    if (!url) return;
-    try {
-      if (!(await shcEnsureToken())) return;
-      const f = fsmRef.current;
-      const dd = calculateTodayDelta(Math.round(f.totalDrank), f.drinkCount, f.refillCount, f.cheatCount);
-      const isi = JSON.stringify({
-        total_ml: +dd.total_ml.toFixed(1),
-        drink_count: dd.drink_count,
-        refill_count: dd.refill_count,
-        cheat_count: dd.cheat_count
-      });
-      const stamp = todayKey() + '|' + isi;
-      if (stamp === lastDailyJsonRef.current) return;
-      lastDailyJsonRef.current = stamp;
-      await fetch(url + '/daily/' + todayKey() + '.json' + shcAuthSuffix(), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: isi
-      });
-    } catch (_) {
-      lastDailyJsonRef.current = '';
-    }
-  }, [connMode]);
-
-  // Cloud push config
-  const pushCloudConfig = useCallback(async () => {
-    if (connMode !== 'cloud') return;
-    const base = getCleanFbUrl();
-    const url = shcCoasterUrl(base);
-    if (!url) return;
-    try {
-      if (!(await shcEnsureToken())) return;
-      const cfg = {
-        demo,
-        auto_dht: autoDht,
-        base_interval_min: customBaseMin,
-        muted: buzzerMuted,
-        at: Date.now()
-      };
-      await fetch(url + '/config.json' + shcAuthSuffix(), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg)
-      });
-    } catch (_) {}
-  }, [connMode, demo, autoDht, customBaseMin, buzzerMuted]);
-
-  // Compute adaptive interval
-  const currentBaseIntervalMs = useCallback(() => {
-    if (demo) return CFG.DEMO_INTERVAL;
-    return customBaseMin * 60000;
-  }, [demo, customBaseMin]);
-
-  const targetIntervalMs = useCallback(() => {
-    const base = currentBaseIntervalMs();
-    if (!autoDht) return base;
-    return computeAdaptiveIntervalMs(base, roomT, roomHum);
-  }, [currentBaseIntervalMs, autoDht, roomT, roomHum]);
-
-  // Weight setting helper
-  const setWeight = (w) => {
-    setWeightState(w);
-    if (w >= 300) lastFullRef.current = w;
-  };
-
-  // Main 100ms ticker for simulation and reactive UI
+  // Init FSM empty cup & interval on mount
   useEffect(() => {
-    const fsm = fsmRef.current;
-    let prevSt = fsm.stateString;
-    let prevDrink = fsm.drinkCount;
-    let prevRefill = fsm.refillCount;
-    let prevCheat = fsm.cheatCount;
+    fsm.setEmptyCup(emptyCup);
+    const effMs = computeEffectiveIntervalMs({
+      demo,
+      autoDht,
+      baseIntervalMin: baseMin,
+      tempC: temp,
+      humidityPct: hum
+    });
+    fsm.setInterval_(effMs);
+    fsm.setMaxLift(demo ? CFG.DEMO_MAX_LIFT : CFG.MAX_LIFT);
+    setTargetSec(Math.round(effMs / 1000));
+    addLog('BOOT', 'Dashboard Smart Hydration Coaster siap.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const timer = setInterval(() => {
-      if (connMode === 'sim') {
-        const deltaMs = 100 * warp;
-        simMsRef.current += deltaMs;
+  // Sync adaptive interval & maxLift whenever mode/temp/hum/baseMin changes in Sim mode
+  useEffect(() => {
+    if (connMode !== 'sim') return;
+    const effMs = computeEffectiveIntervalMs({
+      demo,
+      autoDht,
+      baseIntervalMin: baseMin,
+      tempC: temp,
+      humidityPct: hum
+    });
+    fsm.setInterval_(effMs);
+    fsm.setMaxLift(demo ? CFG.DEMO_MAX_LIFT : CFG.MAX_LIFT);
+    setTargetSec(Math.round(effMs / 1000));
+  }, [connMode, demo, autoDht, baseMin, temp, hum, fsm]);
 
-        // Update target interval
-        const effInt = targetIntervalMs();
-        fsm.setInterval_(effInt);
+  // Daily cloud pusher instance
+  const dailyPusherRef = useRef(null);
+  if (!dailyPusherRef.current) {
+    dailyPusherRef.current = createDailyCloudPusher({
+      getConnMode: () => connModeRef.current,
+      getCoasterUrl: () => shcCoasterUrl(getCleanFbUrl()),
+      ensureToken: () => shcEnsureToken(),
+      getAuthSuffix: () => shcAuthSuffix(),
+      getTodayDelta: () =>
+        todayDelta(
+          Math.round(fsm.totalDrank),
+          fsm.drinkCount,
+          fsm.refillCount,
+          fsm.cheatCount
+        )
+    });
+  }
 
-        // Update FSM state machine
-        fsm.update(weight, simMsRef.current);
+  const syncHistoryNow = useCallback(() => {
+    saveTodayStatsToHistory(fsm, (hist) => {
+      setDailyHistory({ ...hist });
+    });
+    if (connModeRef.current === 'cloud') {
+      dailyPusherRef.current.pushDailyCloud();
+    }
+  }, [fsm]);
 
-        // Check transitions
-        const currSt = fsm.stateString;
-        if (currSt !== prevSt) {
-          if (currSt === 'ALERT_DRINK') {
-            addLog('Pengingat minum aktif! Saatnya minum air.', 'alert');
-            playChime();
-          } else if (currSt === 'ALERT_CHEAT') {
-            addLog('Tegukan kecil terdeteksi (< 20 ml). Silakan minum lebih banyak.', 'alert');
-            playChime();
-          } else if (currSt === 'ALERT_EMPTY_CUP') {
-            addLog('Gelas kosong! Silakan isi ulang air tumbler.', 'alert');
-            playChime();
-          } else if (currSt === 'ALERT_MISSING_CUP') {
-            addLog('Gelas diangkat lebih dari 10 detik.', 'alert');
-            playChime();
-          } else if (currSt === 'STABLE') {
-            addLog('Timbangan stabil, menyiapkan siklus minum.', 'info');
-          } else if (currSt === 'TIMING') {
-            addLog('Siklus minum aktif.', 'info');
-          }
-          prevSt = currSt;
+  // Send partial PATCH to Firebase /config.json
+  const pushCloudConfig = useCallback(
+    async (partial) => {
+      const patch = buildConfigPatch(partial);
+      if (Object.keys(patch).length === 0) return false;
+      const base = getCleanFbUrl();
+      const url = shcCoasterUrl(base);
+      if (!url) return false;
+      try {
+        if (!(await shcEnsureToken())) return false;
+        const res = await fetch(url + '/config.json' + shcAuthSuffix(), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch)
+        });
+        if (res.ok) {
+          cloudCfgCacheRef.current = { ...(cloudCfgCacheRef.current || {}), ...patch };
+          return true;
         }
+      } catch (_) {}
+      return false;
+    },
+    []
+  );
 
-        if (fsm.drinkCount > prevDrink) {
-          addLog(`Tegukan berhasil dicatat! (+${Math.round(fsm.totalDrank)} ml akumulatif)`, 'drink');
-          prevDrink = fsm.drinkCount;
-          syncDailyStats();
+  // Simulator 100ms loop (single stable interval using simParamsRef)
+  useEffect(() => {
+    if (connMode !== 'sim') return undefined;
+
+    let tickCounter = 0;
+    const id = setInterval(() => {
+      const p = simParamsRef.current;
+      const dt = 100 * p.warp;
+      simClockRef.current += dt;
+      const now = simClockRef.current;
+
+      if (!p.standby) {
+        fsm.update(p.weight, now);
+      }
+
+      const rawSt = p.standby ? 'IDLE' : fsm.stateString;
+      const prevSt = prevFsmStateRef.current;
+      if (rawSt !== prevSt) {
+        prevFsmStateRef.current = rawSt;
+        addLog('FSM', `Transisi ${prevSt} -> ${rawSt} (${p.weight.toFixed(1)} g)`);
+        if (rawSt !== 'TIMING') {
+          setTimerHint(null);
         }
-        if (fsm.refillCount > prevRefill) {
-          addLog('Isi ulang air terdeteksi di tatakan.', 'info');
-          prevRefill = fsm.refillCount;
-          syncDailyStats();
-        }
-        if (fsm.cheatCount > prevCheat) {
-          prevCheat = fsm.cheatCount;
-          syncDailyStats();
-        }
+        syncHistoryNow();
+      }
 
-        // Countdown calculation
-        let sec = null;
-        if (currSt === 'TIMING') {
-          const rem = fsm.remaining(simMsRef.current);
-          sec = rem != null ? Math.max(0, Math.ceil(rem / 1000)) : 0;
-        } else if (currSt.startsWith('ALERT_')) {
-          sec = 0;
-        }
-        setRemSec(sec);
-        setTargetSec(Math.round(effInt / 1000));
+      const stableNow =
+        p.weight >= CFG.CUP_ON &&
+        Math.abs(p.weight - fsm.stableCand) <= CFG.STAB_BAND &&
+        now - fsm.stableStart >= CFG.STAB_MS;
 
-        // Water level calculation
-        const ml = fsm.waterMl(weight);
-        setCupMl(ml);
+      setStateString(rawSt);
+      setIsStable(Boolean(stableNow));
+      setCupMl(fsm.waterMl(p.weight));
+      const remMs = fsm.remaining(now);
+      setRemSec(remMs !== null ? Math.ceil(remMs / 1000) : null);
+      setTargetSec(Math.round(fsm.targetIntervalMs() / 1000));
 
-        // Update state hooks
-        setFsmState(currSt);
-        setDrinkCount(fsm.drinkCount);
-        setCheatCount(fsm.cheatCount);
-        setRefillCount(fsm.refillCount);
-        const elapsedStab = simMsRef.current - fsm.stableStart;
-        const stableFlag = currSt === 'TIMING' || currSt === 'IDLE' || (currSt === 'STABLE' && elapsedStab >= 1500);
-        setStableSamples(stableFlag ? 16 : Math.max(0, Math.min(15, Math.floor((elapsedStab / 1500) * 16))));
-        setIsStable(Boolean(stableFlag));
-        setIsLifted(currSt === 'LIFTED' || currSt === 'ALERT_MISSING_CUP' || weight < 25);
+      setSessionMl(fsm.totalDrank);
+      setDrinkCount(fsm.drinkCount);
+      setRefillCount(fsm.refillCount);
+      setCheatCount(fsm.cheatCount);
 
-        // Stream telemetry point
-        setTelemetryStream((prev) => [
-          ...prev.slice(-29),
-          { t: simMsRef.current, w: weight, ml: Math.max(0, ml) }
-        ]);
+      if (!p.standby && fsm.alertActive && Date.now() - lastBeepMsRef.current >= 1200) {
+        lastBeepMsRef.current = Date.now();
+        playBeep(rawSt === 'ALERT_CHEAT' ? 1040 : 880, 100);
+      }
+
+      tickCounter++;
+      if (tickCounter % 5 === 0) {
+        setSimClockSec(Math.floor(now / 1000));
+        setWeightHistory((prev) => [...prev.slice(1), p.weight]);
       }
     }, 100);
 
-    return () => clearInterval(timer);
-  }, [connMode, weight, warp, targetIntervalMs, syncDailyStats, addLog, playChime]);
+    return () => clearInterval(id);
+  }, [connMode, fsm, addLog, playBeep, syncHistoryNow]);
 
-  // Web Serial connection handler
-  const handleConnectUsb = async () => {
-    if (!('serial' in navigator)) {
-      alert('Web Serial API tidak didukung di browser ini. Gunakan Chrome atau Edge.');
-      return;
+  // Apply parsed cloud telemetry & config
+  const applyCloudTelemetry = useCallback(
+    (rawTlm) => {
+      const t = parseCloudTelemetry(rawTlm);
+      if (!t) return;
+      cloudTlmCacheRef.current = rawTlm;
+      setCloudConnected(true);
+
+      setWeight(t.weightG);
+      setCupMl(t.waterMl);
+      setTemp(t.tempC);
+      setHum(t.humidityPct);
+      setStateString(t.rawState);
+      setStandby(t.standby);
+      setIsStable(t.state === 'TIMING' || t.state === 'STABLE');
+      setRemSec(t.remainingSec);
+      setTargetSec(Math.round(t.targetMs / 1000));
+
+      const drinkIncreased = t.drinkCount > fsm.drinkCount || t.totalMl > fsm.totalDrank;
+      fsm.totalDrank = t.totalMl;
+      fsm.drinkCount = t.drinkCount;
+      fsm.refillCount = t.refillCount;
+      fsm.cheatCount = t.cheatCount;
+
+      setSessionMl(t.totalMl);
+      setDrinkCount(t.drinkCount);
+      setRefillCount(t.refillCount);
+      setCheatCount(t.cheatCount);
+      setWeightHistory((prev) => [...prev.slice(1), t.weightG]);
+
+      const resolvedMute = mutedFrom(cloudCfgCacheRef.current, rawTlm);
+      if (typeof resolvedMute === 'boolean') {
+        setBuzzerMuted(resolvedMute);
+      }
+
+      if (drinkIncreased) {
+        syncHistoryNow();
+      }
+    },
+    [fsm, syncHistoryNow]
+  );
+
+  const applyCloudConfig = useCallback(
+    (rawCfg) => {
+      const c = parseCloudConfig(rawCfg);
+      if (!c) return;
+      cloudCfgCacheRef.current = rawCfg;
+      if (c.demo !== null) setDemo(c.demo);
+      if (c.autoDht !== null) setAutoDht(c.autoDht);
+      if (c.manualIntervalMin !== null) setBaseMin(c.manualIntervalMin);
+      if (c.emptyCupWeightG !== null) {
+        setEmptyCup(c.emptyCupWeightG);
+        fsm.setEmptyCup(c.emptyCupWeightG);
+      }
+      const resolvedMute = mutedFrom(rawCfg, cloudTlmCacheRef.current);
+      if (typeof resolvedMute === 'boolean') {
+        setBuzzerMuted(resolvedMute);
+      }
+    },
+    [fsm]
+  );
+
+  // Cloud mode: discovery + REST poll + SSE realtime stream
+  const closeCloudStreams = useCallback(() => {
+    if (sseTlmRef.current) {
+      sseTlmRef.current.close();
+      sseTlmRef.current = null;
     }
+    if (sseCfgRef.current) {
+      sseCfgRef.current.close();
+      sseCfgRef.current = null;
+    }
+  }, []);
+
+  const fetchCloudDailyHistory = useCallback(async (coasterUrl) => {
     try {
-      const port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 115200 });
-      serialPortRef.current = port;
-      setUsbConnected(true);
-      addLog('Terhubung ke ESP32 melalui Web Serial (115200 baud).', 'info');
+      const res = await fetch(coasterUrl + '/daily.json' + shcAuthSuffix());
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || typeof data !== 'object') return;
+      const merged = { ...loadDailyHistory() };
+      Object.entries(data).forEach(([dateKey, val]) => {
+        if (val && typeof val === 'object') {
+          merged[dateKey] = {
+            total_ml: Number(val.total_ml ?? val.ml ?? 0),
+            drink_count: Number(val.drink_count ?? val.drinks ?? 0),
+            refill_count: Number(val.refill_count ?? 0),
+            cheat_count: Number(val.cheat_count ?? 0)
+          };
+        }
+      });
+      localStorage.setItem('shc_daily_history', JSON.stringify(merged));
+      setDailyHistory(merged);
+    } catch (_) {}
+  }, []);
 
-      const textDecoder = new TextDecoderStream();
-      port.readable.pipeTo(textDecoder.writable);
-      const reader = textDecoder.readable.getReader();
-      serialReaderRef.current = reader;
-
-      const textEncoder = new TextEncoderStream();
-      textEncoder.readable.pipeTo(port.writable);
-      serialWriterRef.current = textEncoder.writable.getWriter();
-
-      // Read loop
-      let buf = '';
-      (async () => {
-        try {
-          while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            buf += value;
-            let nl;
-            while ((nl = buf.indexOf('\n')) >= 0) {
-              const line = buf.slice(0, nl).trim();
-              buf = buf.slice(nl + 1);
-              if (line) handleSerialLine(line);
-            }
-          }
-        } catch (_) {}
-      })();
-    } catch (err) {
-      addLog('Gagal menghubungkan serial USB: ' + err.message, 'error');
-    }
-  };
-
-  const handleSerialLine = (line) => {
-    if (!line.startsWith('State:')) {
-      return;
-    }
-    const mState = /State:\s*([A-Z_]+)/.exec(line);
-    const mWeight = /Berat:\s*([-\d.]+)g/.exec(line);
-    const mWater = /Air:\s*([-\d.]+)ml/.exec(line);
-    const mTemp = /Suhu:\s*([-\d.]+)C/.exec(line);
-    const mHum = /RH:\s*([-\d.]+)%/.exec(line);
-    const mRem = /SisaWaktu:\s*(\d+)s/.exec(line);
-    const mDrank = /Diminum:\s*([-\d.]+)ml/.exec(line);
-    const mDrinkCnt = /Minum:\s*(\d+)x/.exec(line);
-    const mCheatCnt = /Cheat:\s*(\d+)/.exec(line);
-    const mRefillCnt = /Refill:\s*(\d+)x/.exec(line);
-    const mTarget = /Target:\s*(\d+)s/.exec(line);
-
-    if (mState) setFsmState(mState[1]);
-    if (mWeight) setWeightState(parseFloat(mWeight[1]));
-    if (mWater) setCupMl(parseFloat(mWater[1]));
-    if (mTemp) setRoomT(parseFloat(mTemp[1]));
-    if (mHum) setRoomHum(parseFloat(mHum[1]));
-    if (mRem) setRemSec(parseInt(mRem[1], 10));
-    if (mTarget) setTargetSec(parseInt(mTarget[1], 10));
-    if (mDrinkCnt) setDrinkCount(parseInt(mDrinkCnt[1], 10));
-    if (mCheatCnt) setCheatCount(parseInt(mCheatCnt[1], 10));
-    if (mRefillCnt) setRefillCount(parseInt(mRefillCnt[1], 10));
-  };
-
-  // Firebase polling loop for cloud mode
-  useEffect(() => {
-    if (connMode !== 'cloud') {
+  const pollCloudOnce = useCallback(async () => {
+    const base = getCleanFbUrl();
+    if (!(await shcEnsureToken())) {
       setCloudConnected(false);
       return;
     }
-    const base = getCleanFbUrl();
     const url = shcCoasterUrl(base);
     if (!url) {
       setCloudConnected(false);
       return;
     }
-
-    let active = true;
-    const poll = async () => {
-      try {
-        if (!(await shcEnsureToken())) {
-          if (active) setCloudConnected(false);
-          return;
-        }
-        const res = await fetch(url + '/telemetry.json' + shcAuthSuffix());
-        if (res.ok) {
-          const t = await res.json();
-          if (t && active) {
-            setCloudConnected(true);
-            if (t.state) setFsmState(t.state);
-            if (typeof t.weight_g === 'number') setWeightState(t.weight_g);
-            if (typeof t.water_ml === 'number') setCupMl(t.water_ml);
-            if (typeof t.temperature_c === 'number') setRoomT(t.temperature_c);
-            if (typeof t.humidity_pct === 'number') setRoomHum(t.humidity_pct);
-            if (typeof t.remaining_sec === 'number') setRemSec(t.remaining_sec);
-            if (typeof t.target_sec === 'number') setTargetSec(t.target_sec);
-            if (typeof t.drink_count === 'number') setDrinkCount(t.drink_count);
-            if (typeof t.cheat_count === 'number') setCheatCount(t.cheat_count);
-            if (typeof t.refill_count === 'number') setRefillCount(t.refill_count);
-          }
-        }
-      } catch (_) {
-        if (active) setCloudConnected(false);
+    try {
+      const [tRes, cRes] = await Promise.all([
+        fetch(url + '/telemetry.json' + shcAuthSuffix()),
+        fetch(url + '/config.json' + shcAuthSuffix())
+      ]);
+      if (cRes.ok) {
+        const cData = await cRes.json();
+        if (cData && typeof cData === 'object') applyCloudConfig(cData);
       }
-    };
-
-    poll();
-    const interval = setInterval(poll, 1500);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [connMode]);
-
-  // Mode switcher handler
-  const handleSetConnMode = (mode) => {
-    setConnMode(mode);
-    if (mode === 'usb' && !usbConnected) {
-      handleConnectUsb();
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        if (tData && typeof tData === 'object') {
+          applyCloudTelemetry(tData);
+        } else {
+          setCloudConnected(false);
+        }
+      } else {
+        setCloudConnected(false);
+      }
+    } catch (_) {
+      setCloudConnected(false);
     }
-    addLog(`Mode koneksi berganti ke: ${mode.toUpperCase()}`, 'info');
+  }, [applyCloudConfig, applyCloudTelemetry]);
+
+  const startCloudStreams = useCallback(async () => {
+    closeCloudStreams();
+    const base = getCleanFbUrl();
+    if (!(await shcEnsureToken())) {
+      setCloudConnected(false);
+      return;
+    }
+    await shcDiscoverDevice(base);
+    const url = shcCoasterUrl(base);
+    if (!url) {
+      setCloudConnected(false);
+      return;
+    }
+    await pollCloudOnce();
+    await fetchCloudDailyHistory(url);
+
+    if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
+      try {
+        const esTlm = new window.EventSource(url + '/telemetry.json' + shcAuthSuffix());
+        esTlm.addEventListener('put', (e) => {
+          try {
+            const payload = JSON.parse(e.data);
+            if (payload && payload.path === '/' && payload.data) {
+              applyCloudTelemetry(payload.data);
+            } else if (payload && payload.data !== undefined) {
+              pollCloudOnce();
+            }
+          } catch (_) {}
+        });
+        esTlm.addEventListener('patch', (e) => {
+          try {
+            const payload = JSON.parse(e.data);
+            if (payload && payload.data && typeof payload.data === 'object') {
+              const merged = { ...(cloudTlmCacheRef.current || {}), ...payload.data };
+              applyCloudTelemetry(merged);
+            }
+          } catch (_) {}
+        });
+        sseTlmRef.current = esTlm;
+
+        const esCfg = new window.EventSource(url + '/config.json' + shcAuthSuffix());
+        esCfg.addEventListener('put', (e) => {
+          try {
+            const payload = JSON.parse(e.data);
+            if (payload && payload.path === '/' && payload.data) {
+              applyCloudConfig(payload.data);
+            }
+          } catch (_) {}
+        });
+        esCfg.addEventListener('patch', (e) => {
+          try {
+            const payload = JSON.parse(e.data);
+            if (payload && payload.data && typeof payload.data === 'object') {
+              const merged = { ...(cloudCfgCacheRef.current || {}), ...payload.data };
+              applyCloudConfig(merged);
+            }
+          } catch (_) {}
+        });
+        sseCfgRef.current = esCfg;
+      } catch (_) {}
+    }
+  }, [closeCloudStreams, pollCloudOnce, fetchCloudDailyHistory, applyCloudTelemetry, applyCloudConfig]);
+
+  useEffect(() => {
+    if (connMode !== 'cloud') {
+      closeCloudStreams();
+      return undefined;
+    }
+    startCloudStreams();
+    const safetyPoll = setInterval(pollCloudOnce, 20000);
+    return () => {
+      clearInterval(safetyPoll);
+      closeCloudStreams();
+    };
+  }, [connMode, startCloudStreams, pollCloudOnce, closeCloudStreams]);
+
+  // USB Web Serial handling
+  const disconnectUsbSerial = useCallback(async () => {
+    try {
+      if (serialReaderRef.current) {
+        await serialReaderRef.current.cancel().catch(() => {});
+        serialReaderRef.current = null;
+      }
+      if (serialPortRef.current) {
+        await serialPortRef.current.close().catch(() => {});
+        serialPortRef.current = null;
+      }
+    } catch (_) {}
+    setUsbConnected(false);
+  }, []);
+
+  const sendSerialCmd = useCallback(async (cmd) => {
+    if (!serialPortRef.current || !serialPortRef.current.writable) return false;
+    try {
+      const writer = serialPortRef.current.writable.getWriter();
+      await writer.write(new TextEncoder().encode(cmd));
+      writer.releaseLock();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }, []);
+
+  const handleSerialLine = useCallback(
+    (line) => {
+      const parsed = parseSerialLine(line);
+      if (!parsed) {
+        if (line.startsWith('[')) addLog('ESP32', line);
+        return;
+      }
+      setStateString(parsed.rawState);
+      if (parsed.weightG !== null) {
+        setWeight(parsed.weightG);
+        setWeightHistory((prev) => [...prev.slice(1), parsed.weightG]);
+      }
+      if (parsed.waterMl !== null) setCupMl(parsed.waterMl);
+      if (parsed.tempC !== null) setTemp(parsed.tempC);
+      if (parsed.humidityPct !== null) setHum(parsed.humidityPct);
+      if (parsed.remainingSec !== null) setRemSec(parsed.remainingSec);
+      if (parsed.targetSec !== null) setTargetSec(parsed.targetSec);
+      if (parsed.totalMl !== null) {
+        fsm.totalDrank = parsed.totalMl;
+        setSessionMl(parsed.totalMl);
+      }
+      if (parsed.drinkCount !== null) {
+        const up = parsed.drinkCount > fsm.drinkCount;
+        fsm.drinkCount = parsed.drinkCount;
+        setDrinkCount(parsed.drinkCount);
+        if (up) syncHistoryNow();
+      }
+      if (parsed.refillCount !== null) {
+        fsm.refillCount = parsed.refillCount;
+        setRefillCount(parsed.refillCount);
+      }
+      if (parsed.cheatCount !== null) {
+        fsm.cheatCount = parsed.cheatCount;
+        setCheatCount(parsed.cheatCount);
+      }
+      if (parsed.demo !== null) setDemo(parsed.demo);
+      if (parsed.autoDht !== null) setAutoDht(parsed.autoDht);
+      if (parsed.muted !== null) setBuzzerMuted(parsed.muted);
+      if (parsed.standby !== null) setStandby(parsed.standby);
+      setIsStable(parsed.state === 'TIMING' || parsed.state === 'STABLE');
+    },
+    [fsm, addLog, syncHistoryNow]
+  );
+
+  const connectUsbSerial = useCallback(async () => {
+    if (!('serial' in navigator)) {
+      addLog('USB', 'Browser ini belum mendukung Web Serial API (gunakan Chrome atau Edge).');
+      return;
+    }
+    try {
+      await disconnectUsbSerial();
+      const port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+      serialPortRef.current = port;
+      setUsbConnected(true);
+      addLog('USB', 'Terhubung ke ESP32 melalui USB Serial.');
+
+      const decoder = new TextDecoderStream();
+      port.readable.pipeTo(decoder.writable).catch(() => {});
+      const reader = decoder.readable.getReader();
+      serialReaderRef.current = reader;
+
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) {
+          buffer += value;
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+          lines.forEach((l) => {
+            if (l.trim()) handleSerialLine(l.trim());
+          });
+        }
+      }
+    } catch (err) {
+      addLog('USB', `Koneksi USB dibatalkan atau terputus: ${err.message || err}`);
+      setUsbConnected(false);
+    }
+  }, [addLog, disconnectUsbSerial, handleSerialLine]);
+
+  const handleSelectConnMode = (nextMode) => {
+    if (scenarioTimerRef.current) {
+      clearTimeout(scenarioTimerRef.current);
+      scenarioTimerRef.current = null;
+      setActiveScenario(null);
+      setScenarioStepText('');
+    }
+    if (connMode === 'usb' && nextMode !== 'usb') {
+      disconnectUsbSerial();
+    }
+    setConnMode(nextMode);
+    if (nextMode === 'usb') {
+      connectUsbSerial();
+    } else if (nextMode === 'cloud') {
+      if (!shcUid()) {
+        setAuthModalOpen(true);
+      }
+    }
   };
 
-  // Quick Action Handlers
+  // Actions: Tare, Empty Cup Calibration, Timer Mode, Interval, Mute, Goal, Reset, Session
   const handleTare = () => {
-    if (connMode === 'usb') sendSerialCmd('t');
+    if (connMode === 'cloud') return;
+    if (connMode === 'usb') {
+      sendSerialCmd('t\n');
+      addLog('AKSI', 'Perintah Tare dikirim ke ESP32 lewat USB.');
+      return;
+    }
     setWeight(0);
-    addLog('Timbangan di-nolkan (Tare).', 'info');
+    fsm.toIdle(simClockRef.current);
+    addLog('AKSI', 'Timbangan simulator dinolkan (0,0 g).');
   };
 
   const handleCalibrateCup = (val) => {
-    if (fsmRef.current.setEmptyCup(val)) {
-      localStorage.setItem('shc_empty_cup', String(val));
-      if (connMode === 'usb') sendSerialCmd('c' + val + '\n');
-      addLog(`Berat gelas kosong disimpan: ${val} g`, 'info');
+    const g = Number(val);
+    if (!fsm.setEmptyCup(g)) return;
+    setEmptyCup(g);
+    localStorage.setItem('shc_empty_cup', String(g));
+    addLog('KONFIG', `Berat gelas kosong disimpan: ${g.toFixed(1)} g.`);
+    if (connMode === 'usb') {
+      const cmd = formatEmptyCupSerialCmd(g);
+      if (cmd) sendSerialCmd(cmd);
+    } else if (connMode === 'cloud') {
+      pushCloudConfig({ emptyCupWeightG: g });
     }
   };
 
-  const handleToggleAuto = () => {
-    const next = !autoDht;
-    setAutoDht(next);
-    if (connMode === 'usb') sendSerialCmd('m');
-    pushCloudConfig();
-    addLog(`Mode timer: ${next ? 'Otomatis (DHT11)' : 'Manual'}`, 'info');
+  const handleSelectTimerMode = (mode) => {
+    const nextDemo = mode === 'DEMO';
+    const nextAuto = mode === 'DEMO' ? autoDht : mode === 'AUTO_DHT';
+    setDemo(nextDemo);
+    if (mode !== 'DEMO') setAutoDht(nextAuto);
+
+    if (stateString === 'TIMING') {
+      setTimerHint('Perubahan mode timer akan berlaku penuh pada siklus minum berikutnya.');
+    }
+    addLog('KONFIG', `Mode timer diubah ke ${mode}.`);
+
+    if (connMode === 'usb') {
+      if (nextDemo !== demo) sendSerialCmd('d\n');
+      if (mode !== 'DEMO' && nextAuto !== autoDht) sendSerialCmd('m\n');
+    } else if (connMode === 'cloud') {
+      pushCloudConfig({ timerMode: mode });
+    }
   };
 
-  const handleToggleDemo = () => {
-    const next = !demo;
-    setDemo(next);
-    if (connMode === 'usb') sendSerialCmd('d');
-    pushCloudConfig();
-    addLog(`Mode demo 15 detik: ${next ? 'AKTIF' : 'NONAKTIF'}`, 'info');
+  const handleSetInterval = (mins) => {
+    const m = Math.round(Number(mins));
+    if (isNaN(m) || m < 1 || m > 180) return;
+    setBaseMin(m);
+    setDemo(false);
+    localStorage.setItem('shc_base_min', String(m));
+    if (stateString === 'TIMING') {
+      setTimerHint(`Interval dasar ${m} menit disimpan; siklus berjalan tetap menyelesaikan target saat ini.`);
+    }
+    addLog('KONFIG', `Interval dasar diatur ke ${m} menit (Mode Normal).`);
+    if (connMode === 'usb') {
+      sendSerialCmd(`i${m}\n`);
+    } else if (connMode === 'cloud') {
+      pushCloudConfig({
+        timerMode: autoDht ? 'AUTO_DHT' : 'MANUAL',
+        manualIntervalMin: m
+      });
+    }
   };
 
   const handleToggleMute = () => {
     const next = !buzzerMuted;
     setBuzzerMuted(next);
-    if (connMode === 'usb') sendSerialCmd('q');
-    pushCloudConfig();
-    addLog(`Mode suara buzzer: ${next ? 'HENING' : 'AKTIF'}`, 'info');
-  };
-
-  const handleSetInterval = (val) => {
-    setCustomBaseMin(val);
-    localStorage.setItem('shc_base_min', String(val));
-    setDemo(false);
-    if (connMode === 'usb') sendSerialCmd('i' + val + '\n');
-    pushCloudConfig();
-    addLog(`Interval dasar diatur ke ${val} menit`, 'info');
+    addLog('KONFIG', next ? 'Buzzer diheningkan (getar tetap aktif).' : 'Suara buzzer diaktifkan.');
+    if (connMode === 'usb') {
+      sendSerialCmd('q\n');
+    } else if (connMode === 'cloud') {
+      pushCloudConfig({ muted: next });
+    }
   };
 
   const handleSaveGoal = (val) => {
-    setDailyGoalMl(val);
-    localStorage.setItem('shc_goal_ml', String(val));
-    addLog(`Target hidrasi harian disimpan: ${val} ml`, 'info');
+    const g = Math.round(Number(val));
+    if (isNaN(g) || g < 500 || g > 6000) return;
+    setDailyGoal(g);
+    localStorage.setItem('shc_daily_goal', String(g));
+    addLog('KONFIG', `Target hidrasi harian disimpan: ${g} ml.`);
   };
 
   const handleResetDaily = () => {
-    if (connMode === 'cloud') {
-      addLog('Reset harian ditolak: mode cloud aktif.', 'error');
-      return;
-    }
-    syncDailyStats();
-    fsmRef.current.resetStats();
-    setDrinkCount(0);
-    setCheatCount(0);
-    setRefillCount(0);
-    setTodayDrank(0);
-    addLog('Statistik harian berhasil di-reset untuk hari baru.', 'info');
-  };
-
-  // Tactile cup actions
-  const handleLift = () => {
-    setWeight(0);
-    addLog('Aksi fisik: Gelas diangkat dari tatakan.', 'info');
-  };
-
-  const handlePlace = () => {
-    setWeight(lastFullRef.current);
-    addLog('Aksi fisik: Gelas diletakkan kembali di tatakan.', 'info');
-  };
-
-  const handleSip = () => {
-    const next = Math.max(0, weight - 30);
-    setWeight(next);
-    addLog('Aksi fisik: Sedot air -30 g via sedotan.', 'info');
-  };
-
-  const handlePour = () => {
-    const next = Math.min(500, weight + 50);
-    setWeight(next);
-    addLog('Aksi fisik: Tuang air +50 g ke dalam tumbler.', 'info');
-  };
-
-  const handleEmpty = () => {
-    const next = fsmRef.current.emptyCup + 5;
-    setWeight(next);
-    addLog('Aksi fisik: Gelas dikosongkan (sisa 5g air).', 'info');
-  };
-
-  // 8 Demo Scenarios
-  const handleRunScenario = (idx) => {
-    const fsm = fsmRef.current;
-    if (idx === 0) {
-      // 1. Taruh gelas terisi
-      setWeight(380);
-      addLog('Skenario 1: Taruh gelas terisi 380 g -> Stabil 1.5s menuju TIMING.', 'info');
-    } else if (idx === 1) {
-      // 2. Timer habis -> ALERT_DRINK
-      if (fsm.stateString === 'TIMING') {
-        const remaining = fsm.remaining(simMsRef.current) ?? 15000;
-        simMsRef.current += remaining + 100;
-        addLog('Skenario 2: Waktu dipercepat -> ALERT_DRINK aktif.', 'alert');
-      } else {
-        setWeight(380);
-        setTimeout(() => {
-          simMsRef.current += 16000;
-        }, 1600);
-      }
-    } else if (idx === 2) {
-      // 3. Tegukan kecil (< 20 ml)
-      const next = weight - 10;
-      setWeight(next);
-      addLog('Skenario 3: Sentuh tatakan / tegukan kecil -10 g -> ALERT_CHEAT.', 'alert');
-    } else if (idx === 3) {
-      // 4. Minum 120 ml
-      setWeight(0);
-      addLog('Skenario 4: Angkat gelas untuk minum 120 ml...', 'info');
-      setTimeout(() => {
-        const next = Math.max(fsm.emptyCup, lastFullRef.current - 120);
-        setWeight(next);
-        addLog(`Skenario 4: Gelas diletakkan kembali dengan beban ${next} g.`, 'drink');
-      }, 1200);
-    } else if (idx === 4) {
-      // 5. Gelas kosong
-      setWeight(fsm.emptyCup + 5);
-      addLog('Skenario 5: Air hampir habis -> ALERT_EMPTY_CUP.', 'alert');
-    } else if (idx === 5) {
-      // 6. Isi ulang air
-      const next = Math.min(480, weight + 240);
-      setWeight(next);
-      addLog(`Skenario 6: Isi ulang air +240 g (total ${next} g).`, 'info');
-    } else if (idx === 6) {
-      // 7. Gelas diangkat > 10 dtk
-      setWeight(0);
-      addLog('Skenario 7: Gelas diangkat > 10 dtk...', 'info');
-      setTimeout(() => {
-        simMsRef.current += 11000;
-        addLog('Skenario 7: Waktu lift terlewati -> ALERT_MISSING_CUP.', 'alert');
-      }, 1000);
-    } else if (idx === 7) {
-      // 8. Sedotan di tatakan
-      const next = Math.max(fsm.emptyCup, weight - 30);
-      setWeight(next);
-      addLog('Skenario 8: Minum via sedotan -30 g tanpa mengangkat gelas.', 'drink');
-    }
-  };
-
-  // CSV Export handler
-  const handleExportCsv = () => {
-    let csv = 'Timestamp,Tipe,Pesan\r\n';
-    logs.forEach((lg) => {
-      csv += `"${lg.time}","${lg.type}","${lg.msg.replace(/"/g, '""')}"\r\n`;
+    const didReset = resetDailyStatsGuarded({
+      connMode,
+      fsm,
+      onSaveHistory: () => syncHistoryNow(),
+      onSendSerialReset: (cmd) => sendSerialCmd(cmd)
     });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    if (!didReset) return;
+    setSessionMl(0);
+    setDrinkCount(0);
+    setRefillCount(0);
+    setCheatCount(0);
+    addLog('AKSI', 'Statistik sesi di-reset setelah menyimpan riwayat hari ini.');
+  };
+
+  const handleConfirmStartSession = async (chosenMode) => {
+    setSessionBusy(true);
+    try {
+      syncHistoryNow();
+      const nextDemo = chosenMode === 'DEMO';
+      const nextAuto = chosenMode === 'DEMO' ? autoDht : chosenMode === 'AUTO_DHT';
+      setDemo(nextDemo);
+      if (chosenMode !== 'DEMO') setAutoDht(nextAuto);
+
+      if (connMode === 'cloud') {
+        const base = getCleanFbUrl();
+        await pushCloudConfig({ timerMode: chosenMode });
+        await shcSetSession(base, shcUid(), true);
+      } else if (connMode === 'usb') {
+        sendSerialCmd('x\n');
+      } else {
+        fsm.toIdle(simClockRef.current);
+      }
+      setStandby(false);
+      setSessionModalOpen(false);
+      addLog('SESI', `Sesi dimulai dengan mode ${chosenMode}.`);
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+
+  const handleEndSession = async () => {
+    setSessionBusy(true);
+    try {
+      syncHistoryNow();
+      if (connMode === 'cloud') {
+        const base = getCleanFbUrl();
+        await shcSetSession(base, shcUid(), false);
+      } else if (connMode === 'usb') {
+        sendSerialCmd('z\n');
+      } else {
+        fsm.toIdle(simClockRef.current);
+      }
+      setStandby(true);
+      setStateString('IDLE');
+      setRemSec(null);
+      addLog('SESI', 'Sesi diakhiri; tatakan masuk ke mode tidur (standby).');
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+
+  // Tactile Simulator Cup Actions
+  const handleSimLift = () => {
+    if (connMode !== 'sim') return;
+    if (weight >= CFG.CUP_ON) lastPlacedWeightRef.current = weight;
+    setWeight(0);
+  };
+
+  const handleSimPlace = () => {
+    if (connMode !== 'sim') return;
+    setWeight(lastPlacedWeightRef.current >= CFG.CUP_ON ? lastPlacedWeightRef.current : emptyCup + 220);
+  };
+
+  const handleSimSip = () => {
+    if (connMode !== 'sim') return;
+    const baseW = weight >= CFG.CUP_ON ? weight : lastPlacedWeightRef.current;
+    const nextW = Math.max(emptyCup, baseW - 30);
+    lastPlacedWeightRef.current = nextW;
+    setWeight(nextW);
+  };
+
+  const handleSimPour = () => {
+    if (connMode !== 'sim') return;
+    const baseW = weight >= CFG.CUP_ON ? weight : Math.max(emptyCup, lastPlacedWeightRef.current);
+    const nextW = Math.min(550, baseW + 50);
+    lastPlacedWeightRef.current = nextW;
+    setWeight(nextW);
+  };
+
+  const handleSimEmpty = () => {
+    if (connMode !== 'sim') return;
+    const nextW = emptyCup + 5;
+    lastPlacedWeightRef.current = nextW;
+    setWeight(nextW);
+  };
+
+  // Automated 8 Verification Scenarios (deterministic step runner)
+  const runScenario = (id) => {
+    if (connMode !== 'sim') return;
+    if (scenarioTimerRef.current) {
+      clearTimeout(scenarioTimerRef.current);
+      scenarioTimerRef.current = null;
+    }
+    setStandby(false);
+    setActiveScenario(id);
+
+    const step = (delayMs, fn) => {
+      scenarioTimerRef.current = setTimeout(fn, delayMs);
+    };
+
+    const settleInTiming = (wTarget) => {
+      let t = simClockRef.current;
+      fsm.toIdle(t);
+      t += 100;
+      fsm.update(wTarget, t);
+      for (let i = 1; i <= 16; i++) {
+        t += 100;
+        fsm.update(wTarget, t);
+      }
+      simClockRef.current = t;
+      lastPlacedWeightRef.current = wTarget;
+      setWeight(wTarget);
+    };
+
+    if (id === 1) {
+      setDemo(true);
+      fsm.toIdle(simClockRef.current);
+      setWeight(350);
+      lastPlacedWeightRef.current = 350;
+      setScenarioStepText('Skenario 1: Gelas 350 g diletakkan, menunggu stabil 1,5 dtk...');
+      step(1700, () => {
+        setScenarioStepText('Skenario 1 selesai: Beban stabil -> TIMING.');
+        setActiveScenario(null);
+      });
+    } else if (id === 2) {
+      setDemo(true);
+      settleInTiming(350);
+      setScenarioStepText('Skenario 2: Memajukan waktu 15 detik hingga target habis...');
+      step(400, () => {
+        simClockRef.current += 15500;
+        fsm.update(350, simClockRef.current);
+        setStateString(fsm.stateString);
+        setScenarioStepText('Skenario 2 selesai: Timer habis -> ALERT_DRINK.');
+        setActiveScenario(null);
+      });
+    } else if (id === 3) {
+      // Tegukan kecil (< 20 g): wajib angkat (0 g -> LIFTED) lalu taruh kembali (-10 g -> CHEAT)
+      setDemo(true);
+      settleInTiming(350);
+      simClockRef.current += 15500;
+      fsm.update(350, simClockRef.current);
+      setWeight(0);
+      simClockRef.current += 500;
+      fsm.update(0, simClockRef.current);
+      setStateString(fsm.stateString);
+      setScenarioStepText('Skenario 3: Gelas diangkat, lalu ditaruh kembali hanya berkurang 10 g...');
+      step(600, () => {
+        setWeight(340);
+        lastPlacedWeightRef.current = 340;
+        let t = simClockRef.current;
+        fsm.update(340, t);
+        for (let i = 1; i <= 16; i++) {
+          t += 100;
+          fsm.update(340, t);
+        }
+        simClockRef.current = t;
+        setStateString(fsm.stateString);
+        setCheatCount(fsm.cheatCount);
+        setScenarioStepText('Skenario 3 selesai: Tegukan < 20 ml terdeteksi -> CHEAT.');
+        setActiveScenario(null);
+      });
+    } else if (id === 4) {
+      setDemo(true);
+      settleInTiming(350);
+      simClockRef.current += 15500;
+      fsm.update(350, simClockRef.current);
+      setWeight(0);
+      simClockRef.current += 1000;
+      fsm.update(0, simClockRef.current);
+      setScenarioStepText('Skenario 4: Gelas diangkat dan diminum 150 ml...');
+      step(600, () => {
+        setWeight(200);
+        lastPlacedWeightRef.current = 200;
+        let t = simClockRef.current;
+        fsm.update(200, t);
+        for (let i = 1; i <= 16; i++) {
+          t += 100;
+          fsm.update(200, t);
+        }
+        simClockRef.current = t;
+        setStateString(fsm.stateString);
+        setSessionMl(fsm.totalDrank);
+        setDrinkCount(fsm.drinkCount);
+        setScenarioStepText('Skenario 4 selesai: Minum +150 ml tercatat -> TIMING.');
+        setActiveScenario(null);
+      });
+    } else if (id === 5) {
+      setDemo(true);
+      settleInTiming(350);
+      setScenarioStepText('Skenario 5: Minum lewat sedotan (-30 g) tanpa mengangkat gelas...');
+      step(500, () => {
+        setWeight(320);
+        lastPlacedWeightRef.current = 320;
+        let t = simClockRef.current;
+        fsm.update(320, t);
+        for (let i = 1; i <= 16; i++) {
+          t += 100;
+          fsm.update(320, t);
+        }
+        simClockRef.current = t;
+        setStateString(fsm.stateString);
+        setSessionMl(fsm.totalDrank);
+        setDrinkCount(fsm.drinkCount);
+        setScenarioStepText('Skenario 5 selesai: Sedotan 30 ml tercatat tanpa angkat.');
+        setActiveScenario(null);
+      });
+    } else if (id === 6) {
+      setDemo(true);
+      settleInTiming(300);
+      const emptyW = emptyCup + 5;
+      setWeight(0);
+      simClockRef.current += 500;
+      fsm.update(0, simClockRef.current);
+      let t = simClockRef.current;
+      fsm.update(emptyW, t);
+      for (let i = 1; i <= 16; i++) {
+        t += 100;
+        fsm.update(emptyW, t);
+      }
+      simClockRef.current = t;
+      setWeight(emptyW);
+      setStateString(fsm.stateString);
+      setScenarioStepText('Skenario 6: Gelas kosong (REFILL), menuang air +240 ml...');
+      step(900, () => {
+        const fullW = emptyW + 240;
+        setWeight(fullW);
+        lastPlacedWeightRef.current = fullW;
+        let t2 = simClockRef.current;
+        fsm.update(fullW, t2);
+        for (let i = 1; i <= 16; i++) {
+          t2 += 100;
+          fsm.update(fullW, t2);
+        }
+        simClockRef.current = t2;
+        setStateString(fsm.stateString);
+        setRefillCount(fsm.refillCount);
+        setScenarioStepText('Skenario 6 selesai: Isi ulang tercatat -> TIMING.');
+        setActiveScenario(null);
+      });
+    } else if (id === 7) {
+      setDemo(true);
+      settleInTiming(350);
+      setWeight(0);
+      simClockRef.current += 200;
+      fsm.update(0, simClockRef.current);
+      setScenarioStepText('Skenario 7: Gelas diangkat > 10 detik...');
+      step(500, () => {
+        simClockRef.current += 11000;
+        fsm.update(0, simClockRef.current);
+        setStateString(fsm.stateString);
+        setScenarioStepText('Skenario 7 selesai: Gelas lupa ditaruh -> REFILL (ALERT_MISSING_CUP).');
+        setActiveScenario(null);
+      });
+    } else if (id === 8) {
+      setDemo(false);
+      setAutoDht(true);
+      setBaseMin(30);
+      setTemp(33.0);
+      setHum(35);
+      const effMs = computeEffectiveIntervalMs({
+        demo: false,
+        autoDht: true,
+        baseIntervalMin: 30,
+        tempC: 33.0,
+        humidityPct: 35
+      });
+      fsm.setInterval_(effMs);
+      settleInTiming(350);
+      setTargetSec(Math.round(effMs / 1000));
+      setScenarioStepText(
+        `Skenario 8 selesai: Suhu 33 °C / RH 35% mempercepat interval 30 mnt menjadi ${(effMs / 60000).toFixed(1)} mnt.`
+      );
+      setActiveScenario(null);
+    }
+  };
+
+  const handleExportCsv = () => {
+    const header = 'Waktu,Kategori,Pesan\n';
+    const body = logs
+      .map((l) => `"${l.time}","${l.tag}","${String(l.msg).replace(/"/g, '""')}"`)
+      .join('\n');
+    const blob = new Blob([header + body], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `shc_sensor_log_${todayKey()}.csv`;
+    a.download = `shc-log-${defaultTodayKey()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  // Format target display string
-  const targetMntDisplay = demo ? '15 detik' : `${customBaseMin} menit`;
+  const todayKeyStr = defaultTodayKey();
+  const todayStats = todayDelta(
+    Math.round(sessionMl),
+    drinkCount,
+    refillCount,
+    cheatCount
+  );
+  const goalCurrentMl =
+    connMode === 'cloud'
+      ? Math.max(todayStats.total_ml, Number(dailyHistory[todayKeyStr]?.total_ml || 0))
+      : Math.max(Math.round(sessionMl), todayStats.total_ml);
 
-  // Sim clock display
-  const clockSec = Math.floor(simMsRef.current / 1000);
-  const clockStr = `${String(Math.floor(clockSec / 60)).padStart(2, '0')}:${String(
-    clockSec % 60
-  ).padStart(2, '0')}`;
+  const effectiveIntervalMs = computeEffectiveIntervalMs({
+    demo,
+    autoDht,
+    baseIntervalMin: baseMin,
+    tempC: temp,
+    humidityPct: hum
+  });
+  const effectiveMin = effectiveIntervalMs / 60000;
+  const targetMntStr = demo
+    ? '15 detik (Demo)'
+    : `${(targetSec / 60).toFixed(targetSec % 60 === 0 ? 0 : 1)} menit`;
+
+  const currentTimerMode = demo ? 'DEMO' : autoDht ? 'AUTO_DHT' : 'MANUAL';
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 antialiased flex flex-col selection:bg-water-200 selection:text-water-900">
-      {/* Top Header */}
+    <div className="min-h-screen bg-porcelain text-slate-900 flex flex-col">
       <Header
         connMode={connMode}
-        setConnMode={handleSetConnMode}
+        setConnMode={handleSelectConnMode}
         usbConnected={usbConnected}
         cloudConnected={cloudConnected}
+        standby={standby}
         userEmail={userEmail}
         onOpenAuth={() => setAuthModalOpen(true)}
-        onTare={handleTare}
       />
 
-      {/* Main Content Dashboard */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {/* Row 1: Ring Gauge Trio */}
-        <RingGaugeTrio
-          goalCur={todayDrank}
-          goalMax={dailyGoalMl}
-          cupMl={cupMl}
-          cupMax={500}
-          remSec={remSec}
-          targetSec={targetSec}
-          stateString={fsmState}
-          targetMntStr={targetMntDisplay}
-        />
-
-        {/* Row 2: Tremor KPI Cards */}
-        <TremorKpiCards
-          weight={weight}
-          stableSamples={stableSamples}
-          isStable={isStable}
-          isLifted={isLifted}
-          temp={roomT}
-          humidity={roomHum}
-          drinkCount={drinkCount}
-          cheatCount={cheatCount}
-          refillCount={refillCount}
-          totalDrank={todayDrank}
-        />
-
-        {/* Row 3: Bento 8:4 Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column (8 cols): Visualizer Stage */}
-          <div className="lg:col-span-8 flex flex-col">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 space-y-4">
+        {/* ROW 1: Above-the-Fold Primary Grid (Hero Stage Col 1-5 + Ring Gauges & Env/Session Col 6-12) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <div className="lg:col-span-5">
             <VisualTumblerCoaster
-              stateString={fsmState}
+              stateString={stateString}
               weight={weight}
+              isStable={isStable}
+              standby={standby}
               cupMl={cupMl}
               cupMax={500}
-              onLift={handleLift}
-              onPlace={handlePlace}
-              onSip={handleSip}
-              onPour={handlePour}
-              onEmpty={handleEmpty}
+              emptyCup={emptyCup}
+              connMode={connMode}
+              onLift={handleSimLift}
+              onPlace={handleSimPlace}
+              onSip={handleSimSip}
+              onPour={handleSimPour}
+              onEmpty={handleSimEmpty}
             />
           </div>
 
-          {/* Right Column (4 cols): Quick Controls */}
-          <div className="lg:col-span-4 flex flex-col">
+          <div className="lg:col-span-7 flex flex-col justify-between gap-4">
+            <RingGaugeTrio
+              goalCur={goalCurrentMl}
+              goalMax={dailyGoal}
+              cupMl={cupMl}
+              cupMax={500}
+              weight={weight}
+              remSec={remSec}
+              targetSec={targetSec}
+              stateString={stateString}
+              standby={standby}
+              targetMntStr={targetMntStr}
+            />
+
+            <EnvironmentSessionBar
+              temp={temp}
+              hum={hum}
+              autoDht={autoDht}
+              demo={demo}
+              baseMin={baseMin}
+              effectiveMin={effectiveMin}
+              sessionMl={sessionMl}
+              drinkCount={drinkCount}
+              refillCount={refillCount}
+              cheatCount={cheatCount}
+              standby={standby}
+              onOpenStartSession={() => setSessionModalOpen(true)}
+              onEndSession={handleEndSession}
+              sessionBusy={sessionBusy}
+            />
+          </div>
+        </div>
+
+        {/* ROW 2: Controls (Col 1-4) & History/Activity Tabs (Col 5-12) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          <div className="lg:col-span-4">
             <QuickControls
-              emptyCup={fsmRef.current.emptyCup}
+              connMode={connMode}
+              emptyCup={emptyCup}
               onCalibrateCup={handleCalibrateCup}
               onTare={handleTare}
               autoDht={autoDht}
-              onToggleAuto={handleToggleAuto}
               demo={demo}
-              onToggleDemo={handleToggleDemo}
+              onSelectTimerMode={handleSelectTimerMode}
               buzzerMuted={buzzerMuted}
               onToggleMute={handleToggleMute}
-              baseMin={customBaseMin}
+              baseMin={baseMin}
               onSetInterval={handleSetInterval}
-              dailyGoal={dailyGoalMl}
+              dailyGoal={dailyGoal}
               onSaveGoal={handleSaveGoal}
               onResetDaily={handleResetDaily}
               timerHint={timerHint}
             />
           </div>
+
+          <div className="lg:col-span-8">
+            <HistoryActivityPanel
+              dailyHistory={dailyHistory}
+              todayDateKey={todayKeyStr}
+              todayMl={goalCurrentMl}
+              todayDrinks={drinkCount}
+              dailyGoal={dailyGoal}
+              logs={logs}
+              onClearLogs={() => setLogs([])}
+              onExportCsv={handleExportCsv}
+              weightHistory={weightHistory}
+              emptyCup={emptyCup}
+            />
+          </div>
         </div>
 
-        {/* Row 4: FSM Demo, Logs & Telemetry Tabs */}
-        <FsmDemoTabs
-          weight={weight}
-          onWeightChange={setWeight}
-          warp={warp}
-          onWarpChange={setWarp}
-          simClock={clockStr}
-          onRunScenario={handleRunScenario}
-          logs={logs}
-          onExportCsv={handleExportCsv}
-          dailyHistory={dailyHistory}
-          dailyGoal={dailyGoalMl}
-          temp={roomT}
-          onTempChange={setRoomT}
-          humidity={roomHum}
-          onHumidityChange={setRoomHum}
-          telemetryStream={telemetryStream}
-        />
+        {/* ROW 3: Lab Simulator Panel (ONLY rendered in Simulator mode) */}
+        {connMode === 'sim' && (
+          <LabSimulatorPanel
+            weight={weight}
+            onWeightChange={(w) => {
+              setWeight(w);
+              if (w >= CFG.CUP_ON) lastPlacedWeightRef.current = w;
+            }}
+            temp={temp}
+            onTempChange={setTemp}
+            hum={hum}
+            onHumChange={setHum}
+            warp={warp}
+            onWarpChange={setWarp}
+            simClockSec={simClockSec}
+            activeScenario={activeScenario}
+            scenarioStepText={scenarioStepText}
+            onRunScenario={runScenario}
+          />
+        )}
       </main>
 
-      {/* Login & Cloud Linking Modal */}
       <LoginModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         onAuthChanged={() => {
           setUserEmail(localStorage.getItem('shc_auth_email') || '');
-          pushDailyCloud();
+          if (connMode === 'cloud') {
+            startCloudStreams();
+          }
         }}
+      />
+
+      <SessionModeModal
+        isOpen={sessionModalOpen}
+        onClose={() => setSessionModalOpen(false)}
+        onConfirmStart={handleConfirmStartSession}
+        currentMode={currentTimerMode}
+        busy={sessionBusy}
       />
     </div>
   );

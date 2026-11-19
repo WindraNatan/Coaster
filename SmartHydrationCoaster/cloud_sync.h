@@ -5,6 +5,7 @@
 #include "config.h"
 #include "fsm.h"
 #include "session_gate.h"
+#include "cloud_config_parser.h"
 
 #if defined(ESP32)
 #include <WiFi.h>
@@ -34,11 +35,28 @@ struct CloudSnapshot {
     uint16_t cheatCnt;
     bool muted;
     bool standby;
+    bool demoMode;
+    bool autoDhtTimerMode;
+    uint32_t customBaseIntervalMs;
+    float emptyCupWeightG;
 };
 
 static volatile bool cloudTaskRunning = false;
 static CloudSnapshot snap = {};
+static PendingCloudUpdate pendingCloud = {};
 static portMUX_TYPE snapMux = portMUX_INITIALIZER_UNLOCKED;
+
+inline bool consumePendingCloudUpdate(PendingCloudUpdate& out) {
+    portENTER_CRITICAL(&snapMux);
+    bool has = pendingCloud.hasConfig || pendingCloud.hasNewSessionOwner;
+    if (has) {
+        out = pendingCloud;
+        pendingCloud.hasConfig = false;
+        pendingCloud.hasNewSessionOwner = false;
+    }
+    portEXIT_CRITICAL(&snapMux);
+    return has;
+}
 
 // Siapa yang menentukan tidur: perintah lokal (z/x) atau session.json. Aturannya
 // ada di session_gate.h supaya bisa diuji di PC. Ditulis cloudTask (core 0),
@@ -222,17 +240,6 @@ extern bool buzzerMuted;
 extern volatile bool configDirty;
 extern uint32_t customBaseIntervalMs;
 extern CoasterFSM fsm;
-extern void updateAdaptiveInterval();
-extern void saveConfigToNvs();
-extern void saveStatsToNvs();
-
-static float extractJsonFloat(const String& s, const char* key, float fallback) {
-    int idx = s.indexOf(key);
-    if (idx < 0) return fallback;
-    int colon = s.indexOf(':', idx);
-    if (colon < 0) return fallback;
-    return s.substring(colon + 1).toFloat();
-}
 
 
 // Kode klaim: 8 karakter dari alfabet tanpa huruf mirip (0/O, 1/I/L). Dibuat sekali,
@@ -279,6 +286,9 @@ static void cloudTask(void*) {
     // Satu TLS untuk semua request. Sebelumnya tiap request membuat client baru:
     // handshake 1-3 dtk, dan satu siklus (push + config + session) membayarnya
     // tiga kali. Itu lag utama yang dirasakan di web dan aplikasi.
+    // shortcut: ESP32 berjalan tanpa jam NTP (CLAUDE.md §4), sehingga verifikasi
+    // masa berlaku sertifikat X.509 mbedTLS terhadap epoch 1970 akan menolak
+    // koneksi. Pinning CA baru aman bila NTP ditambahkan lebih dulu.
     WiFiClientSecure tls;
     tls.setInsecure();
     tls.setTimeout(8);
@@ -333,13 +343,12 @@ static void cloudTask(void*) {
         local = snap;
         portEXIT_CRITICAL(&snapMux);
 
-        // Salinan kode di akun pemilik, terpisah dari /claims. /claims hanya
-        // boleh dibaca pemilik dan menolak PUT kedua selamanya, jadi node ini
-        // yang dipakai tombol "Cari alat" di halaman Akun.
+        // Salinan kode di akun pemilik, terpisah dari /claims dan di luar
+        // /smart_coaster agar tamu tertaut tidak ikut membacanya.
         if (!claimMirrorChecked && claimMirrored &&
             (int32_t)(now - mirrorRetryAfterMs) >= 0) {
             String cek = activeFirebaseUrl + "/users/" + activeUid +
-                         "/smart_coaster/claimCode.json" + authSuffix();
+                         "/private/claimCode.json" + authSuffix();
             bool cekOk = false;
             if (rtdb.begin(tls, cek)) {
                 int cekCode = rtdb.GET();
@@ -366,7 +375,7 @@ static void cloudTask(void*) {
 
         if (!claimMirrored && (int32_t)(now - mirrorRetryAfterMs) >= 0) {
             String mine = activeFirebaseUrl + "/users/" + activeUid +
-                          "/smart_coaster/claimCode.json" + authSuffix();
+                          "/private/claimCode.json" + authSuffix();
             if (rtdb.begin(tls, mine)) {
                 rtdb.addHeader("Content-Type", "application/json");
                 int mirrorCode = rtdb.PUT("\"" + claimCode + "\"");
@@ -466,14 +475,14 @@ static void cloudTask(void*) {
                 // mengubah config lokal membuat alat mem-PATCH AUTO_DHT/MANUAL dan
                 // pilihan DEMO milik klien ikut terhapus.
                 const char* modeStr =
-                    demoMode ? "DEMO" : (autoDhtTimerMode ? "AUTO_DHT" : "MANUAL");
+                    local.demoMode ? "DEMO" : (local.autoDhtTimerMode ? "AUTO_DHT" : "MANUAL");
                 snprintf(cfgBody, sizeof(cfgBody),
                     "{\"timer_mode\":\"%s\",\"manual_interval_min\":%lu,"
                     "\"muted\":%s,\"empty_cup_weight_g\":%.1f}",
                     modeStr,
-                    (unsigned long)(customBaseIntervalMs / 60000UL),
-                    buzzerMuted ? "true" : "false",
-                    fsm.getEmptyCupWeight());
+                    (unsigned long)(local.customBaseIntervalMs / 60000UL),
+                    local.muted ? "true" : "false",
+                    local.emptyCupWeightG);
                 int code = rtdb.PATCH((uint8_t*)cfgBody, strlen(cfgBody));
                 patchOk = (code >= 200 && code < 300);
                 rtdb.end();
@@ -509,56 +518,28 @@ static void cloudTask(void*) {
                 // berikut mengunggah nilai lokal. Tanpa gerbang ini, setelan lokal
                 // tertimpa nilai lama dan NVS-nya ikut ditulis basi.
                 if (!configDirty) {
-                    bool changed = false;
-                    // Tiga nilai: DEMO (15 dtk, tanpa kompensasi DHT), AUTO_DHT,
-                    // MANUAL. Nilai DEMO dulu hanya hidup sebagai perintah serial,
-                    // sehingga pemilihan dari web atau aplikasi tidak berpengaruh
-                    // saat alat dijangkau lewat cloud.
-                    bool wantDemo = cfg.indexOf("\"DEMO\"") >= 0;
-                    bool wantAuto = cfg.indexOf("\"AUTO_DHT\"") >= 0;
-                    if (wantDemo != demoMode) { demoMode = wantDemo; changed = true; }
-                    // Dalam mode demo, tombol DHT tidak berlaku: targetnya tetap
-                    // 15 dtk. Nilainya hanya disimpan supaya kembali apa adanya
-                    // begitu pengguna keluar dari mode demo.
-                    if (!wantDemo && wantAuto != autoDhtTimerMode) {
-                        autoDhtTimerMode = wantAuto;
-                        changed = true;
-                    }
-                    float mins = extractJsonFloat(cfg, "\"manual_interval_min\"", 0.0f);
-                    if (mins >= MIN_CUSTOM_INTERVAL_MIN && mins <= MAX_CUSTOM_INTERVAL_MIN) {
-                        uint32_t newBase = (uint32_t)(mins * 60000.0f);
-                        if (newBase != customBaseIntervalMs) {
-                            customBaseIntervalMs = newBase;
-                            changed = true;
+                    CloudConfigState st = {
+                        local.demoMode,
+                        local.autoDhtTimerMode,
+                        local.muted,
+                        local.customBaseIntervalMs,
+                        local.emptyCupWeightG
+                    };
+                    if (parseCloudConfigJson(cfg.c_str(), st)) {
+                        portENTER_CRITICAL(&snapMux);
+                        if (!configDirty) {
+                            pendingCloud.cfg = st;
+                            pendingCloud.hasConfig = true;
                         }
-                    }
-                    float emptyG = extractJsonFloat(cfg, "\"empty_cup_weight_g\"", 0.0f);
-                    if (emptyG >= CUP_ON_THRESHOLD && emptyG <= MAX_EMPTY_CUP_G &&
-                        fabs(emptyG - fsm.getEmptyCupWeight()) > 0.5f) {
-                        fsm.setEmptyCupWeight(emptyG);
-                        changed = true;
-                    }
-                    if (changed) {
-                        updateAdaptiveInterval();
-                        saveConfigToNvs();
-                        configDirty = false;
-                        // Tidak perlu memaksa push: muted dan targetMin ikut
-                        // dataChanged, jadi tick berikut mengirimnya sendiri.
+                        portEXIT_CRITICAL(&snapMux);
                     }
                 }
             }
             rtdb.end();
 
             // Sesi bergiliran: web menulis session.owner. Begitu nilainya berbeda dari
-            // pemilik terakhir, statistik di-reset supaya orang berikutnya tidak
-            // mewarisi angka orang sebelumnya. Node ini juga membawa active:false,
-            // jadi periode poll menentukan secepat apa alarm berhenti setelah
-            // pengguna menekan Akhiri Sesi.
-            //
-            // 1 dtk hanya saat alarm menyala atau alat sedang tidur: di dua keadaan
-            // itu keterlambatan terasa (buzzer masih berbunyi, atau tombol Mulai
-            // Sesi tampak tidak bekerja). Di luar itu pemilik sesi jarang berubah,
-            // jadi 10 dtk sudah cukup dan kuota lebih hemat.
+            // pemilik terakhir, antrekan reset statistik ke core 1 supaya orang
+            // berikutnya tidak mewarisi angka orang sebelumnya.
             bool alertNow = strncmp(local.stateStr, "ALERT_", 6) == 0;
             uint32_t sessPeriodMs = (local.standby || alertNow) ? 1000UL : 10000UL;
             if (now - lastSessMs >= sessPeriodMs) {
@@ -566,10 +547,6 @@ static void cloudTask(void*) {
             String sessUrl = userNode() + "/session.json" + authSuffix();
             if (rtdb.begin(tls, sessUrl) && rtdb.GET() == 200) {
                 String sess = rtdb.getString();
-                // "active":false = pengguna menekan Akhiri Sesi. Field ini tidak
-                // ada di versi lama, dan ketiadaannya berarti sesi masih aktif.
-                // Nilai cloud hanya menimpa perintah lokal z/x saat nilainya
-                // berubah; lihat SessionGate di session_gate.h.
                 bool wantSleep = sess.indexOf("\"active\":false") >= 0;
                 portENTER_CRITICAL(&snapMux);
                 sessionGate.fromCloud(wantSleep);
@@ -583,13 +560,11 @@ static void cloudTask(void*) {
                         if (owner.length() > 0 && strncmp(owner.c_str(), sessionOwner, sizeof(sessionOwner)) != 0) {
                             strncpy(sessionOwner, owner.c_str(), sizeof(sessionOwner) - 1);
                             sessionOwner[sizeof(sessionOwner) - 1] = '\0';
-                            Preferences sp;
-                            sp.begin("shc", false);
-                            sp.putString("sessionOwner", sessionOwner);
-                            sp.end();
-                            fsm.resetDailyStats();
-                            saveStatsToNvs();
-                            Serial.printf("[CLOUD] Sesi baru untuk %.8s..., statistik di-reset.\n", owner.c_str());
+                            portENTER_CRITICAL(&snapMux);
+                            strncpy(pendingCloud.newSessionOwner, sessionOwner, sizeof(pendingCloud.newSessionOwner) - 1);
+                            pendingCloud.newSessionOwner[sizeof(pendingCloud.newSessionOwner) - 1] = '\0';
+                            pendingCloud.hasNewSessionOwner = true;
+                            portEXIT_CRITICAL(&snapMux);
                         }
                     }
                 }
@@ -817,6 +792,11 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     Serial.printf("[CLOUD] Konfigurasi: ssid=%u url=%u key=%u email=%u\n",
                   (unsigned)activeWifiSsid.length(), (unsigned)activeFirebaseUrl.length(),
                   (unsigned)activeApiKey.length(), (unsigned)activeUserEmail.length());
+    snap.demoMode = demoMode;
+    snap.autoDhtTimerMode = autoDhtTimerMode;
+    snap.customBaseIntervalMs = customBaseIntervalMs;
+    snap.emptyCupWeightG = fsm.getEmptyCupWeight();
+    snap.muted = buzzerMuted;
     startCloudIfNeeded();
 }
 
@@ -848,6 +828,10 @@ inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bo
     snap.cheatCnt = fsm.getCheatCount();
     snap.muted = muted;
     snap.standby = sessionGate.sleep;
+    snap.demoMode = demoMode;
+    snap.autoDhtTimerMode = autoDhtTimerMode;
+    snap.customBaseIntervalMs = customBaseIntervalMs;
+    snap.emptyCupWeightG = fsm.getEmptyCupWeight();
     portEXIT_CRITICAL(&snapMux);
 }
 #else
@@ -857,6 +841,7 @@ inline void setCloudFirebaseUrl(const String&) {}
 inline void updateCloudSnapshot(float, uint32_t, float, float, bool) {}
 inline void setLocalStandby(bool) {}
 inline bool standbyActiveNow() { return false; }
+inline bool consumePendingCloudUpdate(PendingCloudUpdate&) { return false; }
 #endif
 
 #endif

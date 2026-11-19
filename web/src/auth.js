@@ -46,8 +46,8 @@ export function shcDeviceUid() {
 }
 
 export function shcCoasterUrl(base) {
-  const uid = shcDeviceUid();
-  if (!uid) return '';
+  const uid = shcDeviceUid() || shcUid();
+  if (!uid || !base) return '';
   return base + '/users/' + encodeURIComponent(uid) + '/smart_coaster';
 }
 
@@ -57,6 +57,22 @@ export function shcApiKey() {
 
 export function shcBaseUrl() {
   return (localStorage.getItem('shc_fb_url') || '').trim() || SHC_DEFAULT_URL;
+}
+
+export function shcCustomConfig() {
+  return {
+    fbUrl: localStorage.getItem('shc_fb_url') || '',
+    apiKey: localStorage.getItem('shc_api_key') || ''
+  };
+}
+
+export function shcSaveCustomConfig(fbUrl, apiKey) {
+  const cleanUrl = (fbUrl || '').trim().replace(/\/+$/, '');
+  const cleanKey = (apiKey || '').trim();
+  if (cleanUrl) localStorage.setItem('shc_fb_url', cleanUrl);
+  else localStorage.removeItem('shc_fb_url');
+  if (cleanKey) localStorage.setItem('shc_api_key', cleanKey);
+  else localStorage.removeItem('shc_api_key');
 }
 
 export function getCleanFbUrl() {
@@ -89,6 +105,38 @@ export async function shcEnsureToken(force = false) {
     return true;
   } catch (_) {
     return false;
+  }
+}
+
+export async function shcDiscoverDevice(base) {
+  if (!(await shcEnsureToken())) return '';
+  const uid = shcUid();
+  if (!uid || !base) return '';
+  try {
+    const res = await fetch(
+      base + '/links/' + encodeURIComponent(uid) + '.json' + shcAuthSuffix()
+    );
+    if (!res.ok) return '';
+    const data = await res.json();
+    if (!data || typeof data !== 'object') return '';
+    let best = '';
+    let bestAt = -1;
+    Object.entries(data).forEach(([devUid, meta]) => {
+      if (!devUid) return;
+      const at = meta && typeof meta === 'object' && Number.isFinite(Number(meta.at))
+        ? Number(meta.at)
+        : 0;
+      if (at >= bestAt) {
+        bestAt = at;
+        best = devUid;
+      }
+    });
+    if (best) {
+      localStorage.setItem('shc_device_uid', best);
+    }
+    return best;
+  } catch (_) {
+    return '';
   }
 }
 
@@ -143,7 +191,9 @@ export async function shcClaimDevice(base, code) {
   const res = await fetch(base + '/claims/' + encodeURIComponent(clean) + '.json' + shcAuthSuffix());
   if (!res.ok) throw new Error('Gagal membaca kode (HTTP ' + res.status + ').');
   const deviceUid = await res.json();
-  if (!deviceUid || typeof deviceUid !== 'string') throw new Error('Kode tidak dikenali. Cek lagi di Serial Monitor (115200 baud).');
+  if (!deviceUid || typeof deviceUid !== 'string') {
+    throw new Error('Kode alat tidak ditemukan. Pastikan tatakan sudah terhubung ke Wi-Fi dan kode 8 karakter sudah benar.');
+  }
   const put = await fetch(base + '/links/' + encodeURIComponent(shcUid()) + '/' +
       encodeURIComponent(deviceUid) + '.json' + shcAuthSuffix(), {
     method: 'PUT',
@@ -158,16 +208,24 @@ export async function shcClaimDevice(base, code) {
 export async function shcFindOwnDevice(base) {
   if (!(await shcEnsureToken())) throw new Error('Sesi akun habis. Masuk ulang.');
   if (!shcUid()) throw new Error('Akun belum dikenal. Masuk ulang.');
-  const url = base + '/users/' + encodeURIComponent(shcUid()) +
-              '/smart_coaster/claimCode.json' + shcAuthSuffix();
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Gagal mencari alat (HTTP ' + res.status + ').');
-  const value = await res.json();
-  if ('object' === typeof value || !value) return '';
-  return String(value).trim().toUpperCase();
+  const paths = [
+    '/users/' + encodeURIComponent(shcUid()) + '/private/claimCode.json',
+    '/users/' + encodeURIComponent(shcUid()) + '/smart_coaster/claimCode.json'
+  ];
+  for (const p of paths) {
+    const res = await fetch(base + p + shcAuthSuffix());
+    if (res.ok) {
+      const value = await res.json();
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim().toUpperCase();
+      }
+    }
+  }
+  return '';
 }
 
 export async function shcSetSession(base, ownerUid, active = true) {
+  if (!(await shcEnsureToken())) return false;
   const url = shcCoasterUrl(base);
   if (!url || !shcToken()) return false;
   const res = await fetch(url + '/session.json' + shcAuthSuffix(), {

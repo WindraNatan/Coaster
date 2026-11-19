@@ -32,13 +32,13 @@ Logika Finite State Machine (FSM) dan kontroler adaptif hidup di tiga tempat dan
 # 1. Jalankan pengujian Python (24 skenario regresi)
 python test_simulation.py
 
-# 2. Kompilasi dan jalankan harness C++ asli di PC (73 pemeriksaan paritas)
+# 2. Kompilasi dan jalankan harness C++ asli di PC (78 pemeriksaan paritas + parser config cloud)
 cd tools/uji_fsm
 g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fsm.cpp
 ./uji_fsm
 
-# 3. Uji sisi web (FSM + riwayat harian + jalur tulis riwayat di mode cloud)
-node web/fsm.test.js && node web/daily-history.test.js && node web/daily-cloud.test.js
+# 3. Uji sisi web (FSM + riwayat harian + jalur tulis riwayat cloud + kontrak protokol)
+node web/fsm.test.js && node web/daily-history.test.js && node web/daily-cloud.test.js && node web/protocol.test.js
 ```
 *Catatan kompilasi*: Flag `-I.` wajib ada agar `Arduino.h` shim di `tools/uji_fsm/` terbaca saat mengompilasi header firmware asli.
 
@@ -81,7 +81,7 @@ node web/fsm.test.js && node web/daily-history.test.js && node web/daily-cloud.t
   * Tanpa NTP: firmware tidak menyinkronkan waktu; riwayat harian dihitung di web (`localStorage`) per tanggal perangkat.
   * Penulis `daily/<tanggal>.json`: web (mode USB dan mode cloud), karena alat tidak punya jam. Di mode cloud web hanya menulis node `daily`, tidak pernah `telemetry.json` (node itu milik alat). Aplikasi Android hanya membaca node itu, dan memuat ulang saat `drink_count` berubah — bukan tiap poll.
   * Batas yang disadari: baseline harian disimpan per peramban (`localStorage`), jadi bila dua peramban cloud terbuka dengan baseline berbeda, baris hari ini di `daily` mengikuti penulis terakhir. Angka kumulatif alat dan capaian harian masing-masing klien tetap benar; yang bisa berbeda hanya baris riwayat hari berjalan.
-* **Web App**: PWA (`web/manifest.json`, `web/sw.js`) mendukung mode Simulator, USB Live (`navigator.serial` 115200 baud), dan Firebase Cloud (stream SSE; poll 20 s sebagai jaring aman). Akun (email, password) dan klaim alat ada di halaman sendiri `web/login.html` — kotak masuk hanya menampilkan dua kolom itu; URL database dan Web API Key ditanam di `web/auth.js` (`SHC_DEFAULT_URL`, `SHC_DEFAULT_API_KEY`) dan bisa diganti lewat blok tertutup **Pengaturan lanjutan**. `web/index.html` hanya menampilkan status akun dan tautan ke sana. Login membuka dashboard lewat `index.html?mode=cloud`.
+* **Web App**: PWA React + Vite + Tailwind CSS (`web/public/manifest.json`, `web/public/sw.js`, `web/src/`, modul bersama `web/fsm.js`, `web/daily.js`, `web/protocol.js`) mendukung mode Simulator, USB Serial (`navigator.serial` 115200 baud), dan Firebase Cloud (stream SSE pada `telemetry.json` & `config.json` + poll jaring aman 20 s + PATCH parsial `config.json`). Autentikasi akun, penautan kode klaim 8 karakter (`/claims/<kode>` -> `/links/<akun>/<alat>` dan cermin privat `/users/<uid>/private/claimCode.json`), serta pemilihan mode sesi (`Mulai Sesi` / `Akhiri Sesi`) menggunakan elemen native `<dialog closedby="any">`.
 * **Aplikasi Android (Flutter)**: `app/` (Dart, package `smart_coaster`) — mode Cloud saja: URL RTDB dan Web API Key ditanam saat build lewat `app/lib/project_config.dart` (`--dart-define=FB_URL=...`, `--dart-define=FB_API_KEY=...`). `kFirebaseUrl` punya default proyek ini sehingga kolom URL tidak pernah tampil kecuali lewat tombol **Ubah URL** di dashboard; `kFirebaseApiKey` juga terisi default proyek ini, jadi kolom Web API Key tidak tampil; kedua kolom bisa dipaksa muncul lewat `showUrlField`/`showKeyField` untuk proyek lain atau pemanggilan `--dart-define`. Isian pengguna menang atas tetapan build, dan URL tersimpan di SharedPreferences (`shc_fb_url`) dipakai lebih dulu saat boot, stream SSE `GET <url>/users/<uid>/smart_coaster.json` plus polling penyaring tiap 20 s, kontrol `PATCH <url>/users/<uid>/smart_coaster/config.json` (`timer_mode`, `manual_interval_min`, `muted`). Identitas visual mengikuti web PWA (palet dark-teal/cyan, Space Grotesk + JetBrains Mono tabular, badge state berwarna); `ALERT_EMPTY_CUP`/`ALERT_MISSING_CUP` tetap dipetakan ke `ALERT_REFILL`. Kalibrasi `c`/tare `t` tetap USB-only. Verifikasi: `flutter pub get && flutter analyze && flutter test` (63 uji kontrak, alur cloud, layar masuk, dan penyimpanan API key). Toolchain di luar repo: `D:/flutter`, `D:/jdk/jdk-17.0.20.1+1`, `D:/android-sdk`.
   * Reset statistik harian hanya bisa dari alat (`r` lewat Serial atau mode USB Live); firmware tidak membaca perintah reset dari cloud, dan casing tidak punya tombol fisik. Firmware hanya mereset sendiri saat pemilik sesi di `session.json` berubah ke uid lain (`cloud_sync.h`).
   * Capaian harian aplikasi memakai selisih terhadap angka alat saat aplikasi pertama dibuka hari itu. Karena alat tidak punya jam, aplikasi yang tertutup semalaman tidak tahu angka saat tengah malam: air yang diminum pagi ini sebelum aplikasi dibuka tidak ikut terhitung, dan aplikasi menampilkan catatan itu, bukan angka nol tanpa penjelasan.

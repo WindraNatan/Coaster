@@ -331,6 +331,32 @@ void loop() {
 
     handleSerialCommands(filteredWeight);
 
+    PendingCloudUpdate cloudUpd;
+    if (consumePendingCloudUpdate(cloudUpd)) {
+        if (cloudUpd.hasConfig && !configDirty) {
+            demoMode = cloudUpd.cfg.demoMode;
+            autoDhtTimerMode = cloudUpd.cfg.autoDhtTimerMode;
+            buzzerMuted = cloudUpd.cfg.buzzerMuted;
+            customBaseIntervalMs = cloudUpd.cfg.customBaseIntervalMs;
+            if (fabsf(cloudUpd.cfg.emptyCupWeightG - fsm.getEmptyCupWeight()) > 0.5f) {
+                fsm.setEmptyCupWeight(cloudUpd.cfg.emptyCupWeightG);
+            }
+            updateAdaptiveInterval();
+            saveConfigToNvs();
+            configDirty = false;
+        }
+        if (cloudUpd.hasNewSessionOwner) {
+#if defined(ESP32)
+            prefs.begin("shc", false);
+            prefs.putString("sessionOwner", cloudUpd.newSessionOwner);
+            prefs.end();
+#endif
+            fsm.resetDailyStats();
+            saveStatsToNvs();
+            Serial.printf("[CLOUD] Sesi baru untuk %.8s..., statistik di-reset.\n", cloudUpd.newSessionOwner);
+        }
+    }
+
     if (nowMs - lastSampleTime >= SAMPLE_INTERVAL_MS) {
         lastSampleTime = nowMs;
         if (scale.is_ready()) {

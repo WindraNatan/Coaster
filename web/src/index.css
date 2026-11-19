@@ -4,11 +4,57 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-800 antialiased selection:bg-water-200 selection:text-water-900;
+    @apply bg-porcelain text-slate-900 font-sans antialiased selection:bg-water-200 selection:text-water-900;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    overflow-x: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid #0284C7;
+    outline-offset: 2px;
   }
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+html:has(dialog[open]:modal) {
+  overflow: hidden;
+}
+
+dialog:modal {
+  overscroll-behavior: contain;
+  max-height: min(88vh, 680px);
+  width: min(92vw, 440px);
+  margin: auto;
+}
+
+dialog::backdrop {
+  overscroll-behavior: contain;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="tab"],
+  select,
+  input[type="number"],
+  input[type="text"],
+  input[type="email"],
+  input[type="password"] {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

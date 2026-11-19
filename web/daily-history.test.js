@@ -1,131 +1,123 @@
 'use strict';
-// Regresi riwayat harian web/index.html. Dua bug pernah lolos di jalur ini:
-// (1) tombol Reset menyimpan nol sebelum reset, (2) startSession() membalik
-// urutan simpan/reset. Logikanya inline di index.html, jadi diuji dengan
-// mengekstrak dua fungsi murni + localStorage tiruan, bukan DOM penuh.
+// Regresi riwayat harian web/daily.js (dipakai oleh web/src/App.jsx).
+// Menguji modul produksi secara langsung:
+// (1) urutan simpan-dulu-baru-reset mempertahankan catatan hari ini,
+// (2) pemangkasan 30 hari terbaru,
+// (3) guard Reset di mode cloud menolak reset sebelum fsm.resetStats(),
+// (4) baseline tanggal, pergantian hari, dan pemulihan saat alat di-reset.
 const assert = require('assert');
-const fs = require('fs');
-const path = require('path');
+const {
+  loadDailyHistory,
+  todayDelta,
+  saveTodayStatsToHistory,
+  resetDailyStatsGuarded
+} = require('./daily.js');
 
-const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-
-function extract(name) {
-  const m = new RegExp(`function ${name}\\(`).exec(html);
-  assert(m, `fungsi ${name} tidak ditemukan di index.html`);
-  let i = html.indexOf('{', m.index), depth = 0, end = i;
-  for (; end < html.length; end++) {
-    if (html[end] === '{') depth++;
-    else if (html[end] === '}' && --depth === 0) break;
-  }
-  return html.slice(m.index, end + 1);
+function makeStorage() {
+  const store = {};
+  return {
+    getItem: k => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); }
+  };
 }
 
-// localStorage tiruan: hanya API yang dipakai kedua fungsi.
-const store = {};
-global.localStorage = {
-  getItem: k => (k in store ? store[k] : null),
-  setItem: (k, v) => { store[k] = String(v); },
+const ls1 = makeStorage();
+const fsm = {
+  totalDrank: 0,
+  drinkCount: 0,
+  refillCount: 0,
+  cheatCount: 0,
+  resetCalled: 0,
+  resetStats() {
+    this.totalDrank = 0;
+    this.drinkCount = 0;
+    this.refillCount = 0;
+    this.cheatCount = 0;
+    this.resetCalled++;
+  }
 };
-
-const fsm = { totalDrank: 0, drinkCount: 0, refillCount: 0, cheatCount: 0 };
-const renderHistoryList = () => {};
 const todayKey = () => '2026-10-25';
-// eslint-disable-next-line no-new-func
-new Function('fsm', 'renderHistoryList', 'todayKey', 'localStorage',
-  extract('dayBaseline') + '\n' + extract('ensureDayBaseline') + '\n' +
-  extract('todayDelta') + '\n' + extract('loadDailyHistory') + '\n' +
-  extract('saveTodayStatsToHistory') +
-  '\nglobal.loadDailyHistory = loadDailyHistory; global.saveTodayStatsToHistory = saveTodayStatsToHistory;'
-)(fsm, renderHistoryList, todayKey, global.localStorage);
 
-const { loadDailyHistory, saveTodayStatsToHistory } = global;
-
-// 1. Simpan-dulu-baru-reset mempertahankan catatan hari ini (precedent bReset).
+// 1. Simpan-dulu-baru-reset mempertahankan catatan hari ini.
 fsm.totalDrank = 420; fsm.drinkCount = 3;
-saveTodayStatsToHistory();
-// Penyimpanan pertama memasang baseline tanggal, jadi harian = 0. Angka
-// kumulatif alat tidak lagi ditulis sebagai angka harian.
-assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 0,
+saveTodayStatsToHistory(fsm, null, ls1, todayKey);
+assert.strictEqual(loadDailyHistory(ls1)['2026-10-25'].total_ml, 0,
   'baseline dipasang pada penyimpanan pertama');
 
 fsm.totalDrank = 620; fsm.drinkCount = 4;
-saveTodayStatsToHistory();
-assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 200,
+saveTodayStatsToHistory(fsm, null, ls1, todayKey);
+assert.strictEqual(loadDailyHistory(ls1)['2026-10-25'].total_ml, 200,
   'selisih terhadap baseline dicatat sebagai harian');
 
 fsm.totalDrank = 0; fsm.drinkCount = 0;
-assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 200,
+assert.strictEqual(loadDailyHistory(ls1)['2026-10-25'].total_ml, 200,
   'reset setelah simpan tidak boleh menimpa riwayat yang sudah ada');
 
-// 2. Urutan terbalik (reset dulu, simpan kemudian) memang merusak riwayat:
-//    inilah pola yang dijaga oleh urutan di bReset dan startSession().
+// 2. Urutan terbalik (reset dulu, simpan kemudian) memang merusak riwayat.
 fsm.totalDrank = 0; fsm.drinkCount = 0;
-saveTodayStatsToHistory();
-assert.strictEqual(loadDailyHistory()['2026-10-25'].total_ml, 0,
-  'menyimpan setelah reset menulis nol ke riwayat hari ini — pola yang harus dihindari');
+saveTodayStatsToHistory(fsm, null, ls1, todayKey);
+assert.strictEqual(loadDailyHistory(ls1)['2026-10-25'].total_ml, 0,
+  'menyimpan setelah reset menulis nol ke riwayat hari ini');
 
-// 3. Riwayat dipangkas ke 30 hari terbaru, bukan tumbuh selamanya.
+// 3. Riwayat dipangkas ke 30 hari terbaru.
 const many = {};
 for (let d = 1; d <= 40; d++) {
   many[`2026-09-${String(d).padStart(2, '0')}`] = { total_ml: d, drink_count: 1, refill_count: 0, cheat_count: 0 };
 }
-global.localStorage.setItem('shc_daily_history', JSON.stringify(many));
+ls1.setItem('shc_daily_history', JSON.stringify(many));
 fsm.totalDrank = 0;
-saveTodayStatsToHistory();
-const trimmed = Object.keys(loadDailyHistory());
+saveTodayStatsToHistory(fsm, null, ls1, todayKey);
+const trimmed = Object.keys(loadDailyHistory(ls1));
 assert.strictEqual(trimmed.length, 30, `harus 30 entri, dapat ${trimmed.length}`);
 assert(trimmed.includes('2026-10-25'), 'hari terbaru wajib ada');
 assert(!trimmed.includes('2026-09-01'), 'entri terlama harus dibuang');
 
-// Guard Reset di mode cloud: handler-nya anonim di addEventListener, jadi
-// dibaca langsung dari sumber. Yang dijaga urutannya: early-return cloud harus
-// muncul SEBELUM fsm.resetStats() — kalau kebalik, reset tetap jalan walau
-// guard ada di file.
-const resetHandler =
-  /\$\('bReset'\)\.addEventListener\('click', \(\) => \{([\s\S]*?)\n\}\);/.exec(html);
-assert(resetHandler, 'handler bReset tidak ditemukan di index.html');
-const resetBody = resetHandler[1];
-const iGuard = resetBody.indexOf("connMode === 'cloud'");
-const iReset = resetBody.indexOf('fsm.resetStats()');
-assert(iGuard >= 0, 'guard mode cloud hilang dari handler Reset');
-assert(iReset > iGuard, 'guard cloud harus muncul sebelum fsm.resetStats()');
-assert(resetBody.indexOf('return;') > iGuard && resetBody.indexOf('return;') < iReset,
-  'guard cloud wajib return, bukan lanjut ke reset');
+// 4. Guard Reset di mode cloud: early-return sebelum saveHistory/resetStats,
+//    dan di mode USB mengirim perintah serial 'r\n'.
+let savedBeforeReset = false;
+let serialCmd = '';
+fsm.totalDrank = 350; fsm.drinkCount = 2; fsm.resetCalled = 0;
+const cloudRes = resetDailyStatsGuarded({
+  connMode: 'cloud',
+  fsm,
+  onSaveHistory: () => { savedBeforeReset = true; },
+  onSendSerialReset: cmd => { serialCmd = cmd; }
+});
+assert.strictEqual(cloudRes, false, 'mode cloud wajib menolak reset lokal');
+assert.strictEqual(fsm.resetCalled, 0, 'fsm.resetStats tidak boleh dipanggil di mode cloud');
+assert.strictEqual(savedBeforeReset, false, 'saveHistory tidak dipanggil saat cloud ditolak');
 
-console.log('[PASS] Guard Reset mode cloud urut sebelum resetStats');
-// Logika harian: alat tidak punya jam, jadi "hari ini" dihitung dari selisih
-// terhadap baseline tanggal. Tiga kasus yang pernah salah: ganti hari, reset
-// di alat, dan simulator yang menulis baseline.
-const store2 = {};
-const ls2 = {
-  getItem: k => (k in store2 ? store2[k] : null),
-  setItem: (k, v) => { store2[k] = String(v); },
-};
+let order = [];
+const usbRes = resetDailyStatsGuarded({
+  connMode: 'usb',
+  fsm: {
+    resetStats() { order.push('reset'); }
+  },
+  onSaveHistory: () => { order.push('save'); },
+  onSendSerialReset: cmd => { order.push('serial:' + cmd.trim()); }
+});
+assert.strictEqual(usbRes, true);
+assert.deepStrictEqual(order, ['save', 'reset', 'serial:r'],
+  'urutan wajib: simpan riwayat -> reset FSM -> kirim perintah serial r');
+console.log('[PASS] Guard Reset mode cloud & urutan simpan-reset-serial terverifikasi');
 
+// 5. Logika harian: baseline tanggal, ganti hari, reset di alat.
+const ls2 = makeStorage();
 let FAKE_TODAY = '2026-11-03';
 const dayKey = () => FAKE_TODAY;
 
-// eslint-disable-next-line no-new-func
-const dayApi = new Function('localStorage', 'todayKey',
-  extract('dayBaseline') + '\n' + extract('ensureDayBaseline') + '\n' +
-  extract('todayDelta') +
-  '\nreturn { dayBaseline, ensureDayBaseline, todayDelta };'
-)(ls2, dayKey);
-
-assert.strictEqual(dayApi.todayDelta(500, 2, 1, 0).total_ml, 0,
+assert.strictEqual(todayDelta(500, 2, 1, 0, ls2, dayKey).total_ml, 0,
   'baseline pertama = 0 ml hari ini');
-assert.strictEqual(dayApi.todayDelta(700, 3, 1, 0).total_ml, 200, 'selisih dari baseline');
-assert.strictEqual(dayApi.todayDelta(700, 3, 1, 0).drink_count, 1);
+assert.strictEqual(todayDelta(700, 3, 1, 0, ls2, dayKey).total_ml, 200, 'selisih dari baseline');
+assert.strictEqual(todayDelta(700, 3, 1, 0, ls2, dayKey).drink_count, 1);
 
-// Ganti hari: baseline baru, bukan mewarisi kemarin.
 FAKE_TODAY = '2026-11-04';
-assert.strictEqual(dayApi.todayDelta(700, 3, 1, 0).total_ml, 0, 'hari baru mulai dari nol');
-assert.strictEqual(dayApi.todayDelta(850, 4, 1, 0).total_ml, 150, 'hari baru dihitung dari awal');
+assert.strictEqual(todayDelta(700, 3, 1, 0, ls2, dayKey).total_ml, 0, 'hari baru mulai dari nol');
+assert.strictEqual(todayDelta(850, 4, 1, 0, ls2, dayKey).total_ml, 150, 'hari baru dihitung dari awal');
 
-// Reset di alat: total turun, baseline dipasang ulang agar tidak negatif.
-assert.strictEqual(dayApi.todayDelta(0, 0, 0, 0).total_ml, 0,
+assert.strictEqual(todayDelta(0, 0, 0, 0, ls2, dayKey).total_ml, 0,
   'reset alat tidak menghasilkan angka negatif');
-assert.strictEqual(dayApi.todayDelta(120, 1, 0, 0).total_ml, 120,
+assert.strictEqual(todayDelta(120, 1, 0, 0, ls2, dayKey).total_ml, 120,
   'minum setelah reset tetap terhitung');
 
 console.log('[PASS] Hitungan harian: baseline, ganti hari, reset alat');

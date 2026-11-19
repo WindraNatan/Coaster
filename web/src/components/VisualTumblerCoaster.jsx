@@ -1,126 +1,127 @@
 import React from 'react';
+import { stateBadgeLabel } from '../protocol';
 
 const FSM_META = {
   IDLE: {
-    name: 'IDLE',
-    desc: 'Letakkan gelas di tatakan untuk memulai pemantauan',
-    badge: 'bg-slate-100 text-slate-700 border-slate-200',
-    led: '#94A3B8',
-    glow: 'rgba(148, 163, 184, 0.15)'
+    desc: 'Letakkan gelas di tatakan untuk memulai pemantauan.',
+    badge: 'bg-slate-100 text-slate-800 border-slate-300',
+    led: '#64748B'
   },
   STABLE: {
-    name: 'STABLE',
-    desc: 'Beban stabil, menyiapkan siklus hitung mundur',
-    badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    led: '#10B981',
-    glow: 'rgba(16, 185, 129, 0.35)'
+    desc: 'Beban stabil 1,5 detik. Menyiapkan siklus hitung mundur.',
+    badge: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+    led: '#059669'
   },
   TIMING: {
-    name: 'TIMING',
-    desc: 'Siklus pengingat aktif, hidrasi teratur terjaga',
-    badge: 'bg-sky-50 text-sky-700 border-sky-200',
-    led: '#0284C7',
-    glow: 'rgba(2, 132, 199, 0.35)'
+    desc: 'Siklus pengingat aktif berjalan.',
+    badge: 'bg-sky-50 text-sky-800 border-sky-300',
+    led: '#0284C7'
   },
   ALERT_DRINK: {
-    name: 'ALERT_DRINK',
-    desc: 'Waktunya minum! Ambil gelas dan nikmati kesegarannya',
-    badge: 'bg-amber-50 text-amber-700 border-amber-300 animate-pulse',
-    led: '#F59E0B',
-    glow: 'rgba(245, 158, 11, 0.5)'
+    desc: 'Waktunya minum air. Angkat gelas dan minum minimal 20 ml.',
+    badge: 'bg-amber-50 text-amber-900 border-amber-300 animate-pulse',
+    led: '#D97706'
   },
   ALERT_CHEAT: {
-    name: 'ALERT_CHEAT',
-    desc: 'Tegukan kecil terdeteksi (< 20 ml). Silakan minum lebih banyak',
-    badge: 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse',
-    led: '#EF4444',
-    glow: 'rgba(239, 68, 68, 0.5)'
+    desc: 'Berat kembali tanpa minum cukup (< 20 ml). Silakan minum lagi.',
+    badge: 'bg-rose-50 text-rose-900 border-rose-300 animate-pulse',
+    led: '#DC2626'
   },
   ALERT_EMPTY_CUP: {
-    name: 'ALERT_EMPTY_CUP',
-    desc: 'Air di dalam gelas hampir habis. Segera isi ulang tumbler',
-    badge: 'bg-rose-50 text-rose-700 border-rose-300 animate-pulse',
-    led: '#EF4444',
-    glow: 'rgba(239, 68, 68, 0.5)'
+    desc: 'Air di dalam gelas hampir habis. Silakan isi ulang.',
+    badge: 'bg-rose-50 text-rose-900 border-rose-300 animate-pulse',
+    led: '#DC2626'
   },
   ALERT_MISSING_CUP: {
-    name: 'ALERT_MISSING_CUP',
-    desc: 'Gelas terangkat lebih dari 10 detik. Letakkan kembali di tatakan',
-    badge: 'bg-amber-50 text-amber-700 border-amber-300 animate-pulse',
-    led: '#F59E0B',
-    glow: 'rgba(245, 158, 11, 0.4)'
+    desc: 'Gelas belum kembali ke tatakan. Letakkan kembali setelah minum.',
+    badge: 'bg-amber-50 text-amber-900 border-amber-300 animate-pulse',
+    led: '#D97706'
+  },
+  ALERT_REFILL: {
+    desc: 'Gelas kosong atau belum kembali ke tatakan. Silakan isi ulang.',
+    badge: 'bg-rose-50 text-rose-900 border-rose-300 animate-pulse',
+    led: '#DC2626'
   },
   LIFTED: {
-    name: 'LIFTED',
-    desc: 'Gelas sedang diangkat dari tatakan untuk diminum',
-    badge: 'bg-sky-50 text-sky-700 border-sky-200',
-    led: '#38BDF8',
-    glow: 'rgba(56, 189, 248, 0.3)'
+    desc: 'Gelas sedang diangkat dari tatakan.',
+    badge: 'bg-sky-50 text-sky-800 border-sky-300',
+    led: '#0284C7'
   }
 };
 
 export default function VisualTumblerCoaster({
   stateString = 'IDLE',
   weight = 0,
+  isStable = false,
+  standby = false,
   cupMl = 0,
   cupMax = 500,
+  emptyCup = 130,
+  connMode = 'sim',
   onLift,
   onPlace,
   onSip,
   onPour,
   onEmpty
 }) {
-  const meta = FSM_META[stateString] || FSM_META.IDLE;
+  const meta = standby
+    ? {
+        desc: 'Sesi sedang tidur (standby). Tekan Mulai Sesi untuk mengaktifkan pengingat.',
+        badge: 'bg-slate-100 text-slate-700 border-slate-300',
+        led: '#94A3B8'
+      }
+    : (FSM_META[stateString] || FSM_META.IDLE);
+
+  const badgeText = standby ? 'STANDBY' : stateBadgeLabel(stateString);
   const isLifted = stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP' || weight < 25;
 
-  // Water level SVG calculations
-  const maxWaterH = 120;
-  const waterPct = Math.min(1, Math.max(0, cupMl / cupMax));
+  const maxWaterH = 116;
+  const waterPct = isLifted ? 0 : Math.min(1, Math.max(0, cupMl / cupMax));
   const waterH = Math.round(waterPct * maxWaterH);
-  const waterY = 148 - waterH;
+  const waterY = 146 - waterH;
+
+  const stabilityLabel = standby
+    ? 'Sesi tidur'
+    : weight < 25
+      ? 'Tanpa beban'
+      : isStable
+        ? 'Stabil (±3 g)'
+        : 'Menstabilkan...';
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-soft hover:shadow-soft-lg transition-all flex flex-col justify-between">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-4">
+    <section
+      className="bg-white rounded-2xl p-5 border border-slate-200 shadow-soft flex flex-col justify-between h-full"
+      aria-label="Panggung tatakan dan tumbler"
+    >
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-slate-900 tracking-tight">
-            Panggung Tatakan & Gelas
+          <h2 className="font-display text-base font-bold text-slate-900 tracking-tight">
+            Tatakan & Tumbler
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Sensor Load Cell Presisi & Cincin Status FSM
+          <p className="text-xs text-slate-600 mt-0.5">
+            Gelas kosong {Math.round(emptyCup)} g · Kapasitas {cupMax} ml
           </p>
         </div>
         <div
-          className={`px-3 py-1 rounded-full text-xs font-semibold font-mono tracking-wider border ${meta.badge}`}
+          className={`px-3 py-1 rounded-full text-xs font-semibold font-mono tracking-wide border ${meta.badge}`}
           role="status"
           aria-live="polite"
         >
-          {meta.name}
+          {badgeText}
         </div>
       </div>
 
-      {/* Visualizer Stage */}
-      <div className="relative py-4 flex flex-col items-center justify-center">
-        {/* Halo LED Glow behind coaster */}
-        <div
-          className="absolute bottom-6 w-36 h-12 rounded-full blur-xl pointer-events-none transition-all duration-500"
-          style={{
-            backgroundColor: meta.glow,
-            boxShadow: `0 0 40px ${meta.glow}`
-          }}
-        />
-
+      <div className="py-3 flex flex-col items-center justify-center">
         <svg
-          width="160"
-          height="190"
+          width="148"
+          height="172"
           viewBox="0 0 120 170"
-          className="relative z-10 overflow-visible"
+          className="overflow-visible"
           aria-hidden="true"
         >
           <defs>
             <clipPath id="reactCupClip">
-              <path d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z" />
+              <path d="M30 20 L90 20 L82 138 Q81 146 72 146 L48 146 Q39 146 38 138 Z" />
             </clipPath>
             <linearGradient id="reactCupWaterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#38BDF8" />
@@ -128,131 +129,150 @@ export default function VisualTumblerCoaster({
             </linearGradient>
             <linearGradient id="reactPorcelainGrad" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#FFFFFF" />
-              <stop offset="45%" stopColor="#F8FAFC" />
+              <stop offset="55%" stopColor="#F8FAFC" />
               <stop offset="100%" stopColor="#E2E8F0" />
             </linearGradient>
           </defs>
 
-          {/* Coaster Base */}
           <g id="coasterBase">
-            <ellipse cx="60" cy="156" rx="48" ry="12" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.5" />
-            <ellipse cx="60" cy="153" rx="44" ry="10" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1" />
+            <ellipse cx="60" cy="155" rx="48" ry="11" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.5" />
+            <ellipse cx="60" cy="152" rx="44" ry="9" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1" />
             <ellipse
               cx="60"
-              cy="153"
+              cy="152"
               rx="40"
-              ry="8"
+              ry="7.5"
               fill="none"
               stroke={meta.led}
               strokeWidth="2.5"
-              className="transition-colors duration-500"
+              className="transition-colors duration-300"
             />
           </g>
 
-          {/* Ghost cup outline on coaster */}
           <ellipse
             cx="60"
-            cy="148"
-            rx="30"
-            ry="5.5"
+            cy="146"
+            rx="28"
+            ry="5"
             fill="none"
-            stroke="#CBD5E1"
-            strokeDasharray="4 4"
-            strokeWidth="1.5"
+            stroke="#94A3B8"
+            strokeDasharray="3 3"
+            strokeWidth="1.2"
           />
 
-          {/* Nordic Tumbler Body (rises up when lifted) */}
           <g
             className="transition-transform duration-300 ease-out"
             style={{
-              transform: isLifted ? 'translateY(-24px) scale(0.96)' : 'translateY(0px)',
+              transform: isLifted ? 'translateY(-22px)' : 'translateY(0px)',
               transformOrigin: '60px 140px',
-              opacity: isLifted ? 0.75 : 1
+              opacity: isLifted ? 0.55 : 1
             }}
           >
-            {/* Tumbler Wall */}
             <path
-              d="M30 18 L90 18 L82 140 Q81 148 72 148 L48 148 Q39 148 38 140 Z"
+              d="M30 20 L90 20 L82 138 Q81 146 72 146 L48 146 Q39 146 38 138 Z"
               fill="url(#reactPorcelainGrad)"
-              stroke="#CBD5E1"
-              strokeWidth="2.5"
+              stroke="#94A3B8"
+              strokeWidth="2"
             />
 
-            {/* Dynamic Water Rectangle clipped to Tumbler */}
-            <rect
-              x="30"
-              y={waterY}
-              width="60"
-              height={waterH}
-              fill="url(#reactCupWaterGrad)"
-              opacity="0.9"
-              clipPath="url(#reactCupClip)"
-              className="transition-all duration-300 ease-out"
-            />
+            {waterH > 0 && (
+              <g clipPath="url(#reactCupClip)">
+                <rect
+                  x="30"
+                  y={waterY}
+                  width="60"
+                  height={waterH}
+                  fill="url(#reactCupWaterGrad)"
+                  opacity="0.92"
+                  className="transition-all duration-300 ease-out"
+                />
+                <line
+                  x1="30"
+                  y1={waterY}
+                  x2="90"
+                  y2={waterY}
+                  stroke="#0369A1"
+                  strokeWidth="1.5"
+                />
+              </g>
+            )}
 
-            {/* Cup Rim */}
-            <ellipse cx="60" cy="18" rx="30" ry="5" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5" />
-            <line x1="31" y1="26" x2="89" y2="26" stroke="#CBD5E1" strokeWidth="1" />
-            {/* Gloss Highlight reflection */}
-            <path d="M35 24 L39 136" stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" opacity="0.75" />
+            <ellipse cx="60" cy="20" rx="30" ry="4.5" fill="#F1F5F9" stroke="#64748B" strokeWidth="1.5" />
+            <path d="M35 26 L39 134" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" opacity="0.8" />
           </g>
         </svg>
 
-        {/* Volume & Companion Guidance */}
-        <div className="mt-2 text-center">
-          <div className="text-sm font-bold text-slate-800 font-mono tabular-nums">
-            {isLifted ? (
-              <span className="text-amber-600">Gelas diangkat</span>
-            ) : (
-              <span>air {Math.max(0, Math.round(cupMl))} ml</span>
-            )}
+        <div className="mt-2 text-center w-full">
+          <div className="flex items-baseline justify-center gap-2">
+            <span className="text-2xl font-bold text-slate-900 font-mono tabular-nums">
+              {weight.toFixed(1)} g
+            </span>
+            <span className="text-xs font-semibold text-water-700 font-mono tabular-nums">
+              ({isLifted ? 'Gelas diangkat' : `air ${Math.max(0, Math.round(cupMl))} ml`})
+            </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto min-h-[32px] flex items-center justify-center">
+          <div className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+            <span>Status beban:</span>
+            <span className="font-semibold text-slate-800">{stabilityLabel}</span>
+          </div>
+          <p className="text-xs text-slate-600 mt-1.5 max-w-sm mx-auto leading-relaxed">
             {meta.desc}
           </p>
         </div>
       </div>
 
-      {/* Tactile Control Buttons */}
-      <div className="pt-3 border-t border-slate-100">
-        <div className="flex flex-wrap items-center justify-center gap-1.5" role="group" aria-label="Aksi fisik gelas">
-          <button
-            type="button"
-            onClick={onLift}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-sm"
-          >
-            Angkat gelas
-          </button>
-          <button
-            type="button"
-            onClick={onPlace}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-sm"
-          >
-            Taruh kembali
-          </button>
-          <button
-            type="button"
-            onClick={onSip}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-sm"
-          >
-            Sedot -30 g
-          </button>
-          <button
-            type="button"
-            onClick={onPour}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-sm"
-          >
-            Tuang +50 g
-          </button>
-          <button
-            type="button"
-            onClick={onEmpty}
-            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-sm"
-          >
-            Kosongkan
-          </button>
+      {connMode === 'sim' ? (
+        <div className="pt-3 border-t border-slate-200/80">
+          <div className="text-[11px] font-semibold text-slate-600 mb-2 text-center">
+            Simulasi sentuhan fisik gelas
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-1.5" role="group" aria-label="Aksi simulasi fisik gelas">
+            <button
+              type="button"
+              onClick={onLift}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+            >
+              Angkat
+            </button>
+            <button
+              type="button"
+              onClick={onPlace}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+            >
+              Taruh
+            </button>
+            <button
+              type="button"
+              onClick={onSip}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+            >
+              Sedot -30 g
+            </button>
+            <button
+              type="button"
+              onClick={onPour}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+            >
+              Tuang +50 g
+            </button>
+            <button
+              type="button"
+              onClick={onEmpty}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+            >
+              Habiskan
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
+      ) : (
+        <div className="pt-3 border-t border-slate-200/80 text-center">
+          <p className="text-xs text-slate-600">
+            {connMode === 'usb'
+              ? 'Membaca beban langsung dari sensor HX711 melalui USB Serial.'
+              : 'Membaca telemetri waktu-nyata dari tatakan ESP32 melalui Firebase Cloud.'}
+          </p>
+        </div>
+      )}
+    </section>
   );
 }

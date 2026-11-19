@@ -8,6 +8,7 @@
 #include "fsm.h"
 #include "adaptive_controller.h"
 #include "session_gate.h"
+#include "cloud_config_parser.h"
 
 static int fails = 0;
 #define CHECK(cond, msg) do { if (cond) printf("[PASS] %s\n", msg); else { printf("[FAIL] %s\n", msg); fails++; } } while (0)
@@ -246,6 +247,30 @@ int main(){
         CHECK(j.sleep, "25i. akhiri sesi dari klien tetap tidur");
         j.fromCloud(false);            // lalu mulai sesi lagi
         CHECK(!j.sleep, "25j. mulai sesi dari klien membangunkan alat");
+    }
+
+    // 26. CloudConfigParser: regresi commit 5285621 menghapus parsing "muted"
+    // dari config.json. Pastikan semua 4 field config.json diparsing dengan
+    // benar, termasuk pretty-print JSON dan validasi batas rentang.
+    {
+        CloudConfigState st = { false, true, false, BASE_INTERVAL_MS, DEFAULT_EMPTY_CUP_G };
+        bool c1 = parseCloudConfigJson("{\"muted\": true}", st);
+        CHECK(c1 && st.buzzerMuted, "26a. config.json muted:true mengubah buzzerMuted");
+        bool c1b = parseCloudConfigJson("{\"muted\":false}", st);
+        CHECK(c1b && !st.buzzerMuted, "26b. config.json muted:false mematikan mute");
+
+        bool c2 = parseCloudConfigJson("{\"timer_mode\":\"DEMO\"}", st);
+        CHECK(c2 && st.demoMode && st.autoDhtTimerMode,
+              "26c. timer_mode:DEMO mengaktifkan demoMode tanpa merusak autoDhtTimerMode");
+
+        bool c3 = parseCloudConfigJson("{\"timer_mode\":\"MANUAL\",\"manual_interval_min\":25,\"empty_cup_weight_g\":150.0}", st);
+        CHECK(c3 && !st.demoMode && !st.autoDhtTimerMode &&
+              st.customBaseIntervalMs == 1500000u && fabsf(st.emptyCupWeightG - 150.0f) < 0.01f,
+              "26d. timer_mode:MANUAL + interval 25 mnt + empty_cup 150g tertera semua");
+
+        bool c4 = parseCloudConfigJson("{\"manual_interval_min\":999,\"empty_cup_weight_g\":10.0}", st);
+        CHECK(!c4 && st.customBaseIntervalMs == 1500000u && fabsf(st.emptyCupWeightG - 150.0f) < 0.01f,
+              "26e. nilai di luar rentang (interval 999, gelas 10g) ditolak tanpa mutasi");
     }
 
     printf("\n%s (%d gagal)\n", fails ? "ADA YANG GAGAL" : "SEMUA LULUS", fails);

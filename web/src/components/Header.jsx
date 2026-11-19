@@ -1,138 +1,137 @@
 import React from 'react';
-import { Cpu, Usb, Cloud, RotateCcw, User, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Cpu, Usb, Cloud, User } from 'lucide-react';
 
 export default function Header({
   connMode,
   setConnMode,
   usbConnected,
   cloudConnected,
+  standby,
   userEmail,
-  onOpenAuth,
-  onTare
+  onOpenAuth
 }) {
   const getBadgeInfo = () => {
+    if (standby) {
+      return {
+        label: 'Sesi Tidur (Standby)',
+        bg: 'bg-slate-100 text-slate-700 border-slate-300',
+        dot: 'bg-slate-500'
+      };
+    }
     if (connMode === 'sim') {
       return {
         label: 'Simulator Aktif',
-        bg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        dot: 'bg-emerald-500'
+        bg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        dot: 'bg-emerald-600'
       };
     }
     if (connMode === 'usb') {
       return usbConnected
         ? {
-            label: 'Live USB ESP32',
-            bg: 'bg-sky-50 text-sky-700 border-sky-200',
-            dot: 'bg-sky-500'
+            label: 'USB ESP32 Terhubung',
+            bg: 'bg-sky-50 text-sky-800 border-sky-200',
+            dot: 'bg-sky-600'
           }
         : {
             label: 'USB Menunggu Port',
-            bg: 'bg-amber-50 text-amber-700 border-amber-200',
-            dot: 'bg-amber-500'
+            bg: 'bg-amber-50 text-amber-900 border-amber-300',
+            dot: 'bg-amber-600'
           };
     }
     return cloudConnected
       ? {
           label: 'Cloud Firebase Sinkron',
-          bg: 'bg-sky-50 text-sky-700 border-sky-200',
-          dot: 'bg-sky-500'
+          bg: 'bg-sky-50 text-sky-800 border-sky-200',
+          dot: 'bg-sky-600'
         }
       : {
-          label: 'Cloud Perlu Tautan',
-          bg: 'bg-slate-100 text-slate-600 border-slate-200',
-          dot: 'bg-slate-400'
+          label: 'Cloud Perlu Masuk / Klaim',
+          bg: 'bg-slate-100 text-slate-700 border-slate-300',
+          dot: 'bg-slate-500'
         };
   };
 
   const badge = getBadgeInfo();
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3 transition-colors">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200 px-4 sm:px-6 py-2.5">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-        {/* Brand & Live Status */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-water-600 flex items-center justify-center text-white shadow-soft shadow-water-600/30 flex-shrink-0">
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
+          <div className="w-8 h-8 rounded-lg bg-water-700 flex items-center justify-center text-white flex-shrink-0">
+            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
               <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
             </svg>
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight whitespace-nowrap">
-                Smart Hydration Coaster
-              </h1>
-              <div
-                className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono border ${badge.bg}`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${badge.dot} animate-pulse`} />
-                <span>{badge.label}</span>
-              </div>
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <h1 className="font-display text-base sm:text-lg font-bold text-slate-900 tracking-tight whitespace-nowrap">
+              Smart Hydration Coaster
+            </h1>
+            <div
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono border ${badge.bg}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className={`w-2 h-2 rounded-full ${badge.dot}`} aria-hidden="true" />
+              <span>{badge.label}</span>
             </div>
           </div>
         </div>
 
-        {/* Connection Switcher, Tare, User Pill */}
         <div className="flex items-center flex-wrap gap-2">
-          {/* Connection Mode Switcher */}
-          <div className="inline-flex p-1 bg-slate-100 rounded-full border border-slate-200/60 text-xs font-medium text-slate-600">
+          <div
+            className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-medium text-slate-700"
+            role="group"
+            aria-label="Pilih mode koneksi"
+          >
             <button
               type="button"
+              aria-pressed={connMode === 'sim'}
               onClick={() => setConnMode('sim')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${
                 connMode === 'sim'
-                  ? 'bg-white text-slate-900 font-semibold shadow-sm'
-                  : 'hover:text-slate-900'
+                  ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
+                  : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <Cpu className="w-3.5 h-3.5" />
+              <Cpu className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Simulator</span>
             </button>
             <button
               type="button"
+              aria-pressed={connMode === 'usb'}
               onClick={() => setConnMode('usb')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${
                 connMode === 'usb'
-                  ? 'bg-white text-slate-900 font-semibold shadow-sm'
-                  : 'hover:text-slate-900'
+                  ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
+                  : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <Usb className="w-3.5 h-3.5" />
+              <Usb className="w-3.5 h-3.5" aria-hidden="true" />
               <span>USB Serial</span>
             </button>
             <button
               type="button"
+              aria-pressed={connMode === 'cloud'}
               onClick={() => setConnMode('cloud')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${
                 connMode === 'cloud'
-                  ? 'bg-white text-slate-900 font-semibold shadow-sm'
-                  : 'hover:text-slate-900'
+                  ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
+                  : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <Cloud className="w-3.5 h-3.5" />
+              <Cloud className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Firebase Cloud</span>
             </button>
           </div>
 
-          {/* Quick Tare Button */}
-          <button
-            type="button"
-            onClick={onTare}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-medium transition-colors shadow-sm"
-            title="Nol-kan timbangan tatakan"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-            <span>Tare</span>
-          </button>
-
-          {/* User Auth Pill */}
           <button
             type="button"
             onClick={onOpenAuth}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-xs font-medium transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold transition-colors"
           >
-            <User className="w-3.5 h-3.5 text-water-600" />
-            <span className="max-w-[120px] sm:max-w-[160px] truncate">
-              {userEmail ? userEmail.split('@')[0] : 'Akun / Klaim'}
+            <User className="w-3.5 h-3.5 text-water-700" aria-hidden="true" />
+            <span className="max-w-[140px] sm:max-w-[180px] truncate">
+              {userEmail ? userEmail.split('@')[0] : 'Akun & Alat'}
             </span>
           </button>
         </div>
