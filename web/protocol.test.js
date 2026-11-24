@@ -9,7 +9,10 @@ const {
   buildConfigPatch,
   formatEmptyCupSerialCmd,
   parseSerialLine,
-  computeEffectiveIntervalMs
+  computeEffectiveIntervalMs,
+  applySseEvent,
+  isNewTelemetryFrame,
+  computeLiveRemainingSec
 } = require('./protocol.js');
 
 // 1. Pemetaan state kanonik & label badge sesuai DESIGN.md §4 dan app/lib/telemetry.dart
@@ -123,4 +126,85 @@ assert.strictEqual(
   'mode normal + manual memakai baseIntervalMin apa adanya'
 );
 console.log('[PASS] 5. computeEffectiveIntervalMs menjaga paritas mode demo vs adaptif DHT11');
+
+// 6. applySseEvent: root put, sub-path put, root patch, sub-path patch
+const sse1 = applySseEvent(null, 'put', {
+  path: '/',
+  data: { weight_g: 300, muted: false, fsm_state: 'TIMING', remaining_sec: 15, hb: 1 }
+});
+assert.strictEqual(sse1.changed, true);
+assert.strictEqual(sse1.next.weight_g, 300);
+
+const sse2 = applySseEvent(sse1.next, 'put', { path: '/weight_g', data: 345.2 });
+assert.strictEqual(sse2.changed, true);
+assert.strictEqual(sse2.next.weight_g, 345.2);
+assert.strictEqual(sse2.next.hb, 1, 'field lain tetap utuh setelah sub-path put');
+assert.strictEqual(sse1.next.weight_g, 300, 'cache asli tidak termutasi langsung');
+
+const sse3 = applySseEvent(sse2.next, 'put', { path: '/muted', data: null });
+assert.strictEqual('muted' in sse3.next, false, 'nilai null menghapus key pada sub-path put');
+
+const sse4 = applySseEvent(sse2.next, 'patch', {
+  path: '/',
+  data: { fsm_state: 'ALERT_DRINK', remaining_sec: 0, hb: 2 }
+});
+assert.strictEqual(sse4.next.fsm_state, 'ALERT_DRINK');
+assert.strictEqual(sse4.next.weight_g, 345.2);
+
+const sse5 = applySseEvent({ meta: { a: 1 }, muted: false }, 'patch', {
+  path: '/meta',
+  data: { b: 2 }
+});
+assert.deepStrictEqual(sse5.next.meta, { a: 1, b: 2 });
+console.log('[PASS] 6. applySseEvent menangani put & patch penuh maupun sub-path');
+
+// 7. isNewTelemetryFrame
+const f1 = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 10 });
+const f1Same = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 10 });
+const f2 = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 11 });
+assert.strictEqual(isNewTelemetryFrame(null, f1), true);
+assert.strictEqual(isNewTelemetryFrame(f1, f1Same), false);
+assert.strictEqual(isNewTelemetryFrame(f1, f2), true);
+const z1 = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 0 });
+const z1Same = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 0 });
+const z2 = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 14, hb: 0 });
+assert.strictEqual(isNewTelemetryFrame(z1, z1Same), false);
+assert.strictEqual(isNewTelemetryFrame(z1, z2), true);
+console.log('[PASS] 7. isNewTelemetryFrame membedakan frame baru vs poll ulang');
+
+// 8. computeLiveRemainingSec
+const timingTlm = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, standby: false, hb: 1 });
+assert.strictEqual(computeLiveRemainingSec(timingTlm, 10000, 10000), 15);
+assert.strictEqual(computeLiveRemainingSec(timingTlm, 10000, 11000), 14);
+assert.strictEqual(computeLiveRemainingSec(timingTlm, 10000, 13900), 12);
+assert.strictEqual(computeLiveRemainingSec(timingTlm, 10000, 30000), 0, 'clamp ke 0');
+assert.strictEqual(
+  computeLiveRemainingSec(parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, standby: true }), 10000, 11000),
+  null
+);
+assert.strictEqual(
+  computeLiveRemainingSec(parseCloudTelemetry({ fsm_state: 'IDLE', remaining_sec: 0 }), 10000, 11000),
+  null
+);
+assert.strictEqual(
+  computeLiveRemainingSec(parseCloudTelemetry({ fsm_state: 'STABLE', remaining_sec: 0 }), 10000, 11000),
+  null
+);
+assert.strictEqual(
+  computeLiveRemainingSec(parseCloudTelemetry({ fsm_state: 'LIFTED', remaining_sec: 0 }), 10000, 11000),
+  null
+);
+assert.strictEqual(
+  computeLiveRemainingSec(parseCloudTelemetry({ fsm_state: 'ALERT_CHEAT', remaining_sec: 0 }), 10000, 11000),
+  null
+);
+assert.strictEqual(
+  computeLiveRemainingSec(parseCloudTelemetry({ fsm_state: 'ALERT_REFILL', remaining_sec: 0 }), 10000, 11000),
+  null
+);
+assert.strictEqual(
+  computeLiveRemainingSec(parseCloudTelemetry({ fsm_state: 'ALERT_DRINK', remaining_sec: 0 }), 10000, 11000),
+  0
+);
+console.log('[PASS] 8. computeLiveRemainingSec menghitung mundur monotoik tanpa poll baru');
 console.log('SEMUA LULUS (protocol.test.js)');

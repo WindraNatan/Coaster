@@ -452,6 +452,16 @@ class _ConnectScreenState extends State<ConnectScreen> {
 class TlmStreamState {
   final Map<String, dynamic> json = <String, dynamic>{};
 
+  static bool isRevokedEvent(String block) {
+    for (final line in block.split('\n')) {
+      if (line.startsWith('event:')) {
+        final type = line.substring(6).trim();
+        if (type == 'auth_revoked' || type == 'cancel') return true;
+      }
+    }
+    return false;
+  }
+
   bool apply(String block) {
     String type = '';
     String payload = '';
@@ -526,6 +536,7 @@ class DashboardScreen extends StatefulWidget {
   final VoidCallback? onClaimDevice;
   final Future<void> Function()? onLogout;
   final http.Client? client;
+  final DateTime Function()? now;
   const DashboardScreen({
     super.key,
     required this.url,
@@ -534,6 +545,7 @@ class DashboardScreen extends StatefulWidget {
     this.onClaimDevice,
     this.onLogout,
     this.client,
+    this.now,
   });
 
   @override
@@ -563,6 +575,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   StreamSubscription<String>? _streamSub;
   StreamSubscription<String>? _cfgSub;
   Timer? _streamRetry;
+  Timer? _cfgRetry;
   late final http.Client _client;
 
   final TlmStreamState _stream = TlmStreamState();
@@ -590,6 +603,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   ReminderPlan? _plan;
 
   String get _base => widget.url;
+
+  DateTime _now() => widget.now?.call() ?? DateTime.now();
 
   void _catatUbahTimer() {
     setState(() {
@@ -634,11 +649,26 @@ class _DashboardScreenState extends State<DashboardScreen>
     _cfgSub = null;
     _streamRetry?.cancel();
     _streamRetry = null;
+    _cfgRetry?.cancel();
+    _cfgRetry = null;
+  }
+
+  Future<void> _ensureFreshSession() async {
+    if (_session.valid || _session.refreshToken.isEmpty) return;
+    try {
+      final renewed = await refreshSession(_session, client: _client);
+      if (renewed != null && mounted) {
+        setState(() => _session = renewed);
+      }
+    } catch (_) {}
   }
 
   Future<void> _openStream() async {
     await _streamSub?.cancel();
     _streamSub = null;
+    _streamBuf = '';
+    if (!mounted) return;
+    await _ensureFreshSession();
     if (!mounted) return;
     final url = '${_session.coasterUrl(_base)}/telemetry.json${_session.suffix}';
     try {
@@ -664,18 +694,43 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _openCfgStream() async {
     await _cfgSub?.cancel();
     _cfgSub = null;
+    _cfgBuf = '';
+    if (!mounted) return;
+    await _ensureFreshSession();
     if (!mounted) return;
     final url = '${_session.coasterUrl(_base)}/config.json${_session.suffix}';
     try {
       final req = http.Request('GET', Uri.parse(url))
         ..headers['Accept'] = 'text/event-stream';
       final res = await _client.send(req).timeout(const Duration(seconds: 8));
-      if (res.statusCode != 200) return;
+      if (res.statusCode != 200) {
+        _restartCfgStream();
+        return;
+      }
       _cfgSub = res.stream
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen(_onCfgLine, cancelOnError: true);
-    } catch (_) {}
+          .listen(
+            _onCfgLine,
+            onError: (_) => _restartCfgStream(),
+            onDone: _restartCfgStream,
+            cancelOnError: true,
+          );
+    } catch (_) {
+      _restartCfgStream();
+    }
+  }
+
+  void _restartCfgStream() {
+    _cfgSub?.cancel();
+    _cfgSub = null;
+    _cfgRetry?.cancel();
+    if (!mounted) return;
+    _cfgRetry = Timer(const Duration(seconds: 1), () async {
+      if (!mounted) return;
+      await _ensureFreshSession();
+      _openCfgStream();
+    });
   }
 
   void _onCfgLine(String line) {
@@ -684,6 +739,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       return;
     }
     if (_cfgBuf.isEmpty) return;
+    if (TlmStreamState.isRevokedEvent(_cfgBuf)) {
+      _cfgBuf = '';
+      _restartCfgStream();
+      return;
+    }
     final changed = _cfgState.apply(_cfgBuf);
     _cfgBuf = '';
     if (!changed || !mounted) return;
@@ -700,18 +760,23 @@ class _DashboardScreenState extends State<DashboardScreen>
       return;
     }
     if (_streamBuf.isEmpty) return;
+    if (TlmStreamState.isRevokedEvent(_streamBuf)) {
+      _streamBuf = '';
+      _restartStream();
+      return;
+    }
     final changed = _stream.apply(_streamBuf);
     _streamBuf = '';
     if (!changed || !mounted) return;
     setState(() {
       final baru = Telemetry.fromJson(Map<String, dynamic>.from(_stream.json));
-      if (_frameIsNew(baru)) _frameAt = DateTime.now();
+      if (_frameIsNew(baru)) _frameAt = _now();
       _t = baru;
       _segarkanHintTimer();
       _streamFrameAt = DateTime.now();
       _error = null;
       _loading = false;
-      _lastSync = DateTime.now();
+      _lastSync = _now();
     });
     _trackHeartbeat(_t!);
     _dayMl = _computeDayMl(_t!);
@@ -753,6 +818,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     _remindTick = null;
     _streamRetry?.cancel();
     _streamRetry = null;
+    _cfgRetry?.cancel();
+    _cfgRetry = null;
     _client.close();
     _intervalCtrl.dispose();
     _emptyCupCtrl.dispose();
@@ -798,14 +865,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         final cfgUsang = _cfgFrameAt != null && _cfgFrameAt!.isAfter(mulai);
         setState(() {
           if (!usang) {
-            if (_frameIsNew(t)) _frameAt = DateTime.now();
+            if (_frameIsNew(t)) _frameAt = _now();
             _t = t;
             _segarkanHintTimer();
           }
           if (!cfgUsang) _cfg = c;
           _error = null;
           _loading = false;
-          _lastSync = DateTime.now();
+          _lastSync = _now();
         });
         if (!cfgUsang && cMap != null) {
           _cfgCache
@@ -848,6 +915,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _patchConfig(Map<String, dynamic> patch) async {
     try {
+      await _ensureFreshSession();
       final res = await _client
           .patch(
             Uri.parse('${_session.coasterUrl(_base)}/config.json${_session.suffix}'),
@@ -865,6 +933,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<bool> _setSession({required String ownerUid, required bool active}) async {
     try {
+      await _ensureFreshSession();
       final res = await _client
           .put(
             Uri.parse('${_session.coasterUrl(_base)}/session.json${_session.suffix}'),
@@ -1405,7 +1474,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _liveRemaining(Telemetry t) {
     final at = _frameAt ?? _lastSync;
     if (at == null) return t.remainingSec;
-    final rem = t.remainingSec - DateTime.now().difference(at).inSeconds;
+    final rem = t.remainingSec - _now().difference(at).inSeconds;
     return rem < 0 ? 0 : rem;
   }
 
@@ -1415,15 +1484,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (t.heartbeat > 0 || prev.heartbeat > 0) {
       return t.heartbeat != prev.heartbeat;
     }
-    return t.remainingSec > prev.remainingSec + 1;
+    return t.canonicalState != prev.canonicalState ||
+        t.standby != prev.standby ||
+        t.remainingSec != prev.remainingSec;
   }
 
   void _startRemindTick() {
     _remindTick?.cancel();
     _remindTick = Timer.periodic(const Duration(seconds: 1), (_) async {
-      final left = await ReminderService.timeLeft();
+      final left = _remindOn ? await ReminderService.timeLeft() : null;
       if (!mounted) return;
-      setState(() => _remindLeft = left);
+      if (_remindOn || _t?.canonicalState == 'TIMING' || _lastHbAt != null) {
+        setState(() => _remindLeft = left);
+      }
     });
   }
 
@@ -2114,7 +2187,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _countdownCard(Telemetry t) {
     final targetSec = (t.targetIntervalMin * 60).round();
-    final timing = t.canonicalState == 'TIMING';
+    final timing = !t.standby && t.canonicalState == 'TIMING';
     final rem = _liveRemaining(t);
     final progress = (timing && targetSec > 0)
         ? (1 - rem / targetSec).clamp(0.0, 1.0)

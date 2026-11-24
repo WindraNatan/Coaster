@@ -802,4 +802,92 @@ void main() {
     expect(find.text('Masuk'), findsOneWidget);
     expect(await loadSession(), isNull);
   });
+
+  test('isRevokedEvent mendeteksi auth_revoked dan cancel tanpa memicu put/patch', () {
+    expect(TlmStreamState.isRevokedEvent('event: auth_revoked\ndata: null\n\n'), isTrue);
+    expect(TlmStreamState.isRevokedEvent('event: cancel\ndata: null\n\n'), isTrue);
+    expect(TlmStreamState.isRevokedEvent('event: put\ndata: {"path":"/","data":{}}\n\n'), isFalse);
+    expect(TlmStreamState.isRevokedEvent('event: keep-alive\ndata: null\n\n'), isFalse);
+  });
+
+  testWidgets('standby:true menampilkan --:-- meski fsm_state TIMING', (tester) async {
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/telemetry.json')) {
+        return Response(
+            jsonEncode({
+              'weight_g': 315,
+              'water_ml': 185,
+              'temp_c': 27,
+              'humidity_pct': 60,
+              'remaining_sec': 15,
+              'target_interval_min': 0.25,
+              'total_ml': 0,
+              'drink_count': 0,
+              'refill_count': 0,
+              'cheat_count': 0,
+              'muted': false,
+              'standby': true,
+              'fsm_state': 'TIMING',
+              'hb': 1,
+            }),
+            200);
+      }
+      if (req.url.path.endsWith('/config.json')) {
+        return Response(_configBody, 200);
+      }
+      return Response('{}', 200);
+    });
+
+    await _pumpApp(tester, client);
+    await tester.pump();
+    expect(find.text('--:--'), findsOneWidget);
+    expect(find.text('00:15'), findsNothing);
+  });
+
+  testWidgets('countdown TIMING turun tiap detik tanpa poll baru', (tester) async {
+    var fakeNow = DateTime(2026, 11, 25, 1, 0, 0);
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/telemetry.json')) {
+        return Response(
+            jsonEncode({
+              'weight_g': 315,
+              'water_ml': 185,
+              'temp_c': 27,
+              'humidity_pct': 60,
+              'remaining_sec': 15,
+              'target_interval_min': 0.25,
+              'total_ml': 0,
+              'drink_count': 0,
+              'refill_count': 0,
+              'cheat_count': 0,
+              'muted': false,
+              'standby': false,
+              'fsm_state': 'TIMING',
+              'hb': 5,
+            }),
+            200);
+      }
+      if (req.url.path.endsWith('/config.json')) {
+        return Response(_configBody, 200);
+      }
+      return Response('{}', 200);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: DashboardScreen(
+        url: _url,
+        session: const AuthSession(
+            'test-token', 'test@example.com', 'uid-akun', 9999999999999, '', 'uid-test'),
+        onChangeUrl: () {},
+        client: client,
+        now: () => fakeNow,
+      ),
+    ));
+    await tester.pump();
+    expect(find.text('00:15'), findsOneWidget);
+
+    fakeNow = fakeNow.add(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('00:12'), findsOneWidget);
+  });
 }

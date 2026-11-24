@@ -12,7 +12,7 @@ const SCENARIOS = [
   { id: 8, title: '8. Ruangan terasa panas', desc: 'Suhu 33 °C mempercepat pengingat' }
 ];
 
-export default function LabSimulatorPanel({
+export default React.memo(function LabSimulatorPanel({
   weight = 0,
   onWeightChange,
   temp = 27.0,
@@ -37,7 +37,7 @@ export default function LabSimulatorPanel({
 
   return (
     <section
-      className="bg-surface rounded-2xl p-5 border border-hairline space-y-4"
+      className="bg-surface rounded-2xl p-4 sm:p-5 border border-hairline space-y-4"
       aria-label="Panel simulasi presentasi"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -50,7 +50,7 @@ export default function LabSimulatorPanel({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <div className="px-2.5 py-1 rounded-lg bg-subtle text-xs text-ink-soft">
             <span>Waktu simulasi </span>
             <span className="font-mono tabular-nums text-ink font-semibold">
@@ -59,7 +59,7 @@ export default function LabSimulatorPanel({
           </div>
 
           <div
-            className="inline-flex p-1 bg-subtle rounded-xl border border-hairline text-xs"
+            className="grid grid-cols-5 w-full sm:inline-flex sm:w-auto p-1 bg-subtle rounded-xl border border-hairline text-xs"
             role="group"
             aria-label="Kecepatan waktu simulasi"
           >
@@ -69,7 +69,7 @@ export default function LabSimulatorPanel({
                 type="button"
                 aria-pressed={warp === w}
                 onClick={() => onWarpChange(w)}
-                className={`px-2 py-1 rounded-lg whitespace-nowrap transition-colors duration-150 ${
+                className={`min-w-0 text-center px-1.5 sm:px-2 py-1 rounded-lg whitespace-nowrap transition-colors duration-150 ${
                   warp === w
                     ? 'bg-surface text-ink font-semibold border border-hairline'
                     : 'text-ink-soft hover:text-ink'
@@ -228,4 +228,4 @@ export default function LabSimulatorPanel({
       )}
     </section>
   );
-}
+});

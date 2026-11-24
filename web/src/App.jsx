@@ -4,6 +4,7 @@ import {
   defaultTodayKey,
   loadDailyHistory,
   ensureDayBaseline,
+  todayDelta,
   peekTodayDelta,
   saveTodayStatsToHistory,
   resetDailyStatsGuarded,
@@ -15,7 +16,10 @@ import {
   buildConfigPatch,
   formatEmptyCupSerialCmd,
   parseSerialLine,
-  computeEffectiveIntervalMs
+  computeEffectiveIntervalMs,
+  applySseEvent,
+  isNewTelemetryFrame,
+  computeLiveRemainingSec
 } from './protocol';
 import {
   shcEnsureToken,
@@ -24,6 +28,7 @@ import {
   shcDiscoverDevice,
   shcSetSession,
   shcUid,
+  shcDeviceUid,
   getCleanFbUrl
 } from './auth';
 
@@ -49,6 +54,19 @@ const STATE_ACTIVITY_NAMES = {
   ALERT_REFILL: 'Air hampir habis'
 };
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  if (typeof AbortController === 'undefined') {
+    return fetch(url, options);
+  }
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 export default function App() {
   const fsmRef = useRef(null);
   if (!fsmRef.current) {
@@ -56,7 +74,13 @@ export default function App() {
   }
   const fsm = fsmRef.current;
 
-  const [connMode, setConnMode] = useState('sim'); // 'sim' | 'usb' | 'cloud'
+  const [connMode, setConnMode] = useState(() => {
+    try {
+      return localStorage.getItem('shc_conn_mode') === 'cloud' && shcUid() ? 'cloud' : 'sim';
+    } catch (_) {
+      return 'sim';
+    }
+  }); // 'sim' | 'usb' | 'cloud'
   const [usbConnected, setUsbConnected] = useState(false);
   const [usbStatus, setUsbStatus] = useState('idle'); // 'idle' | 'connecting' | 'connected' | 'unsupported' | 'error'
   const [usbError, setUsbError] = useState('');
@@ -121,9 +145,22 @@ export default function App() {
 
   const cloudCfgCacheRef = useRef(null);
   const cloudTlmCacheRef = useRef(null);
+  const cloudParsedTlmRef = useRef(null);
+  const cloudAnchorMsRef = useRef(null);
   const cloudHydratedRef = useRef(false);
+  const cloudConnectedRef = useRef(false);
   const sseTlmRef = useRef(null);
   const sseCfgRef = useRef(null);
+  const sseRetryTimerRef = useRef(null);
+  const sseRetryAttemptRef = useRef(0);
+  const streamGenRef = useRef(0);
+  const lastStreamTlmAtRef = useRef(0);
+  const lastStreamCfgAtRef = useRef(0);
+  const cloudPollingRef = useRef(false);
+
+  useEffect(() => {
+    cloudConnectedRef.current = cloudConnected;
+  }, [cloudConnected]);
 
   const simParamsRef = useRef({
     weight: 0,
@@ -256,15 +293,24 @@ export default function App() {
     const base = getCleanFbUrl();
     const url = shcCoasterUrl(base);
     if (!url) return false;
+    cloudCfgCacheRef.current = { ...(cloudCfgCacheRef.current || {}), ...patch };
+    lastStreamCfgAtRef.current = Date.now();
     try {
       if (!(await shcEnsureToken())) return false;
-      const res = await fetch(url + '/config.json' + shcAuthSuffix(), {
+      let res = await fetchWithTimeout(url + '/config.json' + shcAuthSuffix(), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch)
       });
+      if (res.status === 401 && (await shcEnsureToken(true))) {
+        res = await fetchWithTimeout(url + '/config.json' + shcAuthSuffix(), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch)
+        });
+      }
       if (res.ok) {
-        cloudCfgCacheRef.current = { ...(cloudCfgCacheRef.current || {}), ...patch };
+        lastStreamCfgAtRef.current = Date.now();
         return true;
       }
     } catch (_) {}
@@ -320,9 +366,9 @@ export default function App() {
         playBeep(rawSt === 'ALERT_CHEAT' ? 1040 : 880, 100);
       }
 
-      tickCounter++;
+      const nextClockSec = Math.floor(now / 1000);
       if (tickCounter % 5 === 0) {
-        setSimClockSec(Math.floor(now / 1000));
+        setSimClockSec((prev) => (prev === nextClockSec ? prev : nextClockSec));
       }
     }, 100);
 
@@ -333,6 +379,11 @@ export default function App() {
     (rawTlm) => {
       const t = parseCloudTelemetry(rawTlm);
       if (!t) return;
+      const nowMs = Date.now();
+      if (isNewTelemetryFrame(cloudParsedTlmRef.current, t)) {
+        cloudAnchorMsRef.current = nowMs;
+      }
+      cloudParsedTlmRef.current = t;
       cloudTlmCacheRef.current = rawTlm;
       setCloudConnected(true);
       setCloudStatus('connected');
@@ -345,7 +396,7 @@ export default function App() {
       setStateString(t.rawState);
       setStandby(t.standby);
       setIsStable(t.state === 'TIMING' || t.state === 'STABLE');
-      setRemSec(t.remainingSec);
+      setRemSec(computeLiveRemainingSec(t, cloudAnchorMsRef.current, nowMs));
       setTargetSec(Math.round(t.targetMs / 1000));
 
       const firstHydration = !cloudHydratedRef.current;
@@ -404,8 +455,11 @@ export default function App() {
     [fsm]
   );
 
-  const closeCloudStreams = useCallback(() => {
-    cloudHydratedRef.current = false;
+  const closeSseSockets = useCallback(() => {
+    if (sseRetryTimerRef.current) {
+      clearTimeout(sseRetryTimerRef.current);
+      sseRetryTimerRef.current = null;
+    }
     if (sseTlmRef.current) {
       sseTlmRef.current.close();
       sseTlmRef.current = null;
@@ -416,9 +470,17 @@ export default function App() {
     }
   }, []);
 
+  const closeCloudStreams = useCallback(() => {
+    streamGenRef.current += 1;
+    cloudHydratedRef.current = false;
+    cloudParsedTlmRef.current = null;
+    cloudAnchorMsRef.current = null;
+    closeSseSockets();
+  }, [closeSseSockets]);
+
   const fetchCloudDailyHistory = useCallback(async (coasterUrl) => {
     try {
-      const res = await fetch(coasterUrl + '/daily.json' + shcAuthSuffix());
+      const res = await fetchWithTimeout(coasterUrl + '/daily.json' + shcAuthSuffix());
       if (!res.ok) return;
       const data = await res.json();
       if (!data || typeof data !== 'object') return;
@@ -439,31 +501,41 @@ export default function App() {
   }, []);
 
   const pollCloudOnce = useCallback(async () => {
-    const base = getCleanFbUrl();
-    if (!(await shcEnsureToken())) {
-      setCloudConnected(false);
-      setCloudStatus('unauthenticated');
-      setCloudError('Masuk ke akun dan tautkan kode tatakan untuk memantau secara online.');
-      return;
-    }
-    const url = shcCoasterUrl(base);
-    if (!url) {
-      setCloudConnected(false);
-      setCloudStatus('unauthenticated');
-      setCloudError('Tautkan tatakanmu terlebih dahulu di menu Masuk.');
-      return;
-    }
+    if (cloudPollingRef.current) return;
+    cloudPollingRef.current = true;
     try {
-      const [tRes, cRes] = await Promise.all([
-        fetch(url + '/telemetry.json' + shcAuthSuffix()),
-        fetch(url + '/config.json' + shcAuthSuffix())
+      const base = getCleanFbUrl();
+      if (!(await shcEnsureToken())) {
+        setCloudConnected(false);
+        setCloudStatus('unauthenticated');
+        setCloudError('Masuk ke akun dan tautkan kode tatakan untuk memantau secara online.');
+        return;
+      }
+      const url = shcCoasterUrl(base);
+      if (!url) {
+        setCloudConnected(false);
+        setCloudStatus('unauthenticated');
+        setCloudError('Tautkan tatakanmu terlebih dahulu di menu Masuk.');
+        return;
+      }
+      const startedAt = Date.now();
+      let [tRes, cRes] = await Promise.all([
+        fetchWithTimeout(url + '/telemetry.json' + shcAuthSuffix()),
+        fetchWithTimeout(url + '/config.json' + shcAuthSuffix())
       ]);
-      if (cRes.ok) {
+      if ((tRes.status === 401 || cRes.status === 401) && (await shcEnsureToken(true))) {
+        [tRes, cRes] = await Promise.all([
+          fetchWithTimeout(url + '/telemetry.json' + shcAuthSuffix()),
+          fetchWithTimeout(url + '/config.json' + shcAuthSuffix())
+        ]);
+      }
+      if (cRes.ok && lastStreamCfgAtRef.current <= startedAt) {
         const cData = await cRes.json();
         if (cData && typeof cData === 'object') applyCloudConfig(cData);
       }
       if (tRes.ok) {
         const tData = await tRes.json();
+        if (lastStreamTlmAtRef.current > startedAt) return;
         if (tData && typeof tData === 'object') {
           applyCloudTelemetry(tData);
         } else {
@@ -480,77 +552,124 @@ export default function App() {
       setCloudConnected(false);
       setCloudStatus('error');
       setCloudError('Koneksi internet bermasalah. Periksa jaringan lalu coba lagi.');
+    } finally {
+      cloudPollingRef.current = false;
     }
   }, [applyCloudConfig, applyCloudTelemetry]);
 
-  const startCloudStreams = useCallback(async () => {
-    closeCloudStreams();
-    setCloudStatus('loading');
-    setCloudError('');
-    const base = getCleanFbUrl();
-    if (!(await shcEnsureToken())) {
-      setCloudConnected(false);
-      setCloudStatus('unauthenticated');
-      setCloudError('Masuk ke akun dan tautkan kode tatakan untuk mulai memantau online.');
-      return;
-    }
-    await shcDiscoverDevice(base);
-    const url = shcCoasterUrl(base);
-    if (!url) {
-      setCloudConnected(false);
-      setCloudStatus('unauthenticated');
-      setCloudError('Tatakan belum ditautkan ke akun ini.');
-      return;
-    }
-    await pollCloudOnce();
-    await fetchCloudDailyHistory(url);
+  const startCloudStreams = useCallback(
+    async (forceRefresh = false) => {
+      const gen = ++streamGenRef.current;
+      closeSseSockets();
+      if (!cloudConnectedRef.current) {
+        setCloudStatus('loading');
+      }
+      setCloudError('');
+      const base = getCleanFbUrl();
+      const tokenOk = await shcEnsureToken(forceRefresh);
+      if (gen !== streamGenRef.current || connModeRef.current !== 'cloud') return;
+      if (!tokenOk) {
+        setCloudConnected(false);
+        setCloudStatus('unauthenticated');
+        setCloudError('Masuk ke akun dan tautkan kode tatakan untuk mulai memantau online.');
+        return;
+      }
 
-    if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
-      try {
-        const esTlm = new window.EventSource(url + '/telemetry.json' + shcAuthSuffix());
-        esTlm.addEventListener('put', (e) => {
-          try {
-            const payload = JSON.parse(e.data);
-            if (payload && payload.path === '/' && payload.data) {
-              applyCloudTelemetry(payload.data);
-            } else if (payload && payload.data !== undefined) {
-              pollCloudOnce();
-            }
-          } catch (_) {}
+      const cachedDev = shcDeviceUid();
+      if (!cachedDev) {
+        await shcDiscoverDevice(base);
+        if (gen !== streamGenRef.current || connModeRef.current !== 'cloud') return;
+      } else {
+        shcDiscoverDevice(base).then((found) => {
+          if (
+            found &&
+            found !== cachedDev &&
+            gen === streamGenRef.current &&
+            connModeRef.current === 'cloud'
+          ) {
+            startCloudStreams(false);
+          }
         });
-        esTlm.addEventListener('patch', (e) => {
-          try {
-            const payload = JSON.parse(e.data);
-            if (payload && payload.data && typeof payload.data === 'object') {
-              const merged = { ...(cloudTlmCacheRef.current || {}), ...payload.data };
-              applyCloudTelemetry(merged);
-            }
-          } catch (_) {}
-        });
-        sseTlmRef.current = esTlm;
+      }
 
-        const esCfg = new window.EventSource(url + '/config.json' + shcAuthSuffix());
-        esCfg.addEventListener('put', (e) => {
-          try {
-            const payload = JSON.parse(e.data);
-            if (payload && payload.path === '/' && payload.data) {
-              applyCloudConfig(payload.data);
-            }
-          } catch (_) {}
-        });
-        esCfg.addEventListener('patch', (e) => {
-          try {
-            const payload = JSON.parse(e.data);
-            if (payload && payload.data && typeof payload.data === 'object') {
-              const merged = { ...(cloudCfgCacheRef.current || {}), ...payload.data };
-              applyCloudConfig(merged);
-            }
-          } catch (_) {}
-        });
-        sseCfgRef.current = esCfg;
-      } catch (_) {}
-    }
-  }, [closeCloudStreams, pollCloudOnce, fetchCloudDailyHistory, applyCloudTelemetry, applyCloudConfig]);
+      const url = shcCoasterUrl(base);
+      if (!url) {
+        setCloudConnected(false);
+        setCloudStatus('unauthenticated');
+        setCloudError('Tatakan belum ditautkan ke akun ini.');
+        return;
+      }
+
+      const scheduleReconnect = (needRefresh = false) => {
+        if (gen !== streamGenRef.current || connModeRef.current !== 'cloud') return;
+        closeSseSockets();
+        const attempt = sseRetryAttemptRef.current;
+        const delayMs = Math.min(10000, 800 * Math.pow(2, attempt));
+        sseRetryAttemptRef.current = Math.min(attempt + 1, 5);
+        sseRetryTimerRef.current = setTimeout(() => {
+          sseRetryTimerRef.current = null;
+          if (gen === streamGenRef.current && connModeRef.current === 'cloud') {
+            startCloudStreams(needRefresh);
+          }
+        }, delayMs);
+      };
+
+      if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
+        try {
+          const authSuffix = shcAuthSuffix();
+          const esTlm = new window.EventSource(url + '/telemetry.json' + authSuffix);
+          esTlm.onopen = () => {
+            sseRetryAttemptRef.current = 0;
+          };
+          const handleTlmSse = (type) => (e) => {
+            try {
+              const payload = JSON.parse(e.data);
+              const { changed, next } = applySseEvent(cloudTlmCacheRef.current, type, payload);
+              if (!changed) return;
+              sseRetryAttemptRef.current = 0;
+              lastStreamTlmAtRef.current = Date.now();
+              if (next) {
+                applyCloudTelemetry(next);
+              } else {
+                cloudTlmCacheRef.current = null;
+                cloudParsedTlmRef.current = null;
+                setCloudConnected(false);
+                setCloudStatus('error');
+                setCloudError('Data tatakan belum tersedia. Pastikan tatakan terhubung ke Wi-Fi.');
+              }
+            } catch (_) {}
+          };
+          esTlm.addEventListener('put', handleTlmSse('put'));
+          esTlm.addEventListener('patch', handleTlmSse('patch'));
+          esTlm.addEventListener('auth_revoked', () => scheduleReconnect(true));
+          esTlm.addEventListener('cancel', () => scheduleReconnect(true));
+          esTlm.onerror = () => scheduleReconnect(true);
+          sseTlmRef.current = esTlm;
+
+          const esCfg = new window.EventSource(url + '/config.json' + authSuffix);
+          const handleCfgSse = (type) => (e) => {
+            try {
+              const payload = JSON.parse(e.data);
+              const { changed, next } = applySseEvent(cloudCfgCacheRef.current, type, payload);
+              if (!changed) return;
+              lastStreamCfgAtRef.current = Date.now();
+              if (next) applyCloudConfig(next);
+            } catch (_) {}
+          };
+          esCfg.addEventListener('put', handleCfgSse('put'));
+          esCfg.addEventListener('patch', handleCfgSse('patch'));
+          esCfg.addEventListener('auth_revoked', () => scheduleReconnect(true));
+          esCfg.addEventListener('cancel', () => scheduleReconnect(true));
+          esCfg.onerror = () => scheduleReconnect(true);
+          sseCfgRef.current = esCfg;
+        } catch (_) {}
+      }
+
+      pollCloudOnce();
+      fetchCloudDailyHistory(url);
+    },
+    [closeSseSockets, pollCloudOnce, fetchCloudDailyHistory, applyCloudTelemetry, applyCloudConfig]
+  );
 
   useEffect(() => {
     if (connMode !== 'cloud') {
@@ -559,10 +678,33 @@ export default function App() {
       setCloudError('');
       return undefined;
     }
-    startCloudStreams();
+    startCloudStreams(false);
     const safetyPoll = setInterval(pollCloudOnce, 20000);
+    const countdownTick = setInterval(() => {
+      const tlm = cloudParsedTlmRef.current;
+      if (!tlm || tlm.standby || tlm.state !== 'TIMING') return;
+      const nextRem = computeLiveRemainingSec(tlm, cloudAnchorMsRef.current, Date.now());
+      setRemSec((prev) => (prev === nextRem ? prev : nextRem));
+    }, 1000);
+    const handleWakeup = () => {
+      if (document.visibilityState === 'hidden') return;
+      const tlm = cloudParsedTlmRef.current;
+      if (tlm && !tlm.standby && tlm.state === 'TIMING') {
+        setRemSec(computeLiveRemainingSec(tlm, cloudAnchorMsRef.current, Date.now()));
+      }
+      if (!sseTlmRef.current || sseTlmRef.current.readyState === 2) {
+        startCloudStreams(false);
+      } else {
+        pollCloudOnce();
+      }
+    };
+    window.addEventListener('online', handleWakeup);
+    document.addEventListener('visibilitychange', handleWakeup);
     return () => {
       clearInterval(safetyPoll);
+      clearInterval(countdownTick);
+      window.removeEventListener('online', handleWakeup);
+      document.removeEventListener('visibilitychange', handleWakeup);
       closeCloudStreams();
     };
   }, [connMode, startCloudStreams, pollCloudOnce, closeCloudStreams]);
@@ -603,7 +745,16 @@ export default function App() {
       if (parsed.waterMl !== null) setCupMl(parsed.waterMl);
       if (parsed.tempC !== null) setTemp(parsed.tempC);
       if (parsed.humidityPct !== null) setHum(parsed.humidityPct);
-      if (parsed.remainingSec !== null) setRemSec(parsed.remainingSec);
+      if (parsed.remainingSec !== null) {
+        const activeStandby = parsed.standby !== null ? parsed.standby : simParamsRef.current.standby;
+        if (!activeStandby && parsed.state === 'TIMING') {
+          setRemSec(parsed.remainingSec);
+        } else if (!activeStandby && parsed.state === 'ALERT_DRINK') {
+          setRemSec(0);
+        } else {
+          setRemSec(null);
+        }
+      }
       if (parsed.targetSec !== null) setTargetSec(parsed.targetSec);
       if (parsed.totalMl !== null) {
         fsm.totalDrank = parsed.totalMl;
@@ -701,6 +852,9 @@ export default function App() {
       setStandby(false);
     }
     setConnMode(nextMode);
+    try {
+      localStorage.setItem('shc_conn_mode', nextMode === 'cloud' ? 'cloud' : 'sim');
+    } catch (_) {}
     if (nextMode === 'sim') {
       fsm.toIdle(simClockRef.current);
       fsm.resetStats();
@@ -1225,7 +1379,7 @@ export default function App() {
         onOpenAuth={() => setAuthModalOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 space-y-4">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4">
         {renderConnectionNotice()}
 
         {/* Baris 1: Gelas di tatakan (Kiri) + Tiga cincin & Kondisi ruangan/sesi (Kanan) */}

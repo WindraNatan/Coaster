@@ -96,10 +96,10 @@ export default function VisualTumblerCoaster({
 
   return (
     <section
-      className="bg-surface rounded-2xl p-5 border border-hairline flex flex-col justify-between h-full"
+      className="bg-surface rounded-2xl p-4 sm:p-5 border border-hairline flex flex-col justify-between h-full"
       aria-label="Kondisi gelas di tatakan"
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold text-ink tracking-tight">
             Gelas di tatakan
@@ -117,13 +117,13 @@ export default function VisualTumblerCoaster({
         </div>
       </div>
 
-      <div className="py-4 flex flex-col items-center justify-center">
+      <div className="py-2 sm:py-4 flex flex-col items-center justify-center">
         <div className="relative flex flex-col items-center justify-center">
           <svg
             width="148"
             height="172"
             viewBox="0 0 120 170"
-            className="relative z-10 overflow-visible"
+            className="relative z-10 overflow-visible w-[112px] h-[132px] sm:w-[148px] sm:h-[172px]"
             aria-hidden="true"
           >
             <defs>

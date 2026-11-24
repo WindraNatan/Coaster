@@ -37,9 +37,9 @@ export default function EnvironmentSessionBar({
       className="bg-surface rounded-2xl border border-hairline p-4 sm:p-5"
       aria-label="Kondisi ruangan dan sesi minum"
     >
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-0 items-center">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-0 items-center">
         {/* 1. Suhu & Kelembapan Ruangan */}
-        <div className="lg:col-span-4 lg:pr-4 lg:border-r border-hairline">
+        <div className="md:col-span-4 md:pr-4 md:border-r border-hairline min-w-0">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-ink-soft whitespace-nowrap">
               Suhu ruangan
@@ -70,7 +70,7 @@ export default function EnvironmentSessionBar({
         </div>
 
         {/* 2. Ringkasan Sesi Saat Ini (tanpa kartu di dalam kartu) */}
-        <div className="lg:col-span-5 lg:px-5 lg:border-r border-hairline pt-3 lg:pt-0 border-t lg:border-t-0">
+        <div className="md:col-span-5 md:px-5 md:border-r border-hairline pt-3 md:pt-0 border-t md:border-t-0 min-w-0">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs font-semibold text-ink-soft">
               Sesi saat ini
@@ -81,39 +81,39 @@ export default function EnvironmentSessionBar({
             </span>
           </div>
           <div className="grid grid-cols-3 divide-x divide-hairline bg-subtle rounded-xl py-2.5">
-            <div className="px-2 text-center">
+            <div className="px-1.5 sm:px-2 text-center min-w-0">
               <div className="text-base font-semibold text-ok">
                 <span className="font-mono tabular-nums">{drinkCount}</span>
                 <span>x</span>
               </div>
-              <div className="text-xs text-ink-soft mt-0.5">Minum</div>
+              <div className="text-xs text-ink-soft mt-0.5 leading-tight">Minum</div>
             </div>
-            <div className="px-2 text-center">
+            <div className="px-1.5 sm:px-2 text-center min-w-0">
               <div className="text-base font-semibold text-accent">
                 <span className="font-mono tabular-nums">{refillCount}</span>
                 <span>x</span>
               </div>
-              <div className="text-xs text-ink-soft mt-0.5">Isi ulang</div>
+              <div className="text-xs text-ink-soft mt-0.5 leading-tight">Isi ulang</div>
             </div>
-            <div className="px-2 text-center">
+            <div className="px-1.5 sm:px-2 text-center min-w-0">
               <div className="text-base font-semibold text-warn">
                 <span className="font-mono tabular-nums">{cheatCount}</span>
                 <span>x</span>
               </div>
-              <div className="text-xs text-ink-soft mt-0.5">Tegukan kecil</div>
+              <div className="text-xs text-ink-soft mt-0.5 leading-tight">Tegukan kecil</div>
             </div>
           </div>
         </div>
 
         {/* 3. Kendali Sesi */}
-        <div className="lg:col-span-3 lg:pl-4 pt-3 lg:pt-0 border-t lg:border-t-0 border-hairline flex flex-col justify-between gap-2">
+        <div className="md:col-span-3 md:pl-4 pt-3 md:pt-0 border-t md:border-t-0 border-hairline flex flex-col justify-between gap-2 min-w-0">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Status sesi</span>
             <span className={`text-xs font-semibold ${standby ? 'text-ink-muted' : 'text-ok'}`}>
               {standby ? 'Istirahat' : 'Aktif'}
             </span>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
             <button
               type="button"
               disabled={sessionBusy}

@@ -169,6 +169,84 @@ function computeEffectiveIntervalMs({ demo, autoDht, baseIntervalMin, tempC, hum
   return baseMs;
 }
 
+function setNestedPath(root, parts, value, mergeObj = false) {
+  let cur = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const k = parts[i];
+    const next = cur[k];
+    cur[k] = next && typeof next === 'object' ? { ...next } : {};
+    cur = cur[k];
+  }
+  const leaf = parts[parts.length - 1];
+  if (value === null || value === undefined) {
+    delete cur[leaf];
+  } else if (mergeObj && cur[leaf] && typeof cur[leaf] === 'object' && typeof value === 'object') {
+    cur[leaf] = { ...cur[leaf], ...value };
+  } else {
+    cur[leaf] = value;
+  }
+}
+
+function applySseEvent(cache, eventType, payload) {
+  const base = cache && typeof cache === 'object' ? cache : {};
+  if (!payload || typeof payload !== 'object') {
+    return { changed: false, next: cache || null };
+  }
+  const path = typeof payload.path === 'string' && payload.path ? payload.path : '/';
+  const data = payload.data;
+
+  if (eventType === 'put') {
+    if (path === '/') {
+      return {
+        changed: true,
+        next: data && typeof data === 'object' ? { ...data } : null
+      };
+    }
+    const root = { ...base };
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length > 0) setNestedPath(root, parts, data, false);
+    return { changed: true, next: root };
+  }
+
+  if (eventType === 'patch') {
+    if (path === '/') {
+      if (data && typeof data === 'object') {
+        return { changed: true, next: { ...base, ...data } };
+      }
+      return { changed: false, next: cache || null };
+    }
+    const root = { ...base };
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length > 0) setNestedPath(root, parts, data, true);
+    return { changed: true, next: root };
+  }
+
+  return { changed: false, next: cache || null };
+}
+
+function isNewTelemetryFrame(prevTlm, nextTlm) {
+  if (!nextTlm) return false;
+  if (!prevTlm) return true;
+  if (nextTlm.hb > 0 || prevTlm.hb > 0) {
+    return nextTlm.hb !== prevTlm.hb;
+  }
+  return (
+    nextTlm.rawState !== prevTlm.rawState ||
+    nextTlm.standby !== prevTlm.standby ||
+    nextTlm.remainingSec !== prevTlm.remainingSec
+  );
+}
+
+function computeLiveRemainingSec(tlm, anchoredAtMs, nowMs) {
+  if (!tlm || tlm.standby) return null;
+  if (tlm.state === 'ALERT_DRINK') return 0;
+  if (tlm.state !== 'TIMING') return null;
+  const base = Math.max(0, Math.round(Number(tlm.remainingSec) || 0));
+  if (!Number.isFinite(anchoredAtMs) || !Number.isFinite(nowMs)) return base;
+  const elapsedSec = Math.max(0, Math.floor((nowMs - anchoredAtMs) / 1000));
+  return Math.max(0, base - elapsedSec);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     canonicalState,
@@ -178,6 +256,9 @@ if (typeof module !== 'undefined' && module.exports) {
     buildConfigPatch,
     formatEmptyCupSerialCmd,
     parseSerialLine,
-    computeEffectiveIntervalMs
+    computeEffectiveIntervalMs,
+    applySseEvent,
+    isNewTelemetryFrame,
+    computeLiveRemainingSec
   };
 }

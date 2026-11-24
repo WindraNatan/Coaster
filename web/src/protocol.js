@@ -8,3 +8,6 @@ export const buildConfigPatch = cjs.buildConfigPatch;
 export const formatEmptyCupSerialCmd = cjs.formatEmptyCupSerialCmd;
 export const parseSerialLine = cjs.parseSerialLine;
 export const computeEffectiveIntervalMs = cjs.computeEffectiveIntervalMs;
+export const applySseEvent = cjs.applySseEvent;
+export const isNewTelemetryFrame = cjs.isNewTelemetryFrame;
+export const computeLiveRemainingSec = cjs.computeLiveRemainingSec;
