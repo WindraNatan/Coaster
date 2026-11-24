@@ -307,17 +307,14 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   children: [
                     Row(
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: ShcPalette.accentSoft,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.water_drop_outlined,
-                            color: ShcPalette.accent,
-                            size: 22,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.asset(
+                            'assets/brand-logo.png',
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            excludeFromSemantics: true,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1090,17 +1087,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         titleSpacing: 16,
         title: Row(
           children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: ShcPalette.accentSoft,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.water_drop_outlined,
-                color: ShcPalette.accent,
-                size: 18,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/brand-logo.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+                excludeFromSemantics: true,
               ),
             ),
             const SizedBox(width: 10),

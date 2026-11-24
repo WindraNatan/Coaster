@@ -94,6 +94,12 @@ Future<void> _pump(WidgetTester tester, Size size) async {
       client: _client(),
     ),
   ));
+  await tester.runAsync(() async {
+    await precacheImage(
+      const AssetImage('assets/brand-logo.png'),
+      tester.element(find.byType(DashboardScreen)),
+    );
+  });
   for (var i = 0; i < 4; i++) {
     await tester.pump();
   }
