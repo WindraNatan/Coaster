@@ -1,0 +1,96 @@
+<mxfile host="app.diagrams.net" modified="2026-11-24T22:26:00.000Z" agent="Antigravity" version="24.7.17">
+  <diagram id="diagram-blok-shc" name="Diagram Blok Sistem Kendali">
+    <mxGraphModel dx="1440" dy="820" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="760" math="0" shadow="0" background="#F5F7F5">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Diagram Blok Closed-Loop Human-in-the-Loop (Smart Hydration Coaster)" style="text;html=1;fontFamily=Helvetica;fontSize=20;fontStyle=1;fontColor=#0C1F27;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="880" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="dht" value="Sensor Lingkungan&#xa;DHT11 (GPIO19)&#xa;Suhu &amp; Kelembapan" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="180" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="cfg" value="Konfigurasi User&#xa;Interval Manual (1-180 mnt)&#xa;&amp; Berat Gelas Kosong" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#475652;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="180" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="spgen" value="Generator Setpoint&#xa;T_target (Adaptif / Manual)&#xa;&amp; Target Minum dW &gt;= 20 g" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F0F2;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="290" y="150" width="210" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="comp" value="Komparator &amp;&#xa;Evaluasi State&#xa;(ESP32)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF6DB;strokeColor=#C9922F;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="570" y="150" width="170" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl" value="Kontroler&#xa;7-State FSM &amp;&#xa;Modulator Pulsa" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0B5D6B;strokeColor=#0C1F27;strokeWidth=2;fontColor=#FFFFFF;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="810" y="150" width="180" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="act" value="Aktuator Ganda&#xa;Buzzer PNP (GPIO18, 3V3)&#xa;Motor Getar NPN (GPIO17, 5V)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="150" width="220" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="dash" value="Dashboard Web PWA &amp;&#xa;Aplikasi Android Flutter&#xa;(Firebase RTDB / USB)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAEEEC;strokeColor=#5B6B66;strokeWidth=2;fontColor=#0C1F27;fontSize=12;fontStyle=1;arcSize=12;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="810" y="30" width="210" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="human" value="User&#xa;(Human-in-the-Loop)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF6DB;strokeColor=#C9922F;strokeWidth=2;fontColor=#0C1F27;fontSize=14;fontStyle=1;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="155" width="180" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="dist" value="Disturbance d(t)&#xa;Getaran Meja, Hentakan Gelas&#xa;&amp; Derau ADC HX711" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FBECEC;strokeColor=#9B2C2C;strokeWidth=2;fontColor=#7A1D1D;fontSize=12;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="340" width="210" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="plant" value="Plant&#xa;Gelas &amp; Massa Air&#xa;Gp(s) = -1/s" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F3EE;strokeColor=#16654B;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="340" width="180" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="sensor" value="Sensor Massa&#xa;Load Cell 5 kg + HX711&#xa;Cuplik 10 Hz (GPIO16, GPIO4)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="510" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="filter" value="Pengkondisi Sinyal&#xa;Moving Average (N=10) + Hysteresis&#xa;(25/35 g) + Gerbang Stabilitas 1,5 s" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#0C1F27;fontSize=13;fontStyle=1;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="550" y="510" width="270" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="Mode Adaptif" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="dht" target="spgen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="Setelan Manual" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#475652;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="cfg" target="spgen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="SP" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0C1F27;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="spgen" target="comp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="e(t)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0C1F27;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="comp" target="ctrl">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="Pulsa 150/500/750 ms" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0C1F27;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="ctrl" target="act">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="Suara &amp; Getar" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0C1F27;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="act" target="human">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="Telemetry" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#5B6B66;strokeWidth=2;dashed=1;fontColor=#475652;fontSize=11;endArrow=block;" edge="1" parent="1" source="ctrl" target="dash">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="Alarm Visual" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#5B6B66;strokeWidth=2;dashed=1;fontColor=#475652;fontSize=11;endArrow=block;" edge="1" parent="1" source="dash" target="human">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1450" y="66" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" value="Minum / Angkat / Refill" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#16654B;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="human" target="plant">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="Gangguan" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9B2C2C;strokeWidth=2;fontColor=#7A1D1D;fontSize=11;endArrow=block;" edge="1" parent="1" source="dist" target="plant">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="Massa Aktual" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="plant" target="sensor">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1450" y="550" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" value="ADC Mentah" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#16201E;fontSize=11;endArrow=block;" edge="1" parent="1" source="sensor" target="filter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" value="Feedback PV (-)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#0B5D6B;strokeWidth=2;fontColor=#0B5D6B;fontSize=12;fontStyle=1;endArrow=block;" edge="1" parent="1" source="filter" target="comp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
