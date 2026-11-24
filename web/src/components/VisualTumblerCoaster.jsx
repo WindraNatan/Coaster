@@ -1,51 +1,59 @@
 import React from 'react';
-import { stateBadgeLabel } from '../protocol';
 
-const FSM_META = {
+const STATUS_META = {
   IDLE: {
-    desc: 'Letakkan gelas di tatakan untuk memulai pemantauan.',
-    badge: 'bg-slate-100 text-slate-800 border-slate-300',
-    led: '#64748B'
+    label: 'Siap dipakai',
+    desc: 'Letakkan gelas berisi air di atas tatakan untuk mulai memantau.',
+    badge: 'bg-subtle text-ink-soft border-hairline',
+    ringColor: 'var(--border-control)'
   },
   STABLE: {
-    desc: 'Beban stabil 1,5 detik. Menyiapkan siklus hitung mundur.',
-    badge: 'bg-emerald-50 text-emerald-800 border-emerald-300',
-    led: '#059669'
+    label: 'Gelas terdeteksi',
+    desc: 'Gelas sudah tenang di tatakan dan siap memulai jadwal minum.',
+    badge: 'bg-ok-bg text-ok border-ok-border',
+    ringColor: 'var(--ok)'
   },
   TIMING: {
-    desc: 'Siklus pengingat aktif berjalan.',
-    badge: 'bg-sky-50 text-sky-800 border-sky-300',
-    led: '#0284C7'
+    label: 'Pemantauan aktif',
+    desc: 'Jadwal pengingat minum sedang berjalan teratur.',
+    badge: 'bg-accent-soft text-accent border-hairline',
+    ringColor: 'var(--accent)'
   },
   ALERT_DRINK: {
-    desc: 'Waktunya minum air. Angkat gelas dan minum minimal 20 ml.',
-    badge: 'bg-amber-50 text-amber-900 border-amber-300 animate-pulse',
-    led: '#D97706'
+    label: 'Waktunya minum',
+    desc: 'Ambil gelas dan minum minimal satu tegukan air.',
+    badge: 'bg-warn-bg text-warn border-warn-border',
+    ringColor: 'var(--warn)'
   },
   ALERT_CHEAT: {
-    desc: 'Berat kembali tanpa minum cukup (< 20 ml). Silakan minum lagi.',
-    badge: 'bg-rose-50 text-rose-900 border-rose-300 animate-pulse',
-    led: '#DC2626'
+    label: 'Belum cukup minum',
+    desc: 'Air berkurang sedikit. Silakan minum satu tegukan penuh lagi.',
+    badge: 'bg-danger-bg text-danger border-danger-border',
+    ringColor: 'var(--danger)'
   },
   ALERT_EMPTY_CUP: {
-    desc: 'Air di dalam gelas hampir habis. Silakan isi ulang.',
-    badge: 'bg-rose-50 text-rose-900 border-rose-300 animate-pulse',
-    led: '#DC2626'
+    label: 'Air hampir habis',
+    desc: 'Isi ulang air ke dalam gelas sebelum meletakkannya kembali.',
+    badge: 'bg-danger-bg text-danger border-danger-border',
+    ringColor: 'var(--danger)'
   },
   ALERT_MISSING_CUP: {
-    desc: 'Gelas belum kembali ke tatakan. Letakkan kembali setelah minum.',
-    badge: 'bg-amber-50 text-amber-900 border-amber-300 animate-pulse',
-    led: '#D97706'
+    label: 'Gelas belum kembali',
+    desc: 'Letakkan kembali gelasmu di atas tatakan agar jadwal berlanjut.',
+    badge: 'bg-warn-bg text-warn border-warn-border',
+    ringColor: 'var(--warn)'
   },
   ALERT_REFILL: {
-    desc: 'Gelas kosong atau belum kembali ke tatakan. Silakan isi ulang.',
-    badge: 'bg-rose-50 text-rose-900 border-rose-300 animate-pulse',
-    led: '#DC2626'
+    label: 'Air hampir habis',
+    desc: 'Isi ulang air atau letakkan kembali gelasmu di atas tatakan.',
+    badge: 'bg-danger-bg text-danger border-danger-border',
+    ringColor: 'var(--danger)'
   },
   LIFTED: {
-    desc: 'Gelas sedang diangkat dari tatakan.',
-    badge: 'bg-sky-50 text-sky-800 border-sky-300',
-    led: '#0284C7'
+    label: 'Gelas diangkat',
+    desc: 'Silakan nikmati air minummu lalu letakkan gelas kembali.',
+    badge: 'bg-accent-soft text-accent border-hairline',
+    ringColor: 'var(--accent)'
   }
 };
 
@@ -66,210 +74,250 @@ export default function VisualTumblerCoaster({
 }) {
   const meta = standby
     ? {
-        desc: 'Sesi sedang tidur (standby). Tekan Mulai Sesi untuk mengaktifkan pengingat.',
-        badge: 'bg-slate-100 text-slate-700 border-slate-300',
-        led: '#94A3B8'
+        label: 'Mode istirahat',
+        desc: 'Pengingat sedang diistirahatkan. Tekan Mulai sesi saat ingin memakai lagi.',
+        badge: 'bg-subtle text-ink-soft border-hairline',
+        ringColor: 'var(--border-control)'
       }
-    : (FSM_META[stateString] || FSM_META.IDLE);
+    : (STATUS_META[stateString] || STATUS_META.IDLE);
 
-  const badgeText = standby ? 'STANDBY' : stateBadgeLabel(stateString);
-  const isLifted = stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP' || weight < 25;
-
-  const maxWaterH = 116;
-  const waterPct = isLifted ? 0 : Math.min(1, Math.max(0, cupMl / cupMax));
-  const waterH = Math.round(waterPct * maxWaterH);
-  const waterY = 146 - waterH;
+  const isLifted = stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP';
+  const isNoCup = !isLifted && weight < 25;
+  const isCupOffCoaster = isLifted || isNoCup;
+  const waterPct = isCupOffCoaster ? 0 : Math.min(1, Math.max(0, cupMl / cupMax));
 
   const stabilityLabel = standby
-    ? 'Sesi tidur'
+    ? 'Istirahat'
     : weight < 25
-      ? 'Tanpa beban'
+      ? 'Belum ada gelas'
       : isStable
-        ? 'Stabil (±3 g)'
-        : 'Menstabilkan...';
+        ? 'Gelas tenang'
+        : 'Menyesuaikan posisi';
 
   return (
     <section
-      className="bg-white rounded-2xl p-5 border border-slate-200 shadow-soft flex flex-col justify-between h-full"
-      aria-label="Panggung tatakan dan tumbler"
+      className="bg-surface rounded-2xl p-5 border border-hairline flex flex-col justify-between h-full"
+      aria-label="Kondisi gelas di tatakan"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-base font-bold text-slate-900 tracking-tight">
-            Tatakan & Tumbler
+          <h2 className="text-base font-semibold text-ink tracking-tight">
+            Gelas di tatakan
           </h2>
-          <p className="text-xs text-slate-600 mt-0.5">
-            Gelas kosong {Math.round(emptyCup)} g · Kapasitas {cupMax} ml
+          <p className="text-xs text-ink-soft mt-0.5">
+            Kapasitas penuh {cupMax} ml
           </p>
         </div>
         <div
-          className={`px-3 py-1 rounded-full text-xs font-semibold font-mono tracking-wide border ${meta.badge}`}
+          className={`px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${meta.badge}`}
           role="status"
           aria-live="polite"
         >
-          {badgeText}
+          {meta.label}
         </div>
       </div>
 
-      <div className="py-3 flex flex-col items-center justify-center">
-        <svg
-          width="148"
-          height="172"
-          viewBox="0 0 120 170"
-          className="overflow-visible"
-          aria-hidden="true"
-        >
-          <defs>
-            <clipPath id="reactCupClip">
-              <path d="M30 20 L90 20 L82 138 Q81 146 72 146 L48 146 Q39 146 38 138 Z" />
-            </clipPath>
-            <linearGradient id="reactCupWaterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#38BDF8" />
-              <stop offset="100%" stopColor="#0284C7" />
-            </linearGradient>
-            <linearGradient id="reactPorcelainGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#FFFFFF" />
-              <stop offset="55%" stopColor="#F8FAFC" />
-              <stop offset="100%" stopColor="#E2E8F0" />
-            </linearGradient>
-          </defs>
+      <div className="py-4 flex flex-col items-center justify-center">
+        <div className="relative flex flex-col items-center justify-center">
+          <svg
+            width="148"
+            height="172"
+            viewBox="0 0 120 170"
+            className="relative z-10 overflow-visible"
+            aria-hidden="true"
+          >
+            <defs>
+              <clipPath id="coasterCupClip">
+                <path d="M30 20 L90 20 L82 138 Q81 146 72 146 L48 146 Q39 146 38 138 Z" />
+              </clipPath>
+              <linearGradient id="coasterWaterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="var(--water-top)" />
+                <stop offset="100%" stopColor="var(--water-bottom)" />
+              </linearGradient>
+              <linearGradient id="coasterCeramicGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="var(--bg-surface)" />
+                <stop offset="60%" stopColor="var(--bg-canvas)" />
+                <stop offset="100%" stopColor="var(--bg-subtle)" />
+              </linearGradient>
+            </defs>
 
-          <g id="coasterBase">
-            <ellipse cx="60" cy="155" rx="48" ry="11" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.5" />
-            <ellipse cx="60" cy="152" rx="44" ry="9" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1" />
+            <g>
+              <ellipse
+                cx="60"
+                cy="155"
+                rx="48"
+                ry="11"
+                fill="var(--bg-subtle)"
+                stroke="var(--border-hairline)"
+                strokeWidth="1.5"
+              />
+              <ellipse
+                cx="60"
+                cy="152"
+                rx="44"
+                ry="9"
+                fill="var(--bg-surface)"
+                stroke="var(--border-hairline)"
+                strokeWidth="1"
+              />
+              <ellipse
+                cx="60"
+                cy="152"
+                rx="40"
+                ry="7.5"
+                fill="none"
+                stroke={meta.ringColor}
+                strokeWidth="2.5"
+                className="transition-colors duration-300 ease-calm"
+              />
+            </g>
+
             <ellipse
               cx="60"
-              cy="152"
-              rx="40"
-              ry="7.5"
+              cy="146"
+              rx="28"
+              ry="5"
               fill="none"
-              stroke={meta.led}
-              strokeWidth="2.5"
-              className="transition-colors duration-300"
-            />
-          </g>
-
-          <ellipse
-            cx="60"
-            cy="146"
-            rx="28"
-            ry="5"
-            fill="none"
-            stroke="#94A3B8"
-            strokeDasharray="3 3"
-            strokeWidth="1.2"
-          />
-
-          <g
-            className="transition-transform duration-300 ease-out"
-            style={{
-              transform: isLifted ? 'translateY(-22px)' : 'translateY(0px)',
-              transformOrigin: '60px 140px',
-              opacity: isLifted ? 0.55 : 1
-            }}
-          >
-            <path
-              d="M30 20 L90 20 L82 138 Q81 146 72 146 L48 146 Q39 146 38 138 Z"
-              fill="url(#reactPorcelainGrad)"
-              stroke="#94A3B8"
-              strokeWidth="2"
+              stroke="var(--border-control)"
+              strokeDasharray="3 3"
+              strokeWidth="1.2"
             />
 
-            {waterH > 0 && (
-              <g clipPath="url(#reactCupClip)">
+            <g
+              className="transition-[transform,opacity] duration-300 ease-calm"
+              style={{
+                transform: isCupOffCoaster ? 'translateY(-22px)' : 'translateY(0px)',
+                transformOrigin: '60px 140px',
+                opacity: isCupOffCoaster ? 0.55 : 1
+              }}
+            >
+              <path
+                d="M30 20 L90 20 L82 138 Q81 146 72 146 L48 146 Q39 146 38 138 Z"
+                fill="url(#coasterCeramicGrad)"
+                stroke="var(--border-control)"
+                strokeWidth="1.8"
+              />
+
+              <g clipPath="url(#coasterCupClip)">
                 <rect
                   x="30"
-                  y={waterY}
+                  y="30"
                   width="60"
-                  height={waterH}
-                  fill="url(#reactCupWaterGrad)"
+                  height="116"
+                  fill="url(#coasterWaterGrad)"
                   opacity="0.92"
-                  className="transition-all duration-300 ease-out"
-                />
-                <line
-                  x1="30"
-                  y1={waterY}
-                  x2="90"
-                  y2={waterY}
-                  stroke="#0369A1"
-                  strokeWidth="1.5"
+                  className="transition-transform duration-300 ease-calm"
+                  style={{
+                    transformOrigin: '60px 146px',
+                    transform: `scaleY(${waterPct})`
+                  }}
                 />
               </g>
-            )}
 
-            <ellipse cx="60" cy="20" rx="30" ry="4.5" fill="#F1F5F9" stroke="#64748B" strokeWidth="1.5" />
-            <path d="M35 26 L39 134" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" opacity="0.8" />
-          </g>
-        </svg>
+              <ellipse
+                cx="60"
+                cy="20"
+                rx="30"
+                ry="4.5"
+                fill="var(--bg-subtle)"
+                stroke="var(--ink-muted)"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M35 26 L39 134"
+                stroke="var(--bg-surface)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                opacity="0.85"
+              />
+            </g>
+          </svg>
+          <div
+            className="w-36 h-4 rounded-full bg-subtle shadow-coaster -mt-3 pointer-events-none"
+            aria-hidden="true"
+          />
+        </div>
 
-        <div className="mt-2 text-center w-full">
-          <div className="flex items-baseline justify-center gap-2">
-            <span className="text-2xl font-bold text-slate-900 font-mono tabular-nums">
-              {weight.toFixed(1)} g
-            </span>
-            <span className="text-xs font-semibold text-water-700 font-mono tabular-nums">
-              ({isLifted ? 'Gelas diangkat' : `air ${Math.max(0, Math.round(cupMl))} ml`})
-            </span>
+        <div className="mt-4 text-center w-full">
+          {isLifted ? (
+            <div className="text-xl font-semibold text-ink">
+              Gelas diangkat
+            </div>
+          ) : isNoCup ? (
+            <div className="text-xl font-semibold text-ink">
+              Tatakan kosong
+            </div>
+          ) : (
+            <div className="text-2xl font-semibold text-ink">
+              <span>Air </span>
+              <span className="font-mono tabular-nums">{Math.max(0, Math.round(cupMl))}</span>
+              <span> ml</span>
+            </div>
+          )}
+
+          <div className="mt-1 text-xs text-ink-soft">
+            <span>{stabilityLabel}</span>
+            <span>, berat terukur </span>
+            <span className="font-mono tabular-nums text-ink">{weight.toFixed(1)}</span>
+            <span> g</span>
+            <span className="text-ink-muted"> (kosong {Math.round(emptyCup)} g)</span>
           </div>
-          <div className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
-            <span>Status beban:</span>
-            <span className="font-semibold text-slate-800">{stabilityLabel}</span>
-          </div>
-          <p className="text-xs text-slate-600 mt-1.5 max-w-sm mx-auto leading-relaxed">
+
+          <p className="text-xs text-ink-soft mt-2 max-w-sm mx-auto leading-relaxed">
             {meta.desc}
           </p>
         </div>
       </div>
 
       {connMode === 'sim' ? (
-        <div className="pt-3 border-t border-slate-200/80">
-          <div className="text-[11px] font-semibold text-slate-600 mb-2 text-center">
-            Simulasi sentuhan fisik gelas
+        <div className="pt-3 border-t border-hairline">
+          <div className="text-xs font-medium text-ink-soft mb-2 text-center">
+            Simulasi sentuhan gelas
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-1.5" role="group" aria-label="Aksi simulasi fisik gelas">
+          <div className="flex flex-wrap items-center justify-center gap-1.5" role="group" aria-label="Aksi simulasi gelas">
             <button
               type="button"
               onClick={onLift}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+              className="px-2.5 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-medium whitespace-nowrap transition-colors duration-150"
             >
               Angkat
             </button>
             <button
               type="button"
               onClick={onPlace}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+              className="px-2.5 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-medium whitespace-nowrap transition-colors duration-150"
             >
-              Taruh
+              Letakkan
             </button>
             <button
               type="button"
               onClick={onSip}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+              className="px-2.5 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-medium whitespace-nowrap transition-colors duration-150"
             >
-              Sedot -30 g
+              Sedot 30 ml
             </button>
             <button
               type="button"
               onClick={onPour}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+              className="px-2.5 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-medium whitespace-nowrap transition-colors duration-150"
             >
-              Tuang +50 g
+              Tuang 50 ml
             </button>
             <button
               type="button"
               onClick={onEmpty}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-medium transition-colors"
+              className="px-2.5 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-medium whitespace-nowrap transition-colors duration-150"
             >
               Habiskan
             </button>
           </div>
         </div>
       ) : (
-        <div className="pt-3 border-t border-slate-200/80 text-center">
-          <p className="text-xs text-slate-600">
+        <div className="pt-3 border-t border-hairline text-center">
+          <p className="text-xs text-ink-soft">
             {connMode === 'usb'
-              ? 'Membaca beban langsung dari sensor HX711 melalui USB Serial.'
-              : 'Membaca telemetri waktu-nyata dari tatakan ESP32 melalui Firebase Cloud.'}
+              ? 'Membaca timbangan tatakan langsung lewat kabel USB.'
+              : 'Membaca pembaruan langsung dari tatakan pintar secara online.'}
           </p>
         </div>
       )}

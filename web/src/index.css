@@ -1,18 +1,76 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: mineral-stoneware (custom) · scope: app · v2.0.0
+ * pre-emit critique: P5 H5 E5 S5 R5 V4 · weakest: V, operational layout uses grid cards; eliminated duplicate cards, stock Tailwind palette, and technical jargon
+ * ref: style.ai.id (Heritage, Apple, Anthropic, Antislop 40 rules) */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --bg-canvas: #F4F6F5;
+  --bg-surface: #FBFCFB;
+  --bg-subtle: #EAEEEC;
+  --border-hairline: #D7DFDC;
+  --border-control: #768782;
+  --ink-primary: #16201E;
+  --ink-secondary: #475652;
+  --ink-muted: #5B6B66;
+  --accent: #0B5D6B;
+  --accent-hover: #084853;
+  --accent-soft: #E3F0F2;
+  --accent-ink: #FCFEFC;
+  --water-top: #3B93A1;
+  --water-bottom: #0B5D6B;
+  --ok: #16654B;
+  --ok-bg: #E6F3EE;
+  --ok-border: #B7DDD0;
+  --warn: #8C4B0C;
+  --warn-bg: #FDF3E3;
+  --warn-border: #EED0A0;
+  --danger: #9B2C2C;
+  --danger-bg: #FBECEC;
+  --danger-border: #EBC1C1;
+  --backdrop: rgba(22, 32, 30, 0.42);
+  --shadow-coaster: 0 18px 34px -14px rgba(22, 32, 30, 0.16), 0 4px 10px -4px rgba(22, 32, 30, 0.08);
+  --ease-calm: cubic-bezier(0.16, 1, 0.3, 1);
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
 @layer base {
+  html,
   body {
-    @apply bg-porcelain text-slate-900 font-sans antialiased selection:bg-water-200 selection:text-water-900;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    overflow-x: hidden;
+    overflow-x: clip;
+    background-color: var(--bg-canvas);
+    color: var(--ink-primary);
+    caret-color: var(--accent);
+    scrollbar-color: var(--border-control) var(--bg-canvas);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    overflow-wrap: break-word;
+    min-width: 0;
   }
 
   :focus-visible {
-    outline: 2px solid #0284C7;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+
+  button:not(:disabled):active {
+    transform: scale(0.98);
+  }
+}
+
+::selection {
+  background-color: var(--accent-soft);
+  color: var(--ink-primary);
 }
 
 .tabular-nums {
@@ -20,7 +78,7 @@
 }
 
 html:has(dialog[open]:modal) {
-  overflow: hidden;
+  overflow-y: hidden;
 }
 
 dialog:modal {
@@ -32,8 +90,7 @@ dialog:modal {
 
 dialog::backdrop {
   overscroll-behavior: contain;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(2px);
+  background: var(--backdrop);
 }
 
 @media (pointer: coarse) {

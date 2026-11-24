@@ -1,5 +1,5 @@
 import React from 'react';
-import { Thermometer, Droplets, Play, Square } from 'lucide-react';
+import { Thermometer, Droplets, Play, Pause } from 'lucide-react';
 
 export default function EnvironmentSessionBar({
   temp = 27.0,
@@ -21,90 +21,96 @@ export default function EnvironmentSessionBar({
   const envBadge = demo
     ? 'Demo 15 dtk'
     : autoDht
-      ? `Adaptif ${factorPct}%`
-      : `Manual ${baseMin} mnt`;
+      ? `Otomatis ${factorPct}%`
+      : `Tetap ${baseMin} mnt`;
+
+  const envDesc = demo
+    ? 'Jeda demo tetap 15 detik.'
+    : temp >= 30
+      ? 'Ruangan hangat, jeda dipercepat.'
+      : temp <= 20
+        ? 'Ruangan sejuk, jeda dilonggarkan.'
+        : 'Suhu ruangan nyaman.';
 
   return (
     <section
-      className="bg-white rounded-2xl border border-slate-200 shadow-soft p-4 sm:p-5"
-      aria-label="Kondisi ruang dan kendali sesi"
+      className="bg-surface rounded-2xl border border-hairline p-4 sm:p-5"
+      aria-label="Kondisi ruangan dan sesi minum"
     >
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-        {/* 1. Suhu & Kelembapan Ruang */}
-        <div className="lg:col-span-4 lg:pr-4 lg:border-r border-slate-200/80">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-0 items-center">
+        {/* 1. Suhu & Kelembapan Ruangan */}
+        <div className="lg:col-span-4 lg:pr-4 lg:border-r border-hairline">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-slate-700 whitespace-nowrap">
-              Kondisi Ruang
+            <span className="text-xs font-semibold text-ink-soft whitespace-nowrap">
+              Suhu ruangan
             </span>
-            <span className="text-[11px] font-medium text-water-800 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md whitespace-nowrap">
+            <span className="text-xs font-medium text-accent bg-accent-soft px-2 py-0.5 rounded-md whitespace-nowrap">
               {envBadge}
             </span>
           </div>
           <div className="mt-2.5 flex items-center gap-4">
             <div className="flex items-center gap-1.5 whitespace-nowrap">
-              <Thermometer className="w-4 h-4 text-amber-700 flex-shrink-0" aria-hidden="true" />
-              <span className="text-lg font-bold text-slate-900 font-mono tabular-nums">
-                {Number(temp).toFixed(1)} °C
+              <Thermometer className="w-4 h-4 text-warn flex-shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <span className="text-lg font-semibold text-ink">
+                <span className="font-mono tabular-nums">{Number(temp).toFixed(1)}</span>
+                <span> °C</span>
               </span>
             </div>
             <div className="flex items-center gap-1.5 whitespace-nowrap">
-              <Droplets className="w-4 h-4 text-water-700 flex-shrink-0" aria-hidden="true" />
-              <span className="text-lg font-bold text-slate-900 font-mono tabular-nums">
-                {Math.round(hum)}% RH
+              <Droplets className="w-4 h-4 text-accent flex-shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <span className="text-lg font-semibold text-ink">
+                <span className="font-mono tabular-nums">{Math.round(hum)}</span>
+                <span>%</span>
               </span>
             </div>
           </div>
-          <p className="text-xs text-slate-600 mt-1.5">
-            {temp >= 30
-              ? 'Ruangan hangat, interval dipercepat.'
-              : temp <= 20
-                ? 'Ruangan sejuk, interval dilonggarkan.'
-                : 'Suhu & kelembapan ruang normal.'}
+          <p className="text-xs text-ink-soft mt-1.5">
+            {envDesc}
           </p>
         </div>
 
-        {/* 2. Aktivitas Sesi Berjalan */}
-        <div className="lg:col-span-5 lg:px-2 lg:border-r border-slate-200/80">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-700">
-              Akumulasi Sesi Alat
+        {/* 2. Ringkasan Sesi Saat Ini (tanpa kartu di dalam kartu) */}
+        <div className="lg:col-span-5 lg:px-5 lg:border-r border-hairline pt-3 lg:pt-0 border-t lg:border-t-0">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold text-ink-soft">
+              Sesi saat ini
             </span>
-            <span className="text-sm font-bold text-water-800 font-mono tabular-nums">
-              {Math.round(sessionMl)} ml
+            <span className="text-sm font-semibold text-accent">
+              <span className="font-mono tabular-nums">{Math.round(sessionMl)}</span>
+              <span> ml</span>
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl bg-slate-50 border border-slate-200/80 px-2.5 py-2 text-center">
-              <div className="text-base font-bold text-emerald-800 font-mono tabular-nums">
-                {drinkCount}x
+          <div className="grid grid-cols-3 divide-x divide-hairline bg-subtle rounded-xl py-2.5">
+            <div className="px-2 text-center">
+              <div className="text-base font-semibold text-ok">
+                <span className="font-mono tabular-nums">{drinkCount}</span>
+                <span>x</span>
               </div>
-              <div className="text-[11px] font-medium text-slate-600">Minum</div>
+              <div className="text-xs text-ink-soft mt-0.5">Minum</div>
             </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-200/80 px-2.5 py-2 text-center">
-              <div className="text-base font-bold text-water-800 font-mono tabular-nums">
-                {refillCount}x
+            <div className="px-2 text-center">
+              <div className="text-base font-semibold text-accent">
+                <span className="font-mono tabular-nums">{refillCount}</span>
+                <span>x</span>
               </div>
-              <div className="text-[11px] font-medium text-slate-600">Isi ulang</div>
+              <div className="text-xs text-ink-soft mt-0.5">Isi ulang</div>
             </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-200/80 px-2.5 py-2 text-center">
-              <div className="text-base font-bold text-amber-900 font-mono tabular-nums">
-                {cheatCount}x
+            <div className="px-2 text-center">
+              <div className="text-base font-semibold text-warn">
+                <span className="font-mono tabular-nums">{cheatCount}</span>
+                <span>x</span>
               </div>
-              <div className="text-[11px] font-medium text-slate-600">Tegukan kecil</div>
+              <div className="text-xs text-ink-soft mt-0.5">Tegukan kecil</div>
             </div>
           </div>
         </div>
 
-        {/* 3. Kendali Sesi (Mulai Sesi / Akhiri Sesi) */}
-        <div className="lg:col-span-3 flex flex-col justify-between gap-2">
+        {/* 3. Kendali Sesi */}
+        <div className="lg:col-span-3 lg:pl-4 pt-3 lg:pt-0 border-t lg:border-t-0 border-hairline flex flex-col justify-between gap-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">Status Sesi</span>
-            <span
-              className={`text-xs font-semibold font-mono ${
-                standby ? 'text-slate-600' : 'text-emerald-800'
-              }`}
-            >
-              {standby ? 'Tidur (Standby)' : 'Aktif'}
+            <span className="text-xs font-semibold text-ink-soft">Status sesi</span>
+            <span className={`text-xs font-semibold ${standby ? 'text-ink-muted' : 'text-ok'}`}>
+              {standby ? 'Istirahat' : 'Aktif'}
             </span>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
@@ -112,19 +118,19 @@ export default function EnvironmentSessionBar({
               type="button"
               disabled={sessionBusy}
               onClick={onOpenStartSession}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-water-700 hover:bg-water-800 disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-accent-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
             >
-              <Play className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Mulai Sesi</span>
+              <Play className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <span>Mulai sesi</span>
             </button>
             <button
               type="button"
               disabled={sessionBusy || standby}
               onClick={onEndSession}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-800 text-xs font-semibold transition-colors"
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
             >
-              <Square className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Akhiri Sesi</span>
+              <Pause className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <span>Istirahatkan</span>
             </button>
           </div>
         </div>

@@ -36,6 +36,18 @@ import LabSimulatorPanel from './components/LabSimulatorPanel';
 import LoginModal from './components/LoginModal';
 import SessionModeModal from './components/SessionModeModal';
 
+const STATE_ACTIVITY_NAMES = {
+  IDLE: 'Siap dipakai',
+  STABLE: 'Gelas terdeteksi',
+  TIMING: 'Pemantauan aktif',
+  LIFTED: 'Gelas diangkat',
+  ALERT_DRINK: 'Waktunya minum',
+  ALERT_CHEAT: 'Belum cukup minum',
+  ALERT_EMPTY_CUP: 'Air hampir habis',
+  ALERT_MISSING_CUP: 'Gelas belum kembali',
+  ALERT_REFILL: 'Air hampir habis'
+};
+
 export default function App() {
   const fsmRef = useRef(null);
   if (!fsmRef.current) {
@@ -45,7 +57,11 @@ export default function App() {
 
   const [connMode, setConnMode] = useState('sim'); // 'sim' | 'usb' | 'cloud'
   const [usbConnected, setUsbConnected] = useState(false);
+  const [usbStatus, setUsbStatus] = useState('idle'); // 'idle' | 'connecting' | 'connected' | 'unsupported' | 'error'
+  const [usbError, setUsbError] = useState('');
   const [cloudConnected, setCloudConnected] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState('idle'); // 'idle' | 'loading' | 'connected' | 'unauthenticated' | 'error'
+  const [cloudError, setCloudError] = useState('');
 
   const [weight, setWeight] = useState(0);
   const [temp, setTemp] = useState(27.0);
@@ -82,7 +98,6 @@ export default function App() {
   const [timerHint, setTimerHint] = useState(null);
 
   const [dailyHistory, setDailyHistory] = useState(() => loadDailyHistory());
-  const [weightHistory, setWeightHistory] = useState(() => Array(30).fill(0));
   const [logs, setLogs] = useState([]);
 
   const [simClockSec, setSimClockSec] = useState(0);
@@ -174,7 +189,7 @@ export default function App() {
     } catch (_) {}
   }, []);
 
-  // Init FSM empty cup & interval on mount
+  // Inisialisasi gelas kosong dan interval saat pertama dimuat
   useEffect(() => {
     fsm.setEmptyCup(emptyCup);
     const effMs = computeEffectiveIntervalMs({
@@ -187,11 +202,11 @@ export default function App() {
     fsm.setInterval_(effMs);
     fsm.setMaxLift(demo ? CFG.DEMO_MAX_LIFT : CFG.MAX_LIFT);
     setTargetSec(Math.round(effMs / 1000));
-    addLog('BOOT', 'Dashboard Smart Hydration Coaster siap.');
+    addLog('Sistem', 'Aplikasi tatakan gelas pintar siap digunakan.');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync adaptive interval & maxLift whenever mode/temp/hum/baseMin changes in Sim mode
+  // Selaraskan interval adaptif pada mode simulasi
   useEffect(() => {
     if (connMode !== 'sim') return;
     const effMs = computeEffectiveIntervalMs({
@@ -206,7 +221,6 @@ export default function App() {
     setTargetSec(Math.round(effMs / 1000));
   }, [connMode, demo, autoDht, baseMin, temp, hum, fsm]);
 
-  // Daily cloud pusher instance
   const dailyPusherRef = useRef(null);
   if (!dailyPusherRef.current) {
     dailyPusherRef.current = createDailyCloudPusher({
@@ -233,32 +247,28 @@ export default function App() {
     }
   }, [fsm]);
 
-  // Send partial PATCH to Firebase /config.json
-  const pushCloudConfig = useCallback(
-    async (partial) => {
-      const patch = buildConfigPatch(partial);
-      if (Object.keys(patch).length === 0) return false;
-      const base = getCleanFbUrl();
-      const url = shcCoasterUrl(base);
-      if (!url) return false;
-      try {
-        if (!(await shcEnsureToken())) return false;
-        const res = await fetch(url + '/config.json' + shcAuthSuffix(), {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(patch)
-        });
-        if (res.ok) {
-          cloudCfgCacheRef.current = { ...(cloudCfgCacheRef.current || {}), ...patch };
-          return true;
-        }
-      } catch (_) {}
-      return false;
-    },
-    []
-  );
+  const pushCloudConfig = useCallback(async (partial) => {
+    const patch = buildConfigPatch(partial);
+    if (Object.keys(patch).length === 0) return false;
+    const base = getCleanFbUrl();
+    const url = shcCoasterUrl(base);
+    if (!url) return false;
+    try {
+      if (!(await shcEnsureToken())) return false;
+      const res = await fetch(url + '/config.json' + shcAuthSuffix(), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      });
+      if (res.ok) {
+        cloudCfgCacheRef.current = { ...(cloudCfgCacheRef.current || {}), ...patch };
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }, []);
 
-  // Simulator 100ms loop (single stable interval using simParamsRef)
+  // Loop simulator 100 ms
   useEffect(() => {
     if (connMode !== 'sim') return undefined;
 
@@ -277,7 +287,8 @@ export default function App() {
       const prevSt = prevFsmStateRef.current;
       if (rawSt !== prevSt) {
         prevFsmStateRef.current = rawSt;
-        addLog('FSM', `Transisi ${prevSt} -> ${rawSt} (${p.weight.toFixed(1)} g)`);
+        const nextLabel = STATE_ACTIVITY_NAMES[rawSt] || 'Status berubah';
+        addLog('Aktivitas', `${nextLabel} pada berat ${p.weight.toFixed(1)} g.`);
         if (rawSt !== 'TIMING') {
           setTimerHint(null);
         }
@@ -309,20 +320,20 @@ export default function App() {
       tickCounter++;
       if (tickCounter % 5 === 0) {
         setSimClockSec(Math.floor(now / 1000));
-        setWeightHistory((prev) => [...prev.slice(1), p.weight]);
       }
     }, 100);
 
     return () => clearInterval(id);
   }, [connMode, fsm, addLog, playBeep, syncHistoryNow]);
 
-  // Apply parsed cloud telemetry & config
   const applyCloudTelemetry = useCallback(
     (rawTlm) => {
       const t = parseCloudTelemetry(rawTlm);
       if (!t) return;
       cloudTlmCacheRef.current = rawTlm;
       setCloudConnected(true);
+      setCloudStatus('connected');
+      setCloudError('');
 
       setWeight(t.weightG);
       setCupMl(t.waterMl);
@@ -344,7 +355,6 @@ export default function App() {
       setDrinkCount(t.drinkCount);
       setRefillCount(t.refillCount);
       setCheatCount(t.cheatCount);
-      setWeightHistory((prev) => [...prev.slice(1), t.weightG]);
 
       const resolvedMute = mutedFrom(cloudCfgCacheRef.current, rawTlm);
       if (typeof resolvedMute === 'boolean') {
@@ -378,7 +388,6 @@ export default function App() {
     [fsm]
   );
 
-  // Cloud mode: discovery + REST poll + SSE realtime stream
   const closeCloudStreams = useCallback(() => {
     if (sseTlmRef.current) {
       sseTlmRef.current.close();
@@ -416,11 +425,15 @@ export default function App() {
     const base = getCleanFbUrl();
     if (!(await shcEnsureToken())) {
       setCloudConnected(false);
+      setCloudStatus('unauthenticated');
+      setCloudError('Masuk ke akun dan tautkan kode tatakan untuk memantau secara online.');
       return;
     }
     const url = shcCoasterUrl(base);
     if (!url) {
       setCloudConnected(false);
+      setCloudStatus('unauthenticated');
+      setCloudError('Tautkan tatakanmu terlebih dahulu di menu Masuk.');
       return;
     }
     try {
@@ -438,26 +451,38 @@ export default function App() {
           applyCloudTelemetry(tData);
         } else {
           setCloudConnected(false);
+          setCloudStatus('error');
+          setCloudError('Data tatakan belum tersedia. Pastikan tatakan terhubung ke Wi-Fi.');
         }
       } else {
         setCloudConnected(false);
+        setCloudStatus('error');
+        setCloudError(`Gagal membaca data online (HTTP ${tRes.status}).`);
       }
     } catch (_) {
       setCloudConnected(false);
+      setCloudStatus('error');
+      setCloudError('Koneksi internet bermasalah. Periksa jaringan lalu coba lagi.');
     }
   }, [applyCloudConfig, applyCloudTelemetry]);
 
   const startCloudStreams = useCallback(async () => {
     closeCloudStreams();
+    setCloudStatus('loading');
+    setCloudError('');
     const base = getCleanFbUrl();
     if (!(await shcEnsureToken())) {
       setCloudConnected(false);
+      setCloudStatus('unauthenticated');
+      setCloudError('Masuk ke akun dan tautkan kode tatakan untuk mulai memantau online.');
       return;
     }
     await shcDiscoverDevice(base);
     const url = shcCoasterUrl(base);
     if (!url) {
       setCloudConnected(false);
+      setCloudStatus('unauthenticated');
+      setCloudError('Tatakan belum ditautkan ke akun ini.');
       return;
     }
     await pollCloudOnce();
@@ -513,6 +538,8 @@ export default function App() {
   useEffect(() => {
     if (connMode !== 'cloud') {
       closeCloudStreams();
+      setCloudStatus('idle');
+      setCloudError('');
       return undefined;
     }
     startCloudStreams();
@@ -523,7 +550,6 @@ export default function App() {
     };
   }, [connMode, startCloudStreams, pollCloudOnce, closeCloudStreams]);
 
-  // USB Web Serial handling
   const disconnectUsbSerial = useCallback(async () => {
     try {
       if (serialReaderRef.current) {
@@ -536,6 +562,7 @@ export default function App() {
       }
     } catch (_) {}
     setUsbConnected(false);
+    setUsbStatus('idle');
   }, []);
 
   const sendSerialCmd = useCallback(async (cmd) => {
@@ -553,15 +580,9 @@ export default function App() {
   const handleSerialLine = useCallback(
     (line) => {
       const parsed = parseSerialLine(line);
-      if (!parsed) {
-        if (line.startsWith('[')) addLog('ESP32', line);
-        return;
-      }
+      if (!parsed) return;
       setStateString(parsed.rawState);
-      if (parsed.weightG !== null) {
-        setWeight(parsed.weightG);
-        setWeightHistory((prev) => [...prev.slice(1), parsed.weightG]);
-      }
+      if (parsed.weightG !== null) setWeight(parsed.weightG);
       if (parsed.waterMl !== null) setCupMl(parsed.waterMl);
       if (parsed.tempC !== null) setTemp(parsed.tempC);
       if (parsed.humidityPct !== null) setHum(parsed.humidityPct);
@@ -591,21 +612,27 @@ export default function App() {
       if (parsed.standby !== null) setStandby(parsed.standby);
       setIsStable(parsed.state === 'TIMING' || parsed.state === 'STABLE');
     },
-    [fsm, addLog, syncHistoryNow]
+    [fsm, syncHistoryNow]
   );
 
   const connectUsbSerial = useCallback(async () => {
     if (!('serial' in navigator)) {
-      addLog('USB', 'Browser ini belum mendukung Web Serial API (gunakan Chrome atau Edge).');
+      setUsbConnected(false);
+      setUsbStatus('unsupported');
+      setUsbError('Browser ini belum mendukung sambungan kabel USB. Gunakan Chrome atau Edge versi terbaru.');
+      addLog('Koneksi', 'Browser belum mendukung sambungan kabel USB.');
       return;
     }
     try {
       await disconnectUsbSerial();
+      setUsbStatus('connecting');
+      setUsbError('');
       const port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
       serialPortRef.current = port;
       setUsbConnected(true);
-      addLog('USB', 'Terhubung ke ESP32 melalui USB Serial.');
+      setUsbStatus('connected');
+      addLog('Koneksi', 'Tatakan tersambung lewat kabel USB.');
 
       const decoder = new TextDecoderStream();
       port.readable.pipeTo(decoder.writable).catch(() => {});
@@ -626,8 +653,10 @@ export default function App() {
         }
       }
     } catch (err) {
-      addLog('USB', `Koneksi USB dibatalkan atau terputus: ${err.message || err}`);
       setUsbConnected(false);
+      setUsbStatus('error');
+      setUsbError('Sambungan kabel USB dibatalkan atau terputus. Pastikan kabel terpasang lalu coba lagi.');
+      addLog('Koneksi', `Sambungan kabel terhenti: ${err.message || 'dibatalkan'}.`);
     }
   }, [addLog, disconnectUsbSerial, handleSerialLine]);
 
@@ -641,8 +670,23 @@ export default function App() {
     if (connMode === 'usb' && nextMode !== 'usb') {
       disconnectUsbSerial();
     }
+    if (nextMode !== connMode) {
+      setWeight(0);
+      setCupMl(0);
+      setStateString('IDLE');
+      setIsStable(false);
+      setRemSec(null);
+      setSessionMl(0);
+      setDrinkCount(0);
+      setRefillCount(0);
+      setCheatCount(0);
+      setStandby(false);
+    }
     setConnMode(nextMode);
-    if (nextMode === 'usb') {
+    if (nextMode === 'sim') {
+      fsm.toIdle(simClockRef.current);
+      fsm.resetStats();
+    } else if (nextMode === 'usb') {
       connectUsbSerial();
     } else if (nextMode === 'cloud') {
       if (!shcUid()) {
@@ -651,17 +695,16 @@ export default function App() {
     }
   };
 
-  // Actions: Tare, Empty Cup Calibration, Timer Mode, Interval, Mute, Goal, Reset, Session
   const handleTare = () => {
     if (connMode === 'cloud') return;
     if (connMode === 'usb') {
       sendSerialCmd('t\n');
-      addLog('AKSI', 'Perintah Tare dikirim ke ESP32 lewat USB.');
+      addLog('Pengaturan', 'Perintah menolkan timbangan dikirim lewat kabel USB.');
       return;
     }
     setWeight(0);
     fsm.toIdle(simClockRef.current);
-    addLog('AKSI', 'Timbangan simulator dinolkan (0,0 g).');
+    addLog('Pengaturan', 'Timbangan diatur ulang ke angka nol.');
   };
 
   const handleCalibrateCup = (val) => {
@@ -669,7 +712,7 @@ export default function App() {
     if (!fsm.setEmptyCup(g)) return;
     setEmptyCup(g);
     localStorage.setItem('shc_empty_cup', String(g));
-    addLog('KONFIG', `Berat gelas kosong disimpan: ${g.toFixed(1)} g.`);
+    addLog('Pengaturan', `Berat gelas kosong disimpan menjadi ${g.toFixed(1)} g.`);
     if (connMode === 'usb') {
       const cmd = formatEmptyCupSerialCmd(g);
       if (cmd) sendSerialCmd(cmd);
@@ -684,10 +727,11 @@ export default function App() {
     setDemo(nextDemo);
     if (mode !== 'DEMO') setAutoDht(nextAuto);
 
+    const modeName = mode === 'DEMO' ? 'Demo 15 detik' : mode === 'AUTO_DHT' ? 'Sesuai suhu' : 'Manual';
     if (stateString === 'TIMING') {
-      setTimerHint('Perubahan mode timer akan berlaku penuh pada siklus minum berikutnya.');
+      setTimerHint('Perubahan cara hitung jadwal akan berlaku pada siklus minum berikutnya.');
     }
-    addLog('KONFIG', `Mode timer diubah ke ${mode}.`);
+    addLog('Pengaturan', `Jadwal pengingat diubah ke mode ${modeName}.`);
 
     if (connMode === 'usb') {
       if (nextDemo !== demo) sendSerialCmd('d\n');
@@ -704,9 +748,9 @@ export default function App() {
     setDemo(false);
     localStorage.setItem('shc_base_min', String(m));
     if (stateString === 'TIMING') {
-      setTimerHint(`Interval dasar ${m} menit disimpan; siklus berjalan tetap menyelesaikan target saat ini.`);
+      setTimerHint(`Jeda ${m} menit disimpan dan akan dipakai setelah siklus yang berjalan selesai.`);
     }
-    addLog('KONFIG', `Interval dasar diatur ke ${m} menit (Mode Normal).`);
+    addLog('Pengaturan', `Jeda minum diatur menjadi ${m} menit.`);
     if (connMode === 'usb') {
       sendSerialCmd(`i${m}\n`);
     } else if (connMode === 'cloud') {
@@ -720,7 +764,7 @@ export default function App() {
   const handleToggleMute = () => {
     const next = !buzzerMuted;
     setBuzzerMuted(next);
-    addLog('KONFIG', next ? 'Buzzer diheningkan (getar tetap aktif).' : 'Suara buzzer diaktifkan.');
+    addLog('Pengaturan', next ? 'Suara pengingat diheningkan.' : 'Suara pengingat diaktifkan.');
     if (connMode === 'usb') {
       sendSerialCmd('q\n');
     } else if (connMode === 'cloud') {
@@ -733,7 +777,7 @@ export default function App() {
     if (isNaN(g) || g < 500 || g > 6000) return;
     setDailyGoal(g);
     localStorage.setItem('shc_daily_goal', String(g));
-    addLog('KONFIG', `Target hidrasi harian disimpan: ${g} ml.`);
+    addLog('Pengaturan', `Target minum harian disimpan sebesar ${g} ml.`);
   };
 
   const handleResetDaily = () => {
@@ -748,7 +792,7 @@ export default function App() {
     setDrinkCount(0);
     setRefillCount(0);
     setCheatCount(0);
-    addLog('AKSI', 'Statistik sesi di-reset setelah menyimpan riwayat hari ini.');
+    addLog('Sesi', 'Catatan sesi baru dimulai setelah menyimpan riwayat hari ini.');
   };
 
   const handleConfirmStartSession = async (chosenMode) => {
@@ -771,7 +815,8 @@ export default function App() {
       }
       setStandby(false);
       setSessionModalOpen(false);
-      addLog('SESI', `Sesi dimulai dengan mode ${chosenMode}.`);
+      const label = chosenMode === 'DEMO' ? 'Demo 15 detik' : chosenMode === 'AUTO_DHT' ? 'Otomatis sesuai suhu' : 'Jadwal tetap';
+      addLog('Sesi', `Sesi minum baru dimulai dengan mode ${label}.`);
     } finally {
       setSessionBusy(false);
     }
@@ -792,13 +837,13 @@ export default function App() {
       setStandby(true);
       setStateString('IDLE');
       setRemSec(null);
-      addLog('SESI', 'Sesi diakhiri; tatakan masuk ke mode tidur (standby).');
+      addLog('Sesi', 'Tatakan masuk ke mode istirahat.');
     } finally {
       setSessionBusy(false);
     }
   };
 
-  // Tactile Simulator Cup Actions
+  // Aksi taktil simulasi gelas
   const handleSimLift = () => {
     if (connMode !== 'sim') return;
     if (weight >= CFG.CUP_ON) lastPlacedWeightRef.current = weight;
@@ -833,7 +878,7 @@ export default function App() {
     setWeight(nextW);
   };
 
-  // Automated 8 Verification Scenarios (deterministic step runner)
+  // Pelari skenario uji otomatis untuk demo presentasi
   const runScenario = (id) => {
     if (connMode !== 'sim') return;
     if (scenarioTimerRef.current) {
@@ -866,24 +911,24 @@ export default function App() {
       fsm.toIdle(simClockRef.current);
       setWeight(350);
       lastPlacedWeightRef.current = 350;
-      setScenarioStepText('Skenario 1: Gelas 350 g diletakkan, menunggu stabil 1,5 dtk...');
+      setScenarioStepText('Skenario 1: Gelas 350 g diletakkan di tatakan, menunggu tenang...');
       step(1700, () => {
-        setScenarioStepText('Skenario 1 selesai: Beban stabil -> TIMING.');
+        setScenarioStepText('Skenario 1 selesai: Gelas terbaca tenang dan jadwal minum dimulai.');
         setActiveScenario(null);
       });
     } else if (id === 2) {
       setDemo(true);
       settleInTiming(350);
-      setScenarioStepText('Skenario 2: Memajukan waktu 15 detik hingga target habis...');
+      setScenarioStepText('Skenario 2: Menjalankan waktu demo hingga jadwal pengingat tiba...');
       step(400, () => {
         simClockRef.current += 15500;
         fsm.update(350, simClockRef.current);
         setStateString(fsm.stateString);
-        setScenarioStepText('Skenario 2 selesai: Timer habis -> ALERT_DRINK.');
+        setScenarioStepText('Skenario 2 selesai: Jadwal tiba, tatakan menyalakan pengingat minum.');
         setActiveScenario(null);
       });
     } else if (id === 3) {
-      // Tegukan kecil (< 20 g): wajib angkat (0 g -> LIFTED) lalu taruh kembali (-10 g -> CHEAT)
+      // Tegukan kecil (< 20 ml): angkat (0 g) lalu letakkan kembali hanya berkurang 10 ml
       setDemo(true);
       settleInTiming(350);
       simClockRef.current += 15500;
@@ -892,7 +937,7 @@ export default function App() {
       simClockRef.current += 500;
       fsm.update(0, simClockRef.current);
       setStateString(fsm.stateString);
-      setScenarioStepText('Skenario 3: Gelas diangkat, lalu ditaruh kembali hanya berkurang 10 g...');
+      setScenarioStepText('Skenario 3: Gelas diangkat, lalu ditaruh kembali hanya berkurang 10 ml...');
       step(600, () => {
         setWeight(340);
         lastPlacedWeightRef.current = 340;
@@ -905,7 +950,7 @@ export default function App() {
         simClockRef.current = t;
         setStateString(fsm.stateString);
         setCheatCount(fsm.cheatCount);
-        setScenarioStepText('Skenario 3 selesai: Tegukan < 20 ml terdeteksi -> CHEAT.');
+        setScenarioStepText('Skenario 3 selesai: Tegukan kurang dari 20 ml terdeteksi.');
         setActiveScenario(null);
       });
     } else if (id === 4) {
@@ -916,7 +961,7 @@ export default function App() {
       setWeight(0);
       simClockRef.current += 1000;
       fsm.update(0, simClockRef.current);
-      setScenarioStepText('Skenario 4: Gelas diangkat dan diminum 150 ml...');
+      setScenarioStepText('Skenario 4: Gelas diangkat dan air berkurang 150 ml...');
       step(600, () => {
         setWeight(200);
         lastPlacedWeightRef.current = 200;
@@ -930,13 +975,13 @@ export default function App() {
         setStateString(fsm.stateString);
         setSessionMl(fsm.totalDrank);
         setDrinkCount(fsm.drinkCount);
-        setScenarioStepText('Skenario 4 selesai: Minum +150 ml tercatat -> TIMING.');
+        setScenarioStepText('Skenario 4 selesai: Minum 150 ml tercatat dan jadwal mulai ulang.');
         setActiveScenario(null);
       });
     } else if (id === 5) {
       setDemo(true);
       settleInTiming(350);
-      setScenarioStepText('Skenario 5: Minum lewat sedotan (-30 g) tanpa mengangkat gelas...');
+      setScenarioStepText('Skenario 5: Air diminum 30 ml melalui sedotan tanpa mengangkat gelas...');
       step(500, () => {
         setWeight(320);
         lastPlacedWeightRef.current = 320;
@@ -950,7 +995,7 @@ export default function App() {
         setStateString(fsm.stateString);
         setSessionMl(fsm.totalDrank);
         setDrinkCount(fsm.drinkCount);
-        setScenarioStepText('Skenario 5 selesai: Sedotan 30 ml tercatat tanpa angkat.');
+        setScenarioStepText('Skenario 5 selesai: Minum 30 ml melalui sedotan ikut tercatat.');
         setActiveScenario(null);
       });
     } else if (id === 6) {
@@ -969,7 +1014,7 @@ export default function App() {
       simClockRef.current = t;
       setWeight(emptyW);
       setStateString(fsm.stateString);
-      setScenarioStepText('Skenario 6: Gelas kosong (REFILL), menuang air +240 ml...');
+      setScenarioStepText('Skenario 6: Air di gelas habis, lalu diisi ulang 240 ml...');
       step(900, () => {
         const fullW = emptyW + 240;
         setWeight(fullW);
@@ -983,7 +1028,7 @@ export default function App() {
         simClockRef.current = t2;
         setStateString(fsm.stateString);
         setRefillCount(fsm.refillCount);
-        setScenarioStepText('Skenario 6 selesai: Isi ulang tercatat -> TIMING.');
+        setScenarioStepText('Skenario 6 selesai: Isi ulang tercatat dan jadwal aktif kembali.');
         setActiveScenario(null);
       });
     } else if (id === 7) {
@@ -992,12 +1037,12 @@ export default function App() {
       setWeight(0);
       simClockRef.current += 200;
       fsm.update(0, simClockRef.current);
-      setScenarioStepText('Skenario 7: Gelas diangkat > 10 detik...');
+      setScenarioStepText('Skenario 7: Gelas diangkat melebihi batas waktu...');
       step(500, () => {
         simClockRef.current += 11000;
         fsm.update(0, simClockRef.current);
         setStateString(fsm.stateString);
-        setScenarioStepText('Skenario 7 selesai: Gelas lupa ditaruh -> REFILL (ALERT_MISSING_CUP).');
+        setScenarioStepText('Skenario 7 selesai: Pengingat berbunyi karena gelas belum diletakkan lagi.');
         setActiveScenario(null);
       });
     } else if (id === 8) {
@@ -1017,7 +1062,7 @@ export default function App() {
       settleInTiming(350);
       setTargetSec(Math.round(effMs / 1000));
       setScenarioStepText(
-        `Skenario 8 selesai: Suhu 33 °C / RH 35% mempercepat interval 30 mnt menjadi ${(effMs / 60000).toFixed(1)} mnt.`
+        `Skenario 8 selesai: Suhu 33 °C mempercepat jeda 30 menit menjadi ${(effMs / 60000).toFixed(1)} menit.`
       );
       setActiveScenario(null);
     }
@@ -1032,7 +1077,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `shc-log-${defaultTodayKey()}.csv`;
+    a.download = `catatan-minum-${defaultTodayKey()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -1057,14 +1102,81 @@ export default function App() {
     humidityPct: hum
   });
   const effectiveMin = effectiveIntervalMs / 60000;
-  const targetMntStr = demo
+  const targetLabel = demo
     ? '15 detik (Demo)'
     : `${(targetSec / 60).toFixed(targetSec % 60 === 0 ? 0 : 1)} menit`;
 
   const currentTimerMode = demo ? 'DEMO' : autoDht ? 'AUTO_DHT' : 'MANUAL';
 
+  const renderConnectionNotice = () => {
+    if (connMode === 'cloud' && cloudStatus !== 'connected') {
+      const isLoading = cloudStatus === 'loading';
+      const isUnauth = cloudStatus === 'unauthenticated' || !shcUid();
+      const cls = isLoading
+        ? 'bg-accent-soft border-hairline text-ink'
+        : isUnauth
+          ? 'bg-warn-bg border-warn-border text-warn'
+          : 'bg-danger-bg border-danger-border text-danger';
+
+      return (
+        <div
+          className={`rounded-2xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs ${cls}`}
+          role="status"
+        >
+          <span>
+            {isLoading
+              ? 'Sedang menyambungkan data tatakan online...'
+              : cloudError || 'Masuk ke akun dan tautkan kode tatakan untuk melihat data langsung.'}
+          </span>
+          {!isLoading && (
+            <button
+              type="button"
+              onClick={isUnauth ? () => setAuthModalOpen(true) : pollCloudOnce}
+              className="px-3 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
+            >
+              {isUnauth ? 'Masuk atau tautkan tatakan' : 'Coba sambungkan lagi'}
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    if (connMode === 'usb' && usbStatus !== 'connected') {
+      const isConnecting = usbStatus === 'connecting';
+      const cls = isConnecting
+        ? 'bg-accent-soft border-hairline text-ink'
+        : usbStatus === 'unsupported' || usbStatus === 'error'
+          ? 'bg-danger-bg border-danger-border text-danger'
+          : 'bg-warn-bg border-warn-border text-warn';
+
+      return (
+        <div
+          className={`rounded-2xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs ${cls}`}
+          role="status"
+        >
+          <span>
+            {isConnecting
+              ? 'Menunggu izin akses port kabel USB dari browser...'
+              : usbError || 'Hubungkan tatakan ke komputer lewat kabel USB lalu pilih perangkat.'}
+          </span>
+          {usbStatus !== 'unsupported' && !isConnecting && (
+            <button
+              type="button"
+              onClick={connectUsbSerial}
+              className="px-3 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
+            >
+              Hubungkan kabel USB
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
-    <div className="min-h-screen bg-porcelain text-slate-900 flex flex-col">
+    <div className="min-h-screen bg-canvas text-ink flex flex-col">
       <Header
         connMode={connMode}
         setConnMode={handleSelectConnMode}
@@ -1076,7 +1188,9 @@ export default function App() {
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 space-y-4">
-        {/* ROW 1: Above-the-Fold Primary Grid (Hero Stage Col 1-5 + Ring Gauges & Env/Session Col 6-12) */}
+        {renderConnectionNotice()}
+
+        {/* Baris 1: Gelas di tatakan (Kiri) + Tiga cincin & Kondisi ruangan/sesi (Kanan) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
           <div className="lg:col-span-5">
             <VisualTumblerCoaster
@@ -1107,7 +1221,7 @@ export default function App() {
               targetSec={targetSec}
               stateString={stateString}
               standby={standby}
-              targetMntStr={targetMntStr}
+              targetLabel={targetLabel}
             />
 
             <EnvironmentSessionBar
@@ -1129,7 +1243,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* ROW 2: Controls (Col 1-4) & History/Activity Tabs (Col 5-12) */}
+        {/* Baris 2: Pengaturan & Riwayat minum */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           <div className="lg:col-span-4">
             <QuickControls
@@ -1161,13 +1275,11 @@ export default function App() {
               logs={logs}
               onClearLogs={() => setLogs([])}
               onExportCsv={handleExportCsv}
-              weightHistory={weightHistory}
-              emptyCup={emptyCup}
             />
           </div>
         </div>
 
-        {/* ROW 3: Lab Simulator Panel (ONLY rendered in Simulator mode) */}
+        {/* Baris 3: Simulasi presentasi (khusus mode Simulasi) */}
         {connMode === 'sim' && (
           <LabSimulatorPanel
             weight={weight}

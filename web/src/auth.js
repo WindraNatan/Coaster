@@ -142,7 +142,7 @@ export async function shcDiscoverDevice(base) {
 
 export async function shcAuth(mode, email, password) {
   const key = shcApiKey();
-  if (!key) throw new Error('Isi API key proyek Firebase dulu.');
+  if (!key) throw new Error('Isi kunci server terlebih dahulu.');
   const action = mode === 'signUp' ? 'accounts:signUp' : 'accounts:signInWithPassword';
   const res = await fetch(
     'https://identitytoolkit.googleapis.com/v1/' + action + '?key=' + encodeURIComponent(key),
@@ -157,7 +157,7 @@ export async function shcAuth(mode, email, password) {
     const code = (data && data.error && data.error.message) || ('HTTP ' + res.status);
     throw new Error(SHC_AUTH_ERRORS[code] || code);
   }
-  if (!data.localId) throw new Error('Respons Firebase tidak memuat UID.');
+  if (!data.localId) throw new Error('Server belum mengirimkan identitas akun.');
   localStorage.setItem(SHC_AUTH_KEY, JSON.stringify({
     token: data.idToken,
     exp: Date.now() + (parseInt(data.expiresIn, 10) || 3600) * 1000
@@ -185,14 +185,14 @@ export function shcLogout() {
 }
 
 export async function shcClaimDevice(base, code) {
-  if (!(await shcEnsureToken())) throw new Error('Sesi akun habis. Masuk ulang.');
+  if (!(await shcEnsureToken())) throw new Error('Sesi akun berakhir. Silakan masuk ulang.');
   const clean = (code || '').trim().toUpperCase();
-  if (clean.length !== 8) throw new Error('Kode alat harus 8 karakter.');
+  if (clean.length !== 8) throw new Error('Kode tatakan harus 8 karakter.');
   const res = await fetch(base + '/claims/' + encodeURIComponent(clean) + '.json' + shcAuthSuffix());
-  if (!res.ok) throw new Error('Gagal membaca kode (HTTP ' + res.status + ').');
+  if (!res.ok) throw new Error('Gagal memeriksa kode tatakan (HTTP ' + res.status + ').');
   const deviceUid = await res.json();
   if (!deviceUid || typeof deviceUid !== 'string') {
-    throw new Error('Kode alat tidak ditemukan. Pastikan tatakan sudah terhubung ke Wi-Fi dan kode 8 karakter sudah benar.');
+    throw new Error('Kode tatakan tidak ditemukan. Pastikan tatakan sudah tersambung ke Wi-Fi dan kode 8 karakter sudah benar.');
   }
   const put = await fetch(base + '/links/' + encodeURIComponent(shcUid()) + '/' +
       encodeURIComponent(deviceUid) + '.json' + shcAuthSuffix(), {
@@ -200,14 +200,14 @@ export async function shcClaimDevice(base, code) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code: clean, at: Date.now() })
   });
-  if (!put.ok) throw new Error('Gagal menautkan alat (HTTP ' + put.status + ').');
+  if (!put.ok) throw new Error('Gagal menautkan tatakan (HTTP ' + put.status + ').');
   localStorage.setItem('shc_device_uid', deviceUid);
   return deviceUid;
 }
 
 export async function shcFindOwnDevice(base) {
-  if (!(await shcEnsureToken())) throw new Error('Sesi akun habis. Masuk ulang.');
-  if (!shcUid()) throw new Error('Akun belum dikenal. Masuk ulang.');
+  if (!(await shcEnsureToken())) throw new Error('Sesi akun berakhir. Silakan masuk ulang.');
+  if (!shcUid()) throw new Error('Akun belum terbaca. Silakan masuk ulang.');
   const paths = [
     '/users/' + encodeURIComponent(shcUid()) + '/private/claimCode.json',
     '/users/' + encodeURIComponent(shcUid()) + '/smart_coaster/claimCode.json'

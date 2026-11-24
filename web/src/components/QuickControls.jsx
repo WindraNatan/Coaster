@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Volume2, VolumeX, AlertTriangle } from 'lucide-react';
+import { RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 export default function QuickControls({
   connMode = 'sim',
@@ -62,117 +62,68 @@ export default function QuickControls({
 
   return (
     <section
-      className="bg-white rounded-2xl p-5 border border-slate-200 shadow-soft flex flex-col gap-5"
-      aria-label="Kontrol dan konfigurasi tatakan"
+      className="bg-surface rounded-2xl p-5 border border-hairline flex flex-col gap-5"
+      aria-label="Pengaturan tatakan dan target minum"
     >
       <div>
-        <h2 className="font-display text-base font-bold text-slate-900 tracking-tight">
-          Konfigurasi Alat
+        <h2 className="text-base font-semibold text-ink tracking-tight">
+          Pengaturan
         </h2>
-        <p className="text-xs text-slate-600 mt-0.5">
-          Kalibrasi gelas, mode pengingat, dan target harian
+        <p className="text-xs text-ink-soft mt-0.5">
+          Atur jadwal pengingat, target minum, dan gelas
         </p>
       </div>
 
-      {/* Section 1: Timbangan & Gelas */}
-      <div className="space-y-3 pb-4 border-b border-slate-200/80">
-        <h3 className="text-xs font-semibold text-slate-700">
-          Timbangan & Kalibrasi Gelas
-        </h3>
-
-        <button
-          type="button"
-          onClick={onTare}
-          disabled={connMode === 'cloud'}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-slate-800 text-xs font-semibold transition-colors"
-        >
-          <RotateCcw className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
-          <span>Nol-kan Timbangan (Tare)</span>
-        </button>
-        {connMode === 'cloud' && (
-          <p className="text-[11px] text-slate-600 leading-relaxed">
-            Tare hanya tersedia lewat USB Serial atau saat tatakan menyala tanpa beban.
-          </p>
-        )}
-
-        <form onSubmit={handleSaveEmpty} className="flex items-center gap-2">
-          <label htmlFor="emptyCupInput" className="text-xs text-slate-700 font-medium whitespace-nowrap min-w-[105px]">
-            Gelas kosong
-          </label>
-          <div className="relative flex-1">
-            <input
-              id="emptyCupInput"
-              type="number"
-              min="35"
-              max="300"
-              step="0.5"
-              value={inputEmpty}
-              onChange={(e) => setInputEmpty(e.target.value)}
-              className="w-full pr-7 pl-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono tabular-nums text-slate-900"
-            />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-600 font-medium pointer-events-none">
-              g
-            </span>
-          </div>
-          <button
-            type="submit"
-            className="px-3 py-1.5 rounded-xl bg-water-700 hover:bg-water-800 text-white text-xs font-semibold transition-colors"
-          >
-            Simpan
-          </button>
-        </form>
-      </div>
-
-      {/* Section 2: Mode Timer & Suara */}
-      <div className="space-y-3 pb-4 border-b border-slate-200/80">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-semibold text-slate-700">
-            Mode Timer & Pengingat
+      {/* Bagian 1: Jadwal pengingat & suara */}
+      <div className="space-y-3 pb-4 border-b border-hairline">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold text-ink-soft">
+            Jadwal pengingat
           </h3>
           <button
             type="button"
             onClick={onToggleMute}
             aria-pressed={buzzerMuted}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap transition-colors duration-150 ${
               buzzerMuted
-                ? 'bg-amber-50 text-amber-900 border-amber-300'
-                : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                ? 'bg-warn-bg text-warn border-warn-border'
+                : 'bg-ok-bg text-ok border-ok-border'
             }`}
           >
             {buzzerMuted ? (
-              <VolumeX className="w-3.5 h-3.5" aria-hidden="true" />
+              <VolumeX className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
             ) : (
-              <Volume2 className="w-3.5 h-3.5" aria-hidden="true" />
+              <Volume2 className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
             )}
-            <span>{buzzerMuted ? 'Buzzer Hening' : 'Buzzer Aktif'}</span>
+            <span>{buzzerMuted ? 'Suara hening' : 'Suara aktif'}</span>
           </button>
         </div>
 
         <div
-          className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200"
+          className="grid grid-cols-3 gap-1.5 p-1 bg-subtle rounded-xl border border-hairline"
           role="group"
-          aria-label="Mode timer pengingat"
+          aria-label="Cara mengatur jeda minum"
         >
           <button
             type="button"
             aria-pressed={activeTimerMode === 'AUTO_DHT'}
             onClick={() => onSelectTimerMode('AUTO_DHT')}
-            className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-2 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
               activeTimerMode === 'AUTO_DHT'
-                ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                : 'text-slate-700 hover:text-slate-900'
+                ? 'bg-surface text-ink font-semibold border border-hairline'
+                : 'text-ink-soft hover:text-ink'
             }`}
           >
-            Otomatis
+            Sesuai suhu
           </button>
           <button
             type="button"
             aria-pressed={activeTimerMode === 'MANUAL'}
             onClick={() => onSelectTimerMode('MANUAL')}
-            className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-2 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
               activeTimerMode === 'MANUAL'
-                ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                : 'text-slate-700 hover:text-slate-900'
+                ? 'bg-surface text-ink font-semibold border border-hairline'
+                : 'text-ink-soft hover:text-ink'
             }`}
           >
             Manual
@@ -181,10 +132,10 @@ export default function QuickControls({
             type="button"
             aria-pressed={activeTimerMode === 'DEMO'}
             onClick={() => onSelectTimerMode('DEMO')}
-            className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-2 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150 ${
               activeTimerMode === 'DEMO'
-                ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                : 'text-slate-700 hover:text-slate-900'
+                ? 'bg-surface text-ink font-semibold border border-hairline'
+                : 'text-ink-soft hover:text-ink'
             }`}
           >
             Demo 15 dtk
@@ -192,8 +143,8 @@ export default function QuickControls({
         </div>
 
         <form onSubmit={handleSaveInterval} className="flex items-center gap-2">
-          <label htmlFor="baseMinInput" className="text-xs text-slate-700 font-medium whitespace-nowrap min-w-[105px]">
-            Interval dasar
+          <label htmlFor="baseMinInput" className="text-xs text-ink-soft font-medium whitespace-nowrap min-w-[112px]">
+            Jeda minum
           </label>
           <div className="relative flex-1">
             <input
@@ -204,15 +155,15 @@ export default function QuickControls({
               step="1"
               value={inputBaseMin}
               onChange={(e) => setInputBaseMin(e.target.value)}
-              className="w-full pr-10 pl-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono tabular-nums text-slate-900"
+              className="w-full pr-12 pl-3 py-1.5 rounded-xl border border-control bg-surface text-xs font-mono tabular-nums text-ink"
             />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-600 font-medium pointer-events-none">
-              mnt
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-muted font-medium pointer-events-none">
+              menit
             </span>
           </div>
           <button
             type="submit"
-            className="px-3 py-1.5 rounded-xl bg-water-700 hover:bg-water-800 text-white text-xs font-semibold transition-colors"
+            className="px-3 py-1.5 rounded-xl border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
           >
             Atur
           </button>
@@ -220,7 +171,7 @@ export default function QuickControls({
 
         {timerHint && (
           <p
-            className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-xl p-2.5 leading-relaxed"
+            className="text-xs text-warn bg-warn-bg border border-warn-border rounded-xl p-2.5 leading-relaxed"
             role="status"
           >
             {timerHint}
@@ -228,14 +179,14 @@ export default function QuickControls({
         )}
       </div>
 
-      {/* Section 3: Target Hidrasi & Reset */}
+      {/* Bagian 2: Target harian & ukuran gelas */}
       <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-slate-700">
-          Target Hidrasi Harian
+        <h3 className="text-xs font-semibold text-ink-soft">
+          Target harian & gelas
         </h3>
 
         <form onSubmit={handleSaveGoal} className="flex items-center gap-2">
-          <label htmlFor="dailyGoalInput" className="text-xs text-slate-700 font-medium whitespace-nowrap min-w-[105px]">
+          <label htmlFor="dailyGoalInput" className="text-xs text-ink-soft font-medium whitespace-nowrap min-w-[112px]">
             Target harian
           </label>
           <div className="relative flex-1">
@@ -247,34 +198,73 @@ export default function QuickControls({
               step="50"
               value={inputGoal}
               onChange={(e) => setInputGoal(e.target.value)}
-              className="w-full pr-8 pl-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono tabular-nums text-slate-900"
+              className="w-full pr-8 pl-3 py-1.5 rounded-xl border border-control bg-surface text-xs font-mono tabular-nums text-ink"
             />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-600 font-medium pointer-events-none">
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-muted font-medium pointer-events-none">
               ml
             </span>
           </div>
           <button
             type="submit"
-            className="px-3 py-1.5 rounded-xl bg-water-700 hover:bg-water-800 text-white text-xs font-semibold transition-colors"
+            className="px-3 py-1.5 rounded-xl border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
           >
             Simpan
           </button>
         </form>
 
-        <button
-          type="button"
-          onClick={onResetDaily}
-          disabled={connMode === 'cloud'}
-          className="w-full mt-1 px-3 py-2 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed text-rose-800 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
-        >
-          <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>Reset Statistik Harian</span>
-        </button>
-        {connMode === 'cloud' && (
-          <p className="text-[11px] text-slate-600 leading-relaxed">
-            Pada mode Cloud, gunakan tombol Mulai Sesi untuk memulai sesi pengguna baru.
-          </p>
-        )}
+        <form onSubmit={handleSaveEmpty} className="flex items-center gap-2">
+          <label htmlFor="emptyCupInput" className="text-xs text-ink-soft font-medium whitespace-nowrap min-w-[112px]">
+            Berat gelas kosong
+          </label>
+          <div className="relative flex-1">
+            <input
+              id="emptyCupInput"
+              type="number"
+              min="35"
+              max="300"
+              step="0.5"
+              value={inputEmpty}
+              onChange={(e) => setInputEmpty(e.target.value)}
+              className="w-full pr-7 pl-3 py-1.5 rounded-xl border border-control bg-surface text-xs font-mono tabular-nums text-ink"
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-muted font-medium pointer-events-none">
+              g
+            </span>
+          </div>
+          <button
+            type="submit"
+            className="px-3 py-1.5 rounded-xl border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
+          >
+            Simpan
+          </button>
+        </form>
+
+        <div className="pt-1 space-y-2">
+          <button
+            type="button"
+            onClick={onTare}
+            disabled={connMode === 'cloud'}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-ink-soft" strokeWidth={1.75} aria-hidden="true" />
+            <span>Nolkan timbangan</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onResetDaily}
+            disabled={connMode === 'cloud'}
+            className="w-full px-3 py-2 rounded-xl border border-danger-border bg-surface hover:bg-danger-bg disabled:opacity-50 disabled:cursor-not-allowed text-danger text-xs font-semibold whitespace-nowrap transition-colors duration-150"
+          >
+            Mulai hitungan baru
+          </button>
+
+          {connMode === 'cloud' && (
+            <p className="text-xs text-ink-muted leading-relaxed">
+              Penyetelan nol timbangan tersedia lewat kabel USB. Untuk memulai catatan baru secara online, gunakan tombol Mulai sesi.
+            </p>
+          )}
+        </div>
       </div>
     </section>
   );

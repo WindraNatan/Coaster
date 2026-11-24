@@ -57,7 +57,6 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
     }
   }, [isOpen]);
 
-  // Fallback light-dismiss untuk browser yang belum mendukung atribut closedby="any"
   const handleBackdropPointerDown = (e) => {
     const dialog = dialogRef.current;
     if (!dialog || e.target !== dialog) return;
@@ -79,7 +78,7 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
   const handleSaveCustomProject = (e) => {
     e.preventDefault();
     shcSaveCustomConfig(customUrl, customKey);
-    setSuccessMsg('Konfigurasi proyek Firebase disimpan.');
+    setSuccessMsg('Pengaturan server tersimpan.');
   };
 
   const handleAuth = async (e) => {
@@ -91,15 +90,15 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
       if (tab === 'login') {
         const user = await shcLogin(email, password);
         await shcDiscoverDevice(getCleanFbUrl());
-        setSuccessMsg(`Berhasil masuk sebagai ${user.email}`);
+        setSuccessMsg(`Berhasil masuk sebagai ${user.email}.`);
       } else {
         const user = await shcRegister(email, password);
-        setSuccessMsg(`Akun berhasil dibuat untuk ${user.email}`);
+        setSuccessMsg(`Akun berhasil dibuat untuk ${user.email}.`);
       }
       refreshUser();
       if (onAuthChanged) onAuthChanged();
     } catch (err) {
-      setErrorMsg(err.message || 'Gagal autentikasi.');
+      setErrorMsg(err.message || 'Gagal masuk ke akun.');
     } finally {
       setLoading(false);
     }
@@ -108,7 +107,7 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
   const handleLogout = () => {
     shcLogout();
     refreshUser();
-    setSuccessMsg('Berhasil keluar akun.');
+    setSuccessMsg('Kamu telah keluar dari akun.');
     if (onAuthChanged) onAuthChanged();
   };
 
@@ -119,13 +118,13 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
     setLoading(true);
     try {
       const base = getCleanFbUrl();
-      const claimed = await shcClaimDevice(base, claimCode);
-      setSuccessMsg(`Alat berhasil ditautkan (${claimed.slice(0, 8)}...)`);
+      await shcClaimDevice(base, claimCode);
+      setSuccessMsg('Tatakan berhasil ditautkan ke akunmu.');
       setClaimCode('');
       refreshUser();
       if (onAuthChanged) onAuthChanged();
     } catch (err) {
-      setErrorMsg(err.message || 'Gagal menautkan kode alat.');
+      setErrorMsg(err.message || 'Gagal menautkan tatakan.');
     } finally {
       setLoading(false);
     }
@@ -140,19 +139,19 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
       const linked = await shcDiscoverDevice(base);
       if (linked) {
         refreshUser();
-        setSuccessMsg(`Tautan alat ditemukan otomatis (${linked.slice(0, 8)}...).`);
+        setSuccessMsg('Tatakan yang sudah terdaftar berhasil ditemukan otomatis.');
         if (onAuthChanged) onAuthChanged();
         return;
       }
       const code = await shcFindOwnDevice(base);
       if (!code) {
-        setErrorMsg('Belum ada kode tersimpan untuk akun ini. Masukkan kode 8 karakter alat.');
+        setErrorMsg('Belum ada tatakan tersimpan di akun ini. Masukkan kode 8 karakter dari panduan alat.');
       } else {
         setClaimCode(code);
-        setSuccessMsg(`Kode alat ditemukan: ${code}. Tekan Tautkan.`);
+        setSuccessMsg(`Kode tatakan ditemukan: ${code}. Tekan tombol Tautkan.`);
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Gagal mencari kode alat.');
+      setErrorMsg(err.message || 'Gagal mencari kode tatakan.');
     } finally {
       setLoading(false);
     }
@@ -167,70 +166,66 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
       onClose={handleDialogClose}
       onPointerDown={handleBackdropPointerDown}
       aria-labelledby="auth-dialog-title"
-      className="rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-soft p-0 overflow-y-auto"
+      className="rounded-2xl border border-hairline bg-surface text-ink p-0 overflow-y-auto"
     >
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-hairline">
         <div>
-          <h2 id="auth-dialog-title" className="font-display text-base font-bold text-slate-900 tracking-tight">
-            Akun & Perangkat Coaster
+          <h2 id="auth-dialog-title" className="text-base font-semibold text-ink tracking-tight">
+            Akun & tatakan
           </h2>
-          <p className="text-xs text-slate-600 mt-0.5">
-            Sinkronisasi Firebase Cloud & penautan tatakan ESP32
+          <p className="text-xs text-ink-soft mt-0.5">
+            Masuk untuk memantau tatakanmu dari mana saja
           </p>
         </div>
         <button
           type="button"
           onClick={() => dialogRef.current?.close()}
-          aria-label="Tutup dialog akun"
-          className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+          aria-label="Tutup jendela akun"
+          className="p-1.5 rounded-lg text-ink-soft hover:text-ink hover:bg-subtle transition-colors duration-150"
         >
-          <X className="w-4 h-4" aria-hidden="true" />
+          <X className="w-4 h-4" strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
 
       <div className="p-5 space-y-4">
         {errorMsg && (
           <div
-            className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 border border-rose-300 text-xs text-rose-900"
+            className="flex items-start gap-2 p-3 rounded-xl bg-danger-bg border border-danger-border text-xs text-danger"
             role="alert"
           >
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-700" aria-hidden="true" />
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-danger" strokeWidth={1.75} aria-hidden="true" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {successMsg && (
           <div
-            className="flex items-start gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-900"
+            className="flex items-start gap-2 p-3 rounded-xl bg-ok-bg border border-ok-border text-xs text-ok"
             role="status"
           >
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-emerald-700" aria-hidden="true" />
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-ok" strokeWidth={1.75} aria-hidden="true" />
             <span>{successMsg}</span>
           </div>
         )}
 
         {isLoggedIn ? (
           <div className="space-y-4">
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+            <div className="p-3.5 rounded-xl bg-subtle space-y-2 text-xs">
               <div className="flex justify-between items-center gap-2">
-                <span className="text-slate-600">Email akun</span>
-                <span className="font-semibold text-slate-900 truncate">{userEmail}</span>
+                <span className="text-ink-soft">Email akun</span>
+                <span className="font-semibold text-ink truncate">{userEmail}</span>
               </div>
               <div className="flex justify-between items-center gap-2">
-                <span className="text-slate-600">UID akun</span>
-                <span className="font-mono text-slate-700 truncate max-w-[180px]">{uid}</span>
-              </div>
-              <div className="flex justify-between items-center gap-2">
-                <span className="text-slate-600">Status alat</span>
-                <span className="font-mono font-semibold text-water-800">
-                  {deviceUid ? `Tertaut (${deviceUid.slice(0, 8)}...)` : 'Memakai node akun'}
+                <span className="text-ink-soft">Status tatakan</span>
+                <span className="font-semibold text-accent">
+                  {deviceUid ? 'Sudah tertaut' : 'Memakai akun pribadi'}
                 </span>
               </div>
             </div>
 
-            <form onSubmit={handleClaim} className="space-y-3 pt-2 border-t border-slate-200">
-              <label htmlFor="claimCodeIn" className="text-xs font-semibold text-slate-800 block">
-                Tautkan kode alat 8 karakter
+            <form onSubmit={handleClaim} className="space-y-3 pt-2 border-t border-hairline">
+              <label htmlFor="claimCodeIn" className="text-xs font-semibold text-ink block">
+                Masukkan kode tatakan (8 karakter)
               </label>
               <div className="flex gap-2">
                 <input
@@ -240,12 +235,12 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
                   placeholder="Contoh: AB23CD45"
                   value={claimCode}
                   onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
-                  className="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono uppercase tracking-wider text-slate-900"
+                  className="flex-1 px-3 py-2 rounded-xl border border-control bg-surface text-xs font-mono text-ink"
                 />
                 <button
                   type="submit"
                   disabled={loading || claimCode.trim().length !== 8}
-                  className="px-4 py-2 rounded-xl bg-water-700 hover:bg-water-800 disabled:opacity-50 text-white text-xs font-semibold transition-colors whitespace-nowrap"
+                  className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
                 >
                   Tautkan
                 </button>
@@ -254,56 +249,56 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
                 type="button"
                 onClick={handleAutoFind}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
               >
-                <Search className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Temukan Alat Otomatis</span>
+                <Search className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+                <span>Cari tatakan saya</span>
               </button>
             </form>
 
-            <div className="pt-2 border-t border-slate-200">
+            <div className="pt-2 border-t border-hairline">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-800 text-xs font-semibold transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-danger-border bg-surface hover:bg-danger-bg text-danger text-xs font-semibold whitespace-nowrap transition-colors duration-150"
               >
-                <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Keluar dari Akun</span>
+                <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+                <span>Keluar akun</span>
               </button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-medium">
+            <div className="grid grid-cols-2 p-1 bg-subtle rounded-xl border border-hairline text-xs font-medium">
               <button
                 type="button"
                 aria-pressed={tab === 'login'}
                 onClick={() => setTab('login')}
-                className={`py-1.5 rounded-lg transition-colors ${
+                className={`py-1.5 rounded-lg whitespace-nowrap transition-colors duration-150 ${
                   tab === 'login'
-                    ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                    : 'text-slate-700 hover:text-slate-900'
+                    ? 'bg-surface text-ink font-semibold border border-hairline'
+                    : 'text-ink-soft hover:text-ink'
                 }`}
               >
-                Masuk Akun
+                Masuk
               </button>
               <button
                 type="button"
                 aria-pressed={tab === 'register'}
                 onClick={() => setTab('register')}
-                className={`py-1.5 rounded-lg transition-colors ${
+                className={`py-1.5 rounded-lg whitespace-nowrap transition-colors duration-150 ${
                   tab === 'register'
-                    ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                    : 'text-slate-700 hover:text-slate-900'
+                    ? 'bg-surface text-ink font-semibold border border-hairline'
+                    : 'text-ink-soft hover:text-ink'
                 }`}
               >
-                Daftar Baru
+                Daftar baru
               </button>
             </div>
 
             <form onSubmit={handleAuth} className="space-y-3">
               <div>
-                <label htmlFor="authEmailInput" className="text-xs font-semibold text-slate-800 block mb-1">
+                <label htmlFor="authEmailInput" className="text-xs font-semibold text-ink block mb-1">
                   Alamat email
                 </label>
                 <input
@@ -314,12 +309,12 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
                   placeholder="nama@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900"
+                  className="w-full px-3 py-2 rounded-xl border border-control bg-surface text-xs text-ink"
                 />
               </div>
 
               <div>
-                <label htmlFor="authPassInput" className="text-xs font-semibold text-slate-800 block mb-1">
+                <label htmlFor="authPassInput" className="text-xs font-semibold text-ink block mb-1">
                   Kata sandi
                 </label>
                 <input
@@ -331,45 +326,44 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
                   placeholder="Minimal 6 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-900"
+                  className="w-full px-3 py-2 rounded-xl border border-control bg-surface text-xs text-ink"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 rounded-xl bg-water-700 hover:bg-water-800 disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                className="w-full py-2.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
               >
                 {loading
                   ? 'Memproses...'
                   : tab === 'login'
-                    ? 'Masuk ke Firebase Cloud'
-                    : 'Buat Akun Baru'}
+                    ? 'Masuk sekarang'
+                    : 'Buat akun'}
               </button>
             </form>
           </div>
         )}
 
-        {/* Opsi Proyek Firebase Kustom */}
-        <div className="pt-3 border-t border-slate-200">
+        <div className="pt-3 border-t border-hairline">
           <button
             type="button"
             onClick={() => setShowCustomCfg((v) => !v)}
             aria-expanded={showCustomCfg}
-            className="w-full flex items-center justify-between text-xs font-medium text-slate-600 hover:text-slate-900 py-1"
+            className="w-full flex items-center justify-between text-xs font-medium text-ink-soft hover:text-ink py-1 whitespace-nowrap"
           >
             <span className="inline-flex items-center gap-1.5">
-              <Settings2 className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Pengaturan proyek Firebase kustom</span>
+              <Settings2 className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <span>Pengaturan server</span>
             </span>
-            <span>{showCustomCfg ? 'Sembunyikan' : 'Ubah'}</span>
+            <span>{showCustomCfg ? 'Tutup' : 'Ubah'}</span>
           </button>
 
           {showCustomCfg && (
-            <form onSubmit={handleSaveCustomProject} className="mt-2.5 space-y-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <form onSubmit={handleSaveCustomProject} className="mt-2.5 space-y-2.5 p-3 rounded-xl bg-subtle">
               <div>
-                <label htmlFor="customFbUrl" className="text-[11px] font-semibold text-slate-700 block mb-1">
-                  URL Realtime Database (kosongkan untuk default)
+                <label htmlFor="customFbUrl" className="text-xs font-medium text-ink-soft block mb-1">
+                  Alamat server database (kosongkan untuk bawaan)
                 </label>
                 <input
                   id="customFbUrl"
@@ -377,12 +371,12 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
                   placeholder="https://proyek-anda.firebasedatabase.app"
                   value={customUrl}
                   onChange={(e) => setCustomUrl(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono text-slate-900 bg-white"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-control text-xs font-mono text-ink bg-surface"
                 />
               </div>
               <div>
-                <label htmlFor="customApiKey" className="text-[11px] font-semibold text-slate-700 block mb-1">
-                  Web API Key Firebase (kosongkan untuk default)
+                <label htmlFor="customApiKey" className="text-xs font-medium text-ink-soft block mb-1">
+                  Kunci akses server (kosongkan untuk bawaan)
                 </label>
                 <input
                   id="customApiKey"
@@ -390,14 +384,14 @@ export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
                   placeholder="AIzaSy..."
                   value={customKey}
                   onChange={(e) => setCustomKey(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-mono text-slate-900 bg-white"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-control text-xs font-mono text-ink bg-surface"
                 />
               </div>
               <button
                 type="submit"
-                className="w-full py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold"
+                className="w-full py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
               >
-                Simpan Konfigurasi Proyek
+                Simpan server
               </button>
             </form>
           )}

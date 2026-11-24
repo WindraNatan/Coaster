@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Terminal, Activity, Download, Trash2 } from 'lucide-react';
+import { Calendar, ListChecks, Download, Trash2 } from 'lucide-react';
 
 export default function HistoryActivityPanel({
   dailyHistory = {},
@@ -9,11 +9,9 @@ export default function HistoryActivityPanel({
   dailyGoal = 2000,
   logs = [],
   onClearLogs,
-  onExportCsv,
-  weightHistory = [],
-  emptyCup = 130
+  onExportCsv
 }) {
-  const [activeTab, setActiveTab] = useState('history'); // 'history' | 'logs' | 'weight'
+  const [activeTab, setActiveTab] = useState('history'); // 'history' | 'logs'
 
   const getLast7Days = () => {
     const days = [];
@@ -43,99 +41,28 @@ export default function HistoryActivityPanel({
 
   const days7 = getLast7Days();
   const maxBarMl = Math.max(dailyGoal, ...days7.map((d) => d.ml), 500);
-
-  const renderWeightChart = () => {
-    const pts = weightHistory.length > 0 ? weightHistory : [0];
-    const maxW = 550;
-    const wSvg = 540;
-    const hSvg = 150;
-    const polyPoints = pts
-      .map((val, idx) => {
-        const x = pts.length === 1 ? wSvg / 2 : (idx / (pts.length - 1)) * wSvg;
-        const clamped = Math.min(maxW, Math.max(0, Number(val) || 0));
-        const y = hSvg - (clamped / maxW) * (hSvg - 20) - 10;
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
-
-    const yEmpty = hSvg - (Math.min(maxW, emptyCup) / maxW) * (hSvg - 20) - 10;
-    const yCupOn = hSvg - (35 / maxW) * (hSvg - 20) - 10;
-
-    return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-          <span>30 sampel pembacaan beban terakhir (0 - 550 g)</span>
-          <div className="flex items-center gap-4 font-mono">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-0.5 bg-emerald-600 inline-block" />
-              Gelas kosong ({Math.round(emptyCup)} g)
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2.5 h-0.5 bg-amber-600 inline-block" />
-              Ambang deteksi (35 g)
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-slate-50 rounded-xl border border-slate-200 p-3">
-          <svg
-            viewBox={`0 0 ${wSvg} ${hSvg}`}
-            className="w-full h-40 overflow-visible"
-            role="img"
-            aria-label="Grafik riwayat berat tatakan"
-          >
-            <line
-              x1="0"
-              y1={yEmpty}
-              x2={wSvg}
-              y2={yEmpty}
-              stroke="#059669"
-              strokeDasharray="4 4"
-              strokeWidth="1.2"
-            />
-            <line
-              x1="0"
-              y1={yCupOn}
-              x2={wSvg}
-              y2={yCupOn}
-              stroke="#D97706"
-              strokeDasharray="3 3"
-              strokeWidth="1"
-            />
-            <polyline
-              fill="none"
-              stroke="#0284C7"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={polyPoints}
-            />
-          </svg>
-        </div>
-      </div>
-    );
-  };
+  const weekHasIntake = days7.some((d) => d.ml > 0);
 
   return (
     <section
-      className="bg-white rounded-2xl p-5 border border-slate-200 shadow-soft flex flex-col justify-between"
-      aria-label="Riwayat hidrasi dan log aktivitas"
+      className="bg-surface rounded-2xl p-5 border border-hairline flex flex-col justify-between"
+      aria-label="Riwayat minum 7 hari dan catatan aktivitas"
     >
       <div>
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-hairline">
           <div>
-            <h2 className="font-display text-base font-bold text-slate-900 tracking-tight">
-              Riwayat & Diagnostik Sensor
+            <h2 className="text-base font-semibold text-ink tracking-tight">
+              Riwayat minum
             </h2>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Capaian hidrasi 7 hari terakhir, log kejadian, dan kurva berat
+            <p className="text-xs text-ink-soft mt-0.5">
+              Capaian 7 hari terakhir dan catatan aktivitas minum
             </p>
           </div>
 
           <div
-            className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-medium"
+            className="inline-flex p-1 bg-subtle rounded-xl border border-hairline text-xs font-medium"
             role="tablist"
-            aria-label="Tab riwayat dan diagnostik"
+            aria-label="Pilihan tampilan riwayat"
           >
             <button
               type="button"
@@ -144,14 +71,14 @@ export default function HistoryActivityPanel({
               aria-selected={activeTab === 'history'}
               aria-controls="panel-history"
               onClick={() => setActiveTab('history')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors duration-150 ${
                 activeTab === 'history'
-                  ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                  : 'text-slate-700 hover:text-slate-900'
+                  ? 'bg-surface text-ink font-semibold border border-hairline'
+                  : 'text-ink-soft hover:text-ink'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Riwayat 7 Hari</span>
+              <Calendar className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <span>7 hari terakhir</span>
             </button>
             <button
               type="button"
@@ -160,88 +87,74 @@ export default function HistoryActivityPanel({
               aria-selected={activeTab === 'logs'}
               aria-controls="panel-logs"
               onClick={() => setActiveTab('logs')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors duration-150 ${
                 activeTab === 'logs'
-                  ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                  : 'text-slate-700 hover:text-slate-900'
+                  ? 'bg-surface text-ink font-semibold border border-hairline'
+                  : 'text-ink-soft hover:text-ink'
               }`}
             >
-              <Terminal className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Log Sensor ({logs.length})</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="tab-weight"
-              aria-selected={activeTab === 'weight'}
-              aria-controls="panel-weight"
-              onClick={() => setActiveTab('weight')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors ${
-                activeTab === 'weight'
-                  ? 'bg-white text-slate-900 font-semibold shadow-sm border border-slate-200/80'
-                  : 'text-slate-700 hover:text-slate-900'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Kurva Berat</span>
+              <ListChecks className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <span>Catatan aktivitas ({logs.length})</span>
             </button>
           </div>
         </div>
 
-        {/* Panel 1: Riwayat 7 Hari */}
+        {/* Tab 1: Riwayat 7 hari terakhir */}
         {activeTab === 'history' && (
           <div
             id="panel-history"
             role="tabpanel"
             aria-labelledby="tab-history"
-            className="pt-4 space-y-4"
+            className="pt-4 space-y-3"
           >
-            <div className="flex items-center justify-between text-xs text-slate-600">
-              <span>Perbandingan volume minum harian terhadap target {dailyGoal} ml</span>
-              <span className="font-mono font-semibold text-water-800">
-                Target: {dailyGoal} ml/hari
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-soft">
+              <span>Perbandingan jumlah air minum setiap hari</span>
+              <span className="font-semibold text-ink">
+                Target harian: <span className="font-mono tabular-nums">{dailyGoal}</span> ml
               </span>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 pt-2 items-end h-44 bg-slate-50 rounded-xl border border-slate-200 p-3">
+            <div className="grid grid-cols-7 gap-2 pt-2 items-end h-44 bg-subtle rounded-xl p-3">
               {days7.map((d) => {
-                const heightPct = Math.min(100, Math.max(4, Math.round((d.ml / maxBarMl) * 100)));
+                const scaleY = d.ml > 0 ? Math.min(1, Math.max(0.06, d.ml / maxBarMl)) : 0.04;
                 const reachedGoal = d.ml >= dailyGoal;
                 return (
                   <div key={d.key} className="flex flex-col items-center h-full justify-end">
-                    <span className="text-[11px] font-mono font-semibold text-slate-700 tabular-nums mb-1">
-                      {d.ml > 0 ? `${d.ml}` : '0'}
+                    <span className="text-xs font-mono font-medium text-ink tabular-nums mb-1">
+                      {d.ml > 0 ? d.ml : '0'}
                     </span>
-                    <div className="w-full max-w-[36px] bg-slate-200/70 rounded-t-lg h-24 flex items-end overflow-hidden">
+                    <div className="w-full max-w-[36px] bg-surface rounded-t-lg h-24 flex items-end overflow-hidden border border-hairline">
                       <div
-                        className={`w-full rounded-t-lg transition-all duration-300 ${
-                          reachedGoal
-                            ? 'bg-emerald-600'
-                            : d.isToday
-                              ? 'bg-water-700'
-                              : 'bg-water-500'
+                        className={`w-full h-full origin-bottom rounded-t-lg transition-transform duration-300 ease-calm ${
+                          reachedGoal || d.isToday ? 'bg-accent' : 'bg-control'
                         }`}
-                        style={{ height: `${d.ml > 0 ? heightPct : 4}%` }}
+                        style={{ transform: `scaleY(${scaleY})` }}
                       />
                     </div>
                     <span
-                      className={`mt-1.5 text-[11px] font-medium truncate max-w-full ${
-                        d.isToday ? 'text-water-800 font-bold' : 'text-slate-700'
+                      className={`mt-1.5 text-xs truncate max-w-full ${
+                        d.isToday ? 'text-accent font-semibold' : 'text-ink-soft font-medium'
                       }`}
                     >
                       {d.isToday ? 'Hari ini' : d.label}
                     </span>
-                    <span className="text-[10px] font-mono text-slate-600">
-                      {d.drinks}x
+                    <span className="text-xs text-ink-muted">
+                      {d.drinks} kali
                     </span>
                   </div>
                 );
               })}
             </div>
+
+            {!weekHasIntake && (
+              <p className="text-xs text-ink-muted">
+                Belum ada catatan minum yang tersimpan selama 7 hari terakhir. Setiap tegukan akan tercatat otomatis.
+              </p>
+            )}
           </div>
         )}
 
-        {/* Panel 2: Log Aktivitas Sensor */}
+        {/* Tab 2: Catatan aktivitas */}
         {activeTab === 'logs' && (
           <div
             id="panel-logs"
@@ -250,63 +163,51 @@ export default function HistoryActivityPanel({
             className="pt-4 space-y-3"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-slate-600">
-                Catatan transisi FSM, pembacaan serial, dan sinkronisasi cloud
+              <span className="text-xs text-ink-soft">
+                Urutan kejadian minum, isi ulang, dan pengingat selama sesi berjalan
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={onExportCsv}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold transition-colors"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
                 >
-                  <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                  <Download className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
                   <span>Unduh CSV</span>
                 </button>
                 <button
                   type="button"
                   onClick={onClearLogs}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-hairline bg-surface hover:bg-subtle text-ink-soft text-xs font-medium whitespace-nowrap transition-colors duration-150"
                 >
-                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Bersihkan</span>
+                  <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} aria-hidden="true" />
+                  <span>Hapus daftar</span>
                 </button>
               </div>
             </div>
 
-            <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 h-48 overflow-y-auto font-mono text-xs space-y-1.5">
+            <div className="bg-subtle rounded-xl p-3 h-48 overflow-y-auto text-xs space-y-1.5">
               {logs.length === 0 ? (
-                <div className="text-slate-600 py-8 text-center">
-                  Belum ada catatan aktivitas pada sesi ini.
+                <div className="text-ink-muted py-10 text-center">
+                  Belum ada aktivitas minum atau perubahan pengaturan pada sesi ini.
                 </div>
               ) : (
                 logs.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start gap-2 py-1 border-b border-slate-200/60 last:border-b-0 text-slate-800"
+                    className="flex items-start gap-2.5 py-1.5 border-b border-hairline last:border-b-0 text-ink"
                   >
-                    <span className="text-slate-600 tabular-nums flex-shrink-0">
-                      [{item.time}]
+                    <span className="font-mono tabular-nums text-ink-muted flex-shrink-0">
+                      {item.time}
                     </span>
-                    <span className="px-1.5 py-0.2 rounded bg-white border border-slate-300 text-slate-800 font-semibold text-[11px] flex-shrink-0">
+                    <span className="px-2 py-0.5 rounded-md bg-surface text-ink-soft font-semibold flex-shrink-0">
                       {item.tag}
                     </span>
-                    <span className="break-words">{item.msg}</span>
+                    <span className="leading-relaxed">{item.msg}</span>
                   </div>
                 ))
               )}
             </div>
-          </div>
-        )}
-
-        {/* Panel 3: Kurva Berat */}
-        {activeTab === 'weight' && (
-          <div
-            id="panel-weight"
-            role="tabpanel"
-            aria-labelledby="tab-weight"
-            className="pt-4"
-          >
-            {renderWeightChart()}
           </div>
         )}
       </div>
