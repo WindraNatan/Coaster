@@ -57,11 +57,14 @@ export default function Header({
     <header className="sticky top-0 z-40 bg-surface border-b border-hairline px-4 sm:px-6 py-3">
       <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-accent-ink flex-shrink-0">
-            <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">
-              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
-            </svg>
-          </div>
+          <img
+            src="./icon-192.png"
+            alt=""
+            aria-hidden="true"
+            width="36"
+            height="36"
+            className="w-9 h-9 rounded-lg object-cover flex-shrink-0"
+          />
           <div className="flex flex-wrap items-center gap-2.5 min-w-0">
             <h1 className="text-base sm:text-lg font-semibold text-ink tracking-tight whitespace-nowrap">
               Smart Hydration Coaster
