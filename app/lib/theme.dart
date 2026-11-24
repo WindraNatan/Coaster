@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Palet Mineral Stoneware & Deep Spring Teal (selaras DESIGN.md v4.0).
 abstract final class ShcPalette {
