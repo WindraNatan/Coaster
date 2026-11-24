@@ -3,7 +3,8 @@ import { CoasterFSM, CFG, mutedFrom } from './fsm';
 import {
   defaultTodayKey,
   loadDailyHistory,
-  todayDelta,
+  ensureDayBaseline,
+  peekTodayDelta,
   saveTodayStatsToHistory,
   resetDailyStatsGuarded,
   createDailyCloudPusher
@@ -120,6 +121,7 @@ export default function App() {
 
   const cloudCfgCacheRef = useRef(null);
   const cloudTlmCacheRef = useRef(null);
+  const cloudHydratedRef = useRef(false);
   const sseTlmRef = useRef(null);
   const sseCfgRef = useRef(null);
 
@@ -239,6 +241,7 @@ export default function App() {
   }
 
   const syncHistoryNow = useCallback(() => {
+    if (connModeRef.current === 'sim') return;
     saveTodayStatsToHistory(fsm, (hist) => {
       setDailyHistory({ ...hist });
     });
@@ -345,11 +348,24 @@ export default function App() {
       setRemSec(t.remainingSec);
       setTargetSec(Math.round(t.targetMs / 1000));
 
-      const drinkIncreased = t.drinkCount > fsm.drinkCount || t.totalMl > fsm.totalDrank;
-      fsm.totalDrank = t.totalMl;
-      fsm.drinkCount = t.drinkCount;
-      fsm.refillCount = t.refillCount;
-      fsm.cheatCount = t.cheatCount;
+      const firstHydration = !cloudHydratedRef.current;
+      let drinkIncreased = false;
+      if (firstHydration) {
+        cloudHydratedRef.current = true;
+        ensureDayBaseline(Math.round(t.totalMl), t.drinkCount, t.refillCount, t.cheatCount);
+        fsm.totalDrank = t.totalMl;
+        fsm.drinkCount = t.drinkCount;
+        fsm.refillCount = t.refillCount;
+        fsm.cheatCount = t.cheatCount;
+        const d0 = peekTodayDelta(Math.round(t.totalMl), t.drinkCount, t.refillCount, t.cheatCount);
+        drinkIncreased = d0.total_ml > 0 || d0.drink_count > 0;
+      } else {
+        drinkIncreased = t.drinkCount > fsm.drinkCount || t.totalMl > fsm.totalDrank;
+        fsm.totalDrank = t.totalMl;
+        fsm.drinkCount = t.drinkCount;
+        fsm.refillCount = t.refillCount;
+        fsm.cheatCount = t.cheatCount;
+      }
 
       setSessionMl(t.totalMl);
       setDrinkCount(t.drinkCount);
@@ -389,6 +405,7 @@ export default function App() {
   );
 
   const closeCloudStreams = useCallback(() => {
+    cloudHydratedRef.current = false;
     if (sseTlmRef.current) {
       sseTlmRef.current.close();
       sseTlmRef.current = null;
@@ -671,6 +688,7 @@ export default function App() {
       disconnectUsbSerial();
     }
     if (nextMode !== connMode) {
+      cloudHydratedRef.current = false;
       setWeight(0);
       setCupMl(0);
       setStateString('IDLE');
@@ -795,10 +813,19 @@ export default function App() {
     addLog('Sesi', 'Catatan sesi baru dimulai setelah menyimpan riwayat hari ini.');
   };
 
+  const syncSessionHistoryIfActive = () => {
+    if (connMode === 'usb') {
+      syncHistoryNow();
+    } else if (connMode === 'cloud' && cloudHydratedRef.current) {
+      const d = peekTodayDelta(Math.round(fsm.totalDrank), fsm.drinkCount, fsm.refillCount, fsm.cheatCount);
+      if (d.total_ml > 0 || d.drink_count > 0) syncHistoryNow();
+    }
+  };
+
   const handleConfirmStartSession = async (chosenMode) => {
     setSessionBusy(true);
     try {
-      syncHistoryNow();
+      syncSessionHistoryIfActive();
       const nextDemo = chosenMode === 'DEMO';
       const nextAuto = chosenMode === 'DEMO' ? autoDht : chosenMode === 'AUTO_DHT';
       setDemo(nextDemo);
@@ -825,7 +852,7 @@ export default function App() {
   const handleEndSession = async () => {
     setSessionBusy(true);
     try {
-      syncHistoryNow();
+      syncSessionHistoryIfActive();
       if (connMode === 'cloud') {
         const base = getCleanFbUrl();
         await shcSetSession(base, shcUid(), false);
@@ -1083,16 +1110,27 @@ export default function App() {
   };
 
   const todayKeyStr = defaultTodayKey();
-  const todayStats = todayDelta(
-    Math.round(sessionMl),
-    drinkCount,
-    refillCount,
-    cheatCount
-  );
+  const todayStats = connMode === 'sim'
+    ? {
+        total_ml: Math.round(sessionMl),
+        drink_count: drinkCount,
+        refill_count: refillCount,
+        cheat_count: cheatCount
+      }
+    : peekTodayDelta(
+        Math.round(sessionMl),
+        drinkCount,
+        refillCount,
+        cheatCount
+      );
   const goalCurrentMl =
-    connMode === 'cloud'
-      ? Math.max(todayStats.total_ml, Number(dailyHistory[todayKeyStr]?.total_ml || 0))
-      : Math.max(Math.round(sessionMl), todayStats.total_ml);
+    connMode === 'sim'
+      ? Math.round(sessionMl)
+      : Math.max(todayStats.total_ml, Number(dailyHistory[todayKeyStr]?.total_ml || 0));
+  const todayDrinksCount =
+    connMode === 'sim'
+      ? drinkCount
+      : Math.max(todayStats.drink_count, Number(dailyHistory[todayKeyStr]?.drink_count || 0));
 
   const effectiveIntervalMs = computeEffectiveIntervalMs({
     demo,
@@ -1270,7 +1308,7 @@ export default function App() {
               dailyHistory={dailyHistory}
               todayDateKey={todayKeyStr}
               todayMl={goalCurrentMl}
-              todayDrinks={drinkCount}
+              todayDrinks={todayDrinksCount}
               dailyGoal={dailyGoal}
               logs={logs}
               onClearLogs={() => setLogs([])}

@@ -8,7 +8,10 @@
 const assert = require('assert');
 const {
   loadDailyHistory,
+  dayBaseline,
+  ensureDayBaseline,
   todayDelta,
+  peekTodayDelta,
   saveTodayStatsToHistory,
   resetDailyStatsGuarded
 } = require('./daily.js');
@@ -119,6 +122,21 @@ assert.strictEqual(todayDelta(0, 0, 0, 0, ls2, dayKey).total_ml, 0,
   'reset alat tidak menghasilkan angka negatif');
 assert.strictEqual(todayDelta(120, 1, 0, 0, ls2, dayKey).total_ml, 120,
   'minum setelah reset tetap terhitung');
+
+// 6. peekTodayDelta tidak mutasi storage dan nol saat hidrasi awal cloud.
+const ls3 = makeStorage();
+const peekEmpty = peekTodayDelta(0, 0, 0, 0, ls3, dayKey);
+assert.strictEqual(peekEmpty.total_ml, 0);
+assert.strictEqual(dayBaseline(ls3), null, 'peekTodayDelta tidak menulis baseline kosong');
+
+ensureDayBaseline(512, 7, 11, 7, ls3, dayKey);
+const peekInit = peekTodayDelta(512, 7, 11, 7, ls3, dayKey);
+assert.strictEqual(peekInit.total_ml, 0);
+assert.strictEqual(peekInit.drink_count, 0);
+
+const peekDrink = peekTodayDelta(662, 8, 11, 7, ls3, dayKey);
+assert.strictEqual(peekDrink.total_ml, 150);
+assert.strictEqual(peekDrink.drink_count, 1);
 
 console.log('[PASS] Hitungan harian: baseline, ganti hari, reset alat');
 console.log('SEMUA LULUS (daily-history.test.js)');

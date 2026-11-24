@@ -57,6 +57,20 @@ function todayDelta(totMl, drink, refill, cheat, storage = globalThis.localStora
   };
 }
 
+function peekTodayDelta(totMl, drink, refill, cheat, storage = globalThis.localStorage, todayKeyFn = defaultTodayKey) {
+  const b = dayBaseline(storage);
+  const k = todayKeyFn();
+  if (!b || b.date !== k || totMl < b.total_ml || drink < b.drink_count) {
+    return { total_ml: 0, drink_count: 0, refill_count: 0, cheat_count: 0 };
+  }
+  return {
+    total_ml: Math.max(0, totMl - b.total_ml),
+    drink_count: Math.max(0, drink - b.drink_count),
+    refill_count: Math.max(0, refill - b.refill_count),
+    cheat_count: Math.max(0, cheat - b.cheat_count)
+  };
+}
+
 function saveTodayStatsToHistory(fsm, onRender = null, storage = globalThis.localStorage, todayKeyFn = defaultTodayKey) {
   const hist = loadDailyHistory(storage);
   const k = todayKeyFn();
@@ -151,6 +165,7 @@ if (typeof module !== 'undefined' && module.exports) {
     dayBaseline,
     ensureDayBaseline,
     todayDelta,
+    peekTodayDelta,
     saveTodayStatsToHistory,
     resetDailyStatsGuarded,
     createDailyCloudPusher

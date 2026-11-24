@@ -26,6 +26,7 @@ export default function HistoryActivityPanel({
         '-' +
         String(d.getDate()).padStart(2, '0');
       const label = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric' });
+      const shortDay = d.toLocaleDateString('id-ID', { weekday: 'short' });
       const rec = dailyHistory[key] || {};
       const isToday = key === todayDateKey;
       const ml = isToday
@@ -34,7 +35,7 @@ export default function HistoryActivityPanel({
       const drinks = isToday
         ? Math.max(Number(rec.drink_count || 0), todayDrinks)
         : Number(rec.drink_count || 0);
-      days.push({ key, label, ml, drinks, isToday });
+      days.push({ key, label, shortDay, ml, drinks, isToday });
     }
     return days;
   };
@@ -136,7 +137,8 @@ export default function HistoryActivityPanel({
                         d.isToday ? 'text-accent font-semibold' : 'text-ink-soft font-medium'
                       }`}
                     >
-                      {d.isToday ? 'Hari ini' : d.label}
+                      <span className="hidden sm:inline">{d.isToday ? 'Hari ini' : d.label}</span>
+                      <span className="sm:hidden">{d.isToday ? 'Kini' : d.shortDay}</span>
                     </span>
                     <span className="text-xs text-ink-muted">
                       {d.drinks} kali
