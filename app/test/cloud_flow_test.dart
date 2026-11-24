@@ -712,4 +712,94 @@ void main() {
     expect(find.text('Riwayat'), findsOneWidget);
     expect(find.text('2026-11-06'), findsOneWidget);
   });
+
+  testWidgets('layout adaptif bebas overflow di ponsel 360px dan tablet 960px',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    MockClient makeClient() => MockClient((req) async {
+          if (req.url.path.endsWith('/telemetry.json')) {
+            return Response(_telemetryBody, 200);
+          }
+          if (req.url.path.endsWith('/config.json')) {
+            return Response(_configBody, 200);
+          }
+          if (req.url.path.endsWith('/daily.json')) {
+            return Response('{"2026-11-22":{"total_ml":1500,"drink_count":5}}', 200);
+          }
+          return Response('{}', 200);
+        });
+
+    for (final sz in const [Size(360, 800), Size(960, 800)]) {
+      await tester.binding.setSurfaceSize(sz);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _pumpApp(tester, makeClient());
+      await tester.pump();
+      expect(find.text('315.0'), findsOneWidget);
+      expect(find.text('Riwayat'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.binding.setSurfaceSize(null);
+  });
+
+  testWidgets('ubah target harian tersimpan di SharedPreferences',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'goal_ml': 2000});
+    final client = MockClient((req) async => Response(
+        req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200));
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    final targetChip = find.text('Target 2000 ml');
+    await tester.ensureVisible(targetChip);
+    await tester.pump();
+    await tester.tap(targetChip);
+    await tester.pumpAndSettle();
+
+    final goalField = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(goalField, '2500');
+    await tester.tap(find.text('Simpan target'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Target 2500 ml'), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('goal_ml'), 2500);
+  });
+
+  testWidgets('keluar akun lewat menu AppBar mengembalikan ke layar masuk',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'shc_id_token': 'tok',
+      'shc_id_token_exp': 9999999999999,
+      'shc_auth_email': 'a@b.c',
+      'shc_uid': 'uid-akun',
+      'shc_refresh_token': 'ref',
+      'shc_device_uid': 'uid-alat',
+    });
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/telemetry.json')) {
+        return Response(_telemetryBody, 200);
+      }
+      if (req.url.path.endsWith('/config.json')) {
+        return Response(_configBody, 200);
+      }
+      return Response('null', 200);
+    });
+
+    await tester.pumpWidget(MaterialApp(home: RootPage(client: client)));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byTooltip('Menu akun dan perangkat'), findsOneWidget);
+    await tester.tap(find.byTooltip('Menu akun dan perangkat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Keluar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Masuk'), findsOneWidget);
+    expect(await loadSession(), isNull);
+  });
 }

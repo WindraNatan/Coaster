@@ -1,48 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth.dart';
+import 'painters.dart';
 import 'project_config.dart';
 import 'reminder.dart';
 import 'telemetry.dart';
-
-// Palet Clean Nordic / Porcelain Light:
-// porcelain white surface, slate 50 background, deep sky water accent.
-const _bg = Color(0xFFF8FAFC);
-const _panel = Color(0xFFFFFFFF);
-const _panel2 = Color(0xFFF1F5F9);
-const _line = Color(0xFFE2E8F0);
-const _ink = Color(0xFF0F172A);
-const _dim = Color(0xFF64748B);
-const _water = Color(0xFF0284C7);
-const _ok = Color(0xFF059669);
-const _warn = Color(0xFFD97706);
-const _alarm = Color(0xFFE11D48);
-
-const _cardShadow = [
-  BoxShadow(
-    color: Color(0x0A0F172A),
-    blurRadius: 18,
-    offset: Offset(0, 4),
-  ),
-  BoxShadow(
-    color: Color(0x050F172A),
-    blurRadius: 4,
-    offset: Offset(0, 1),
-  ),
-];
-
-const _display = 'SpaceGrotesk';
-const _mono = 'JetBrainsMono';
+import 'theme.dart';
 
 const _pollInterval = Duration(seconds: 20);
 const _glassDisplayMl = 500.0;
@@ -53,17 +25,6 @@ const _defaultCfg = CloudConfig(
   emptyCupWeightG: 130,
   muted: false,
 );
-
-final _tabular = [const FontFeature.tabularFigures()];
-
-TextStyle _monoStyle(double size, {Color? color, FontWeight? weight}) =>
-    TextStyle(
-      fontFamily: _mono,
-      fontSize: size,
-      color: color ?? _dim,
-      fontWeight: weight,
-      fontFeatures: _tabular,
-    );
 
 String _fmtTargetMnt(double m) {
   if (m < 1) return '${(m * 60).round()} detik';
@@ -83,28 +44,11 @@ class CoasterApp extends StatelessWidget {
     return MaterialApp(
       title: 'Smart Hydration Coaster',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: _bg,
-        fontFamily: _display,
-        colorScheme: const ColorScheme.light(
-          surface: _panel,
-          primary: _water,
-          secondary: _water,
-          error: _alarm,
-        ),
-        dividerColor: _line,
-        textSelectionTheme: const TextSelectionThemeData(
-          cursorColor: _water,
-          selectionHandleColor: _water,
-        ),
-      ),
+      theme: buildShcTheme(),
       home: const RootPage(),
     );
   }
 }
-
-// ── Root: pilih antara layar koneksi (URL RTDB) dan dashboard ───────────────
 
 class RootPage extends StatefulWidget {
   final http.Client? client;
@@ -118,6 +62,8 @@ class _RootPageState extends State<RootPage> {
   String? _url;
   String? _savedUrl;
   AuthSession? _session;
+  bool _editingUrl = false;
+  bool _claiming = false;
 
   @override
   void initState() {
@@ -130,7 +76,7 @@ class _RootPageState extends State<RootPage> {
     final saved = p.getString('shc_fb_url');
     var session = await loadSession();
     if (session != null && !session.valid && session.refreshToken.isNotEmpty) {
-      session = await refreshSession(session);
+      session = await refreshSession(session, client: widget.client);
     }
     if (!mounted) return;
     final effective = (saved != null && saved.isNotEmpty) ? saved : kFirebaseUrl;
@@ -146,7 +92,9 @@ class _RootPageState extends State<RootPage> {
       discoverDevice(base: effective, session: s, client: widget.client)
           .then((found) {
         if (!mounted || found.isEmpty) return;
-        setState(() { _session = _session!.copyWith(deviceUid: found); });
+        setState(() {
+          _session = _session!.copyWith(deviceUid: found);
+        });
         saveSession(_session!);
       });
     }
@@ -162,16 +110,29 @@ class _RootPageState extends State<RootPage> {
       discoverDevice(base: url, session: session, client: widget.client)
           .then((found) {
         if (!mounted || found.isEmpty) return;
-        setState(() { _session = _session!.copyWith(deviceUid: found); });
+        setState(() {
+          _session = _session!.copyWith(deviceUid: found);
+        });
         saveSession(_session!);
       });
     }
   }
 
-  bool _editingUrl = false;
-  bool _claiming = false;
+  void _editUrl() => setState(() {
+        _url = null;
+        _editingUrl = true;
+      });
 
-  void _editUrl() => setState(() { _url = null; _editingUrl = true; });
+  Future<void> _logout() async {
+    await saveSession(null);
+    if (!mounted) return;
+    setState(() {
+      _url = null;
+      _session = null;
+      _claiming = false;
+      _editingUrl = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,34 +140,40 @@ class _RootPageState extends State<RootPage> {
     final session = _session;
     if (url == null || session == null) {
       return ConnectScreen(
-          initialUrl: _savedUrl,
-          onConnect: _openDashboard,
-          initialSession: session,
-          client: widget.client,
-          showUrlField: _editingUrl);
+        initialUrl: _savedUrl,
+        onConnect: _openDashboard,
+        initialSession: session,
+        client: widget.client,
+        showUrlField: _editingUrl,
+      );
     }
     if (_claiming) {
       return ClaimScreen(
-          url: url,
-          session: session,
-          client: widget.client,
-          onClaimed: (uid) => setState(() {
-                _session = session.copyWith(deviceUid: uid);
-                _claiming = false;
-              }),
-          onCancel: () => setState(() { _claiming = false; }));
-    }
-    return DashboardScreen(
-        key: ValueKey('$url/${session.deviceUid}'),
         url: url,
         session: session,
-        onChangeUrl: _editUrl,
         client: widget.client,
-        onClaimDevice: () => setState(() { _claiming = true; }));
+        onClaimed: (uid) => setState(() {
+          _session = session.copyWith(deviceUid: uid);
+          _claiming = false;
+        }),
+        onCancel: () => setState(() {
+          _claiming = false;
+        }),
+      );
+    }
+    return DashboardScreen(
+      key: ValueKey('$url/${session.deviceUid}'),
+      url: url,
+      session: session,
+      onChangeUrl: _editUrl,
+      client: widget.client,
+      onClaimDevice: () => setState(() {
+        _claiming = true;
+      }),
+      onLogout: _logout,
+    );
   }
 }
-
-// ── Layar koneksi ───────────────────────────────────────────────────────────
 
 class ConnectScreen extends StatefulWidget {
   final void Function(String url, AuthSession session) onConnect;
@@ -215,9 +182,15 @@ class ConnectScreen extends StatefulWidget {
   final bool showUrlField;
   final bool showKeyField;
   final http.Client? client;
-  const ConnectScreen({super.key, required this.onConnect, this.initialUrl,
-      this.initialSession, this.showUrlField = false, this.showKeyField = false,
-      this.client});
+  const ConnectScreen({
+    super.key,
+    required this.onConnect,
+    this.initialUrl,
+    this.initialSession,
+    this.showUrlField = false,
+    this.showKeyField = false,
+    this.client,
+  });
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -232,6 +205,12 @@ class _ConnectScreenState extends State<ConnectScreen> {
   String? _authError;
   bool _busy = false;
   bool _registerMode = false;
+
+  late final bool _needsUrl = widget.showUrlField ||
+      (kFirebaseUrl.isEmpty && (_ctrl.text.trim().isEmpty));
+  bool _storedKeyMissing = true;
+  bool get _needsKey =>
+      widget.showKeyField || (kFirebaseApiKey.isEmpty && _storedKeyMissing);
 
   @override
   void initState() {
@@ -267,12 +246,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
     return typed.isNotEmpty ? typed : kFirebaseApiKey;
   }
 
-  late final bool _needsUrl = widget.showUrlField ||
-      (kFirebaseUrl.isEmpty && (_ctrl.text.trim().isEmpty));
-  bool _storedKeyMissing = true;
-  bool get _needsKey =>
-      widget.showKeyField || (kFirebaseApiKey.isEmpty && _storedKeyMissing);
-
   Future<void> _submit() async {
     final raw = _urlValue;
     if (raw.isEmpty) {
@@ -284,7 +257,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
       return;
     }
     final url = raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
-    setState(() { _busy = true; _authError = null; _error = null; });
+    setState(() {
+      _busy = true;
+      _authError = null;
+      _error = null;
+    });
     try {
       if (kFirebaseApiKey.isEmpty) await saveApiKey(_keyValue);
       var existing = await loadSession();
@@ -315,172 +292,157 @@ class _ConnectScreenState extends State<ConnectScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Container(
-              decoration: BoxDecoration(
-                color: _panel,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _line),
-                boxShadow: _cardShadow,
-              ),
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Smart Hydration',
-                      style: TextStyle(
-                          fontFamily: _display,
-                          fontSize: 30,
-                          fontWeight: FontWeight.w600,
-                          color: _ink,
-                          letterSpacing: -0.5)),
-                  Text('Coaster',
-                      style: TextStyle(
-                          fontFamily: _display,
-                          fontSize: 30,
-                          fontWeight: FontWeight.w600,
-                          color: _water,
-                          letterSpacing: -0.5)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Masuk untuk melihat tatakan gelasmu dari jauh.',
-                    style: TextStyle(fontSize: 14, color: _dim, height: 1.5),
-                  ),
-                  const SizedBox(height: 28),
-                  if (_needsUrl) ...[
-                    TextField(
-                      controller: _ctrl,
-                      keyboardType: TextInputType.url,
-                      textInputAction: TextInputAction.go,
-                      onSubmitted: (_) => _submit(),
-                      style: _monoStyle(13, color: _ink),
-                      decoration: InputDecoration(
-                        labelText: 'URL Firebase RTDB',
-                        labelStyle: _monoStyle(12, color: _dim),
-                        hintText:
-                            'https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app',
-                        hintStyle: _monoStyle(11, color: _dim),
-                        filled: true,
-                        fillColor: _panel2,
-                        enabledBorder: OutlineInputBorder(
+      backgroundColor: ShcPalette.canvas,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Container(
+                decoration: shcCardDecoration(radius: 20),
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: ShcPalette.accentSoft,
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _line)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _water, width: 2)),
-                        errorText: _error,
-                        errorStyle: _monoStyle(11, color: _alarm),
-                      ),
+                          ),
+                          child: const Icon(
+                            Icons.water_drop_outlined,
+                            color: ShcPalette.accent,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Smart Hydration Coaster',
+                                style: shcSans(
+                                  18,
+                                  color: ShcPalette.ink,
+                                  weight: FontWeight.w700,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              Text(
+                                'Pendamping hidrasi harianmu',
+                                style: shcSans(12, color: ShcPalette.muted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 18),
                     Text(
-                      'Salin URL dari Firebase Console → Realtime Database. '
-                      'ESP32 menulis ke /users/<uid>/smart_coaster lewat Wi-Fi 2,4 GHz; '
-                      'aplikasi ini membaca telemetry dan mengatur config.',
-                      style: _monoStyle(11, color: _dim),
+                      'Masuk untuk memantau isi gelas, jadwal pengingat, dan riwayat minummu.',
+                      style: shcSans(13, color: ShcPalette.inkSoft, height: 1.5),
                     ),
-                    const SizedBox(height: 20),
-                  ],
-                  TextField(
-                    controller: _email,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.username],
-                    style: _monoStyle(13, color: _ink),
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      labelStyle: _monoStyle(12, color: _dim),
-                      filled: true,
-                      fillColor: _panel2,
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: _line)),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: _water, width: 2)),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _pass,
-                    obscureText: true,
-                    autofillHints: const [AutofillHints.password],
-                    style: _monoStyle(13, color: _ink),
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      labelStyle: _monoStyle(12, color: _dim),
-                      filled: true,
-                      fillColor: _panel2,
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: _line)),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: _water, width: 2)),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  if (_needsKey)
+                    const SizedBox(height: 22),
+                    if (_needsUrl) ...[
+                      TextField(
+                        controller: _ctrl,
+                        keyboardType: TextInputType.url,
+                        textInputAction: TextInputAction.next,
+                        style: shcMono(13, color: ShcPalette.ink),
+                        decoration: shcInputDecoration(
+                          label: 'URL Firebase RTDB',
+                          hint:
+                              'https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app',
+                          error: _error,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Salin alamat Realtime Database dari proyek Firebase milikmu.',
+                        style: shcSans(12, color: ShcPalette.muted, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextField(
-                      controller: _key,
-                      autocorrect: false,
-                      style: _monoStyle(13, color: _ink),
-                      decoration: InputDecoration(
-                        labelText: 'Web API Key proyek Firebase',
-                        labelStyle: _monoStyle(12, color: _dim),
-                        helperText: 'Project settings → General → Web API Key',
-                        helperStyle: _monoStyle(11, color: _dim),
-                        filled: true,
-                        fillColor: _panel2,
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _line)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: _water, width: 2)),
-                        errorText: _authError,
-                        errorStyle: _monoStyle(11, color: _alarm),
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.username],
+                      style: shcSans(14, color: ShcPalette.ink, weight: FontWeight.w500),
+                      decoration: shcInputDecoration(label: 'Email'),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _pass,
+                      obscureText: true,
+                      textInputAction: _needsKey ? TextInputAction.next : TextInputAction.done,
+                      onSubmitted: _needsKey ? null : (_) => _submit(),
+                      autofillHints: const [AutofillHints.password],
+                      style: shcSans(14, color: ShcPalette.ink, weight: FontWeight.w500),
+                      decoration: shcInputDecoration(label: 'Password'),
+                    ),
+                    if (_needsKey) ...[
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _key,
+                        autocorrect: false,
+                        style: shcMono(13, color: ShcPalette.ink),
+                        decoration: shcInputDecoration(
+                          label: 'Web API Key proyek Firebase',
+                          helper: 'Project settings > General > Web API Key',
+                          error: _authError,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    if (_authError != null && !_needsKey) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: ShcPalette.dangerBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: ShcPalette.dangerBorder),
+                        ),
+                        child: Text(
+                          _authError!,
+                          style: shcSans(12, color: ShcPalette.danger, weight: FontWeight.w500),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    FilledButton(
+                      onPressed: _busy ? null : _submit,
+                      child: Text(
+                        _busy
+                            ? 'Sebentar...'
+                            : (_registerMode ? 'Buat akun' : 'Masuk'),
                       ),
                     ),
-                  const SizedBox(height: 24),
-                  if (_authError != null) ...[
-                    Text(_authError!,
-                        style: _monoStyle(12, color: _alarm), textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _registerMode = !_registerMode),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 44),
+                        foregroundColor: ShcPalette.accent,
+                      ),
+                      child: Text(
+                        _registerMode
+                            ? 'Sudah punya akun? Masuk'
+                            : 'Belum punya akun? Daftar',
+                        style: shcSans(13, color: ShcPalette.accent, weight: FontWeight.w700),
+                      ),
+                    ),
                   ],
-                  FilledButton(
-                    onPressed: _busy ? null : _submit,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _water,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      minimumSize: const Size.fromHeight(48),
-                      textStyle: TextStyle(
-                          fontFamily: _mono,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600),
-                    ),
-                    child: Text(_busy
-                        ? 'Sebentar...'
-                        : (_registerMode ? 'Buat akun' : 'Masuk')),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() => _registerMode = !_registerMode),
-                    child: Text(
-                      _registerMode
-                          ? 'Sudah punya akun? Masuk'
-                          : 'Belum punya akun? Daftar',
-                      style: _monoStyle(12, color: _water, weight: FontWeight.w600),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -488,26 +450,6 @@ class _ConnectScreenState extends State<ConnectScreen> {
       ),
     );
   }
-}
-
-// ── Dashboard ───────────────────────────────────────────────────────────────
-
-class DashboardScreen extends StatefulWidget {
-  final String url;
-  final AuthSession session;
-  final VoidCallback onChangeUrl;
-  final VoidCallback? onClaimDevice;
-  final http.Client? client;
-  const DashboardScreen(
-      {super.key,
-      required this.url,
-      required this.session,
-      required this.onChangeUrl,
-      this.onClaimDevice,
-      this.client});
-
-  @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class TlmStreamState {
@@ -580,8 +522,29 @@ class TlmStreamState {
   }
 }
 
+class DashboardScreen extends StatefulWidget {
+  final String url;
+  final AuthSession session;
+  final VoidCallback onChangeUrl;
+  final VoidCallback? onClaimDevice;
+  final Future<void> Function()? onLogout;
+  final http.Client? client;
+  const DashboardScreen({
+    super.key,
+    required this.url,
+    required this.session,
+    required this.onChangeUrl,
+    this.onClaimDevice,
+    this.onLogout,
+    this.client,
+  });
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
 class _DashboardScreenState extends State<DashboardScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with WidgetsBindingObserver {
   late AuthSession _session = widget.session;
   Telemetry? _t;
   double? _hintTargetLama;
@@ -601,12 +564,33 @@ class _DashboardScreenState extends State<DashboardScreen>
   DateTime? _cfgFrameAt;
   Timer? _timer;
   StreamSubscription<String>? _streamSub;
+  StreamSubscription<String>? _cfgSub;
   Timer? _streamRetry;
   late final http.Client _client;
 
-  late final AnimationController _pulse;
+  final TlmStreamState _stream = TlmStreamState();
+  final TlmStreamState _cfgState = TlmStreamState();
+  String _streamBuf = '';
+  final Map<String, dynamic> _cfgCache = {};
+  String _cfgBuf = '';
+
   final _intervalCtrl = TextEditingController();
   final _emptyCupCtrl = TextEditingController();
+
+  int? _lastHb;
+  DateTime? _lastHbAt;
+
+  List<MapEntry<String, Map<String, dynamic>>> _history = const [];
+  bool _historyLoading = false;
+  int? _historyDrinks;
+
+  int _goalMl = 2000;
+  DateTime? _dayKey;
+  double _dayBaseMl = 0;
+  int _dayBaseDrink = 0;
+  double _dayMl = 0;
+  bool _dayFresh = false;
+  ReminderPlan? _plan;
 
   String get _base => widget.url;
 
@@ -631,8 +615,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   void initState() {
     super.initState();
     _client = widget.client ?? http.Client();
-    _pulse = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 500));
     WidgetsBinding.instance.addObserver(this);
     _loadReminder();
     _loadGoal();
@@ -670,21 +652,17 @@ class _DashboardScreenState extends State<DashboardScreen>
       _streamSub = res.stream
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen(_onStreamLine, onError: (_) => _restartStream(),
-              onDone: _restartStream, cancelOnError: true);
+          .listen(
+            _onStreamLine,
+            onError: (_) => _restartStream(),
+            onDone: _restartStream,
+            cancelOnError: true,
+          );
       _openCfgStream();
     } catch (_) {
       _restartStream();
     }
   }
-
-  final TlmStreamState _stream = TlmStreamState();
-  final TlmStreamState _cfgState = TlmStreamState();
-  String _streamBuf = '';
-
-  StreamSubscription<String>? _cfgSub;
-  final Map<String, dynamic> _cfgCache = {};
-  String _cfgBuf = '';
 
   Future<void> _openCfgStream() async {
     await _cfgSub?.cancel();
@@ -779,7 +757,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     _streamRetry?.cancel();
     _streamRetry = null;
     _client.close();
-    _pulse.dispose();
     _intervalCtrl.dispose();
     _emptyCupCtrl.dispose();
     super.dispose();
@@ -792,9 +769,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       final base = _session.coasterUrl(_base);
       final mulai = DateTime.now();
       final results = await Future.wait([
-        _client.get(Uri.parse('$base/telemetry.json${_session.suffix}'))
+        _client
+            .get(Uri.parse('$base/telemetry.json${_session.suffix}'))
             .timeout(const Duration(seconds: 8)),
-        _client.get(Uri.parse('$base/config.json${_session.suffix}'))
+        _client
+            .get(Uri.parse('$base/config.json${_session.suffix}'))
             .timeout(const Duration(seconds: 8)),
       ]);
       final res = results[0];
@@ -883,7 +862,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Gagal kirim config: $e')));
+          .showSnackBar(SnackBar(content: Text('Gagal mengirim pengaturan: $e')));
     }
   }
 
@@ -909,31 +888,51 @@ class _DashboardScreenState extends State<DashboardScreen>
   Future<void> _mulaiSesi() async {
     final pilih = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: _panel,
+      backgroundColor: ShcPalette.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-              child: Text(
-                  'Pilih mode timer dulu. Pilihan ini yang dipakai alat selama sesi berjalan.',
-                  style: _monoStyle(12, color: _dim)),
-            ),
-            for (final opt in const [
-              ('DEMO', 'Demo 15 detik'),
-              ('AUTO_DHT', 'Otomatis (sesuaikan dengan suhu ruangan)'),
-              ('MANUAL', 'Manual tetap'),
-            ])
-              ListTile(
-                title: Text(opt.$2, style: _monoStyle(13, color: _ink, weight: FontWeight.w500)),
-                onTap: () => Navigator.pop(ctx, opt.$1),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+                child: Text(
+                  'Mulai sesi baru',
+                  style: shcSans(16, color: ShcPalette.ink, weight: FontWeight.w700),
+                ),
               ),
-            const SizedBox(height: 12),
-          ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text(
+                  'Pilih cara tatakan mengatur jadwal pengingat minum selama sesi berjalan.',
+                  style: shcSans(12, color: ShcPalette.inkSoft, height: 1.4),
+                ),
+              ),
+              const Divider(color: ShcPalette.hairline, height: 1),
+              for (final opt in const [
+                ('DEMO', 'Demo 15 detik', 'Siklus cepat 15 detik untuk demonstrasi.'),
+                ('AUTO_DHT', 'Otomatis (sesuaikan dengan suhu ruangan)', 'Jeda menyesuaikan suhu dan kelembapan.'),
+                ('MANUAL', 'Manual tetap', 'Memakai jeda menit pilihanmu sendiri.'),
+              ])
+                ListTile(
+                  title: Text(
+                    opt.$2,
+                    style: shcSans(14, color: ShcPalette.ink, weight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    opt.$3,
+                    style: shcSans(12, color: ShcPalette.muted),
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: ShcPalette.muted),
+                  onTap: () => Navigator.pop(ctx, opt.$1),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -941,15 +940,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     await _setMode(pilih);
     final ok = await _setSession(ownerUid: _session.uid, active: true);
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(ok ? 'Sesi dimulai.' : 'Gagal memulai sesi.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? 'Sesi dimulai.' : 'Gagal memulai sesi.')),
+    );
   }
 
   Future<void> _akhiriSesi() async {
     final ok = await _setSession(ownerUid: '', active: false);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? 'Sesi ditutup. Alat tidur.' : 'Gagal menutup sesi.')));
+      SnackBar(content: Text(ok ? 'Sesi diakhiri. Tatakan masuk mode istirahat.' : 'Gagal menutup sesi.')),
+    );
   }
 
   void _setMuted(bool v) {
@@ -969,8 +970,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     final text = _intervalCtrl.text.trim();
     final v = int.tryParse(text);
     if (v == null || v < kMinManualIntervalMin || v > kMaxManualIntervalMin) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Interval harus 1 sampai 180 menit.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Interval harus 1 sampai 180 menit.')),
+      );
       return;
     }
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(manualIntervalMin: v));
@@ -982,220 +984,416 @@ class _DashboardScreenState extends State<DashboardScreen>
     final text = _emptyCupCtrl.text.trim();
     final v = double.tryParse(text);
     if (v == null || v < 35.0 || v > 300.0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Berat gelas kosong harus 35 sampai 300 gram.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Berat gelas kosong harus 35 sampai 300 gram.')),
+      );
       return;
     }
     setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(emptyCupWeightG: v));
     _patchConfig({'empty_cup_weight_g': v});
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Berat gelas kosong (${v.toStringAsFixed(0)} g) disimpan.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Berat gelas kosong (${v.toStringAsFixed(0)} g) disimpan.')),
+    );
   }
 
-  Color _stateColor(String s) {
+  Future<void> _editGoalSheet() async {
+    final saved = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: ShcPalette.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _GoalSheetBody(initialGoal: _goalMl),
+    );
+    if (saved == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('goal_ml', saved);
+    if (!mounted) return;
+    setState(() => _goalMl = saved);
+  }
+
+  _StateTone _stateTone(String s) {
     switch (s) {
       case 'STABLE':
-        return _ok;
+        return const _StateTone(
+          fg: ShcPalette.ok,
+          bg: ShcPalette.okBg,
+          border: ShcPalette.okBorder,
+          icon: Icons.check_circle_outline,
+        );
       case 'TIMING':
-        return _water;
+        return const _StateTone(
+          fg: ShcPalette.accent,
+          bg: ShcPalette.accentSoft,
+          border: ShcPalette.hairline,
+          icon: Icons.timer_outlined,
+        );
       case 'ALERT_DRINK':
-        return _warn;
-      case 'ALERT_CHEAT':
-        return _alarm;
       case 'ALERT_REFILL':
-        return _warn;
+        return const _StateTone(
+          fg: ShcPalette.warn,
+          bg: ShcPalette.warnBg,
+          border: ShcPalette.warnBorder,
+          icon: Icons.notifications_active_outlined,
+        );
+      case 'ALERT_CHEAT':
+        return const _StateTone(
+          fg: ShcPalette.danger,
+          bg: ShcPalette.dangerBg,
+          border: ShcPalette.dangerBorder,
+          icon: Icons.warning_amber_rounded,
+        );
       default:
-        return _dim;
+        return const _StateTone(
+          fg: ShcPalette.inkSoft,
+          bg: ShcPalette.surface,
+          border: ShcPalette.hairline,
+          icon: Icons.pause_circle_outline,
+        );
     }
-  }
-
-  Duration _pulsePeriod(String s) {
-    if (s == 'ALERT_CHEAT') return const Duration(milliseconds: 150);
-    if (s == 'ALERT_REFILL') return const Duration(milliseconds: 750);
-    return const Duration(milliseconds: 500);
   }
 
   @override
   Widget build(BuildContext context) {
     final t = _t;
-    final reduceMotion = MediaQuery.of(context).disableAnimations;
-
-    if (t != null && t.isAlert && !reduceMotion) {
-      if (!_pulse.isAnimating) {
-        _pulse.repeat(reverse: true, period: _pulsePeriod(t.canonicalState));
-      }
-    } else if (_pulse.isAnimating) {
-      _pulse.stop();
-      _pulse.value = 0;
-    }
-
-    final dotColor = _t != null && _error == null
-        ? _ok
+    final statusIcon = _t != null && _error == null
+        ? Icons.cloud_done_outlined
         : _error != null
-            ? _alarm
-            : _dim;
+            ? Icons.cloud_off_outlined
+            : Icons.sync;
+    final statusColor = _t != null && _error == null
+        ? ShcPalette.ok
+        : _error != null
+            ? ShcPalette.danger
+            : ShcPalette.muted;
+    final statusLabel = _error != null
+        ? 'Koneksi bermasalah'
+        : _t != null
+            ? 'Terhubung'
+            : 'Menghubungkan';
 
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: ShcPalette.canvas,
       appBar: AppBar(
-        backgroundColor: _panel,
+        backgroundColor: ShcPalette.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: _line, height: 1),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: SizedBox(
+            height: 1,
+            width: double.infinity,
+            child: ColoredBox(color: ShcPalette.hairline),
+          ),
         ),
         titleSpacing: 16,
         title: Row(
           children: [
             Container(
-              width: 8,
-              height: 8,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
-                  shape: BoxShape.circle, color: dotColor),
+                color: ShcPalette.accentSoft,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.water_drop_outlined,
+                color: ShcPalette.accent,
+                size: 18,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text('Smart Hydration Coaster',
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                style: TextStyle(
-                    fontFamily: _display,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: _ink,
-                    letterSpacing: .1)),
+              child: Semantics(
+                header: true,
+                child: Text(
+                  'Smart Hydration Coaster',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: shcSans(
+                    16,
+                    color: ShcPalette.ink,
+                    weight: FontWeight.w700,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: statusLabel,
+              child: Icon(
+                statusIcon,
+                size: 18,
+                color: statusColor,
+                semanticLabel: statusLabel,
+              ),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Ubah URL',
-            icon: const Icon(Icons.swap_horiz, color: _dim),
-            onPressed: widget.onChangeUrl,
+          PopupMenuButton<String>(
+            tooltip: 'Menu akun dan perangkat',
+            icon: const Icon(Icons.more_vert, color: ShcPalette.inkSoft),
+            color: ShcPalette.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: ShcPalette.hairline),
+            ),
+            onSelected: (value) {
+              if (value == 'claim' && widget.onClaimDevice != null) {
+                widget.onClaimDevice!();
+              } else if (value == 'url') {
+                widget.onChangeUrl();
+              } else if (value == 'logout' && widget.onLogout != null) {
+                widget.onLogout!();
+              }
+            },
+            itemBuilder: (context) => [
+              if (widget.onClaimDevice != null)
+                PopupMenuItem<String>(
+                  value: 'claim',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.link, size: 18, color: ShcPalette.accent),
+                      const SizedBox(width: 10),
+                      Text(
+                        _session.hasDevice ? 'Ganti alat' : 'Tautkan alat',
+                        style: shcSans(13, weight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              PopupMenuItem<String>(
+                value: 'url',
+                child: Row(
+                  children: [
+                    const Icon(Icons.swap_horiz, size: 18, color: ShcPalette.inkSoft),
+                    const SizedBox(width: 10),
+                    Text('Ubah URL', style: shcSans(13, weight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+              if (widget.onLogout != null)
+                PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.logout, size: 18, color: ShcPalette.danger),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Keluar',
+                        style: shcSans(13, color: ShcPalette.danger, weight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ],
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: _water,
-          backgroundColor: _panel,
-          onRefresh: () async {
-            await _poll();
-            await _syncReminder();
-          },
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 880;
+            final maxW = isWide ? 1080.0 : 560.0;
+            final outerPad = isWide
+                ? const EdgeInsets.symmetric(horizontal: 24, vertical: 20)
+                : const EdgeInsets.symmetric(horizontal: 16, vertical: 14);
+
+            return RefreshIndicator(
+              color: ShcPalette.accent,
+              backgroundColor: ShcPalette.surface,
+              onRefresh: () async {
+                await _poll();
+                await _loadHistory();
+                await _syncReminder();
+              },
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _syncLine(),
-                    const SizedBox(height: 14),
-                    if (_loading)
-                      _card(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 40),
-                          child: Column(
-                            children: [
-                              const CircularProgressIndicator(color: _water),
-                              const SizedBox(height: 16),
-                              Text('Menghubungkan ke Firebase…',
-                                  style: _monoStyle(12, color: _dim)),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (t == null)
-                      _card(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Column(
-                            children: [
-                              Icon(
-                                _error != null
-                                    ? Icons.cloud_off
-                                    : Icons.hourglass_empty,
-                                color: _error != null ? _alarm : _dim,
-                                size: 36,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                _error != null
-                                    ? 'Gagal membaca cloud:\n$_error'
-                                    : 'Belum ada data telemetry.\n'
-                                        'Pastikan ESP32 menyala dan terhubung Wi-Fi 2,4 GHz.',
-                                textAlign: TextAlign.center,
-                                style: _monoStyle(12, color: _ink),
-                              ),
-                              const SizedBox(height: 16),
-                              OutlinedButton(
-                                onPressed: _poll,
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: _line),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  minimumSize: const Size(160, 44),
-                                ),
-                                child: Text('Coba lagi',
-                                    style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else ...[
-                      _goalCard(t),
-                      const SizedBox(height: 14),
-                      _glassCard(t),
-                      const SizedBox(height: 14),
-                      _badgeCard(t, reduceMotion),
-                      const SizedBox(height: 14),
-                      _countdownCard(t),
-                      const SizedBox(height: 14),
-                      _reminderCard(),
-                      const SizedBox(height: 14),
-                      IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(child: _envChip('Suhu', t.tempC, ' °C')),
-                            const SizedBox(width: 14),
-                            Expanded(
-                                child: _envChip('Kelembapan', t.humidityPct, ' %')),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _dailyCard(t),
-                      if (_history.isNotEmpty) ...[
-                        const SizedBox(height: 14),
-                        _historyCard(),
-                      ],
-                      const SizedBox(height: 14),
-                      _controlsCard(),
-                      const SizedBox(height: 14),
-                      Text(
-                        'RTDB: ${Uri.parse(_base).host} · stream langsung · '
-                        'skala gelas tampilan ${_glassDisplayMl.toInt()} ml.',
-                        style: _monoStyle(11, color: _dim),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ],
+                padding: outerPad,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxW),
+                    child: _buildBody(t, isWide),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  // ── Pengingat minum ───────────────────────────────────────────────────────
+  Widget _buildBody(Telemetry? t, bool isWide) {
+    if (_loading) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: _card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 36),
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(color: ShcPalette.accent),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Menghubungkan ke Firebase…',
+                    style: shcSans(13, color: ShcPalette.inkSoft, weight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (t == null) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: _card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  Icon(
+                    _error != null ? Icons.cloud_off : Icons.hourglass_empty,
+                    color: _error != null ? ShcPalette.danger : ShcPalette.muted,
+                    size: 36,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _error != null
+                        ? 'Gagal membaca cloud:\n$_error'
+                        : 'Belum ada data telemetry.\n'
+                            'Pastikan tatakan gelas menyala dan terhubung Wi-Fi 2,4 GHz.',
+                    textAlign: TextAlign.center,
+                    style: shcSans(13, color: ShcPalette.ink, height: 1.5),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton(
+                    onPressed: _poll,
+                    child: const Text('Coba lagi'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final gap = isWide ? 16.0 : 12.0;
+
+    final envRow = IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _envChip('Suhu', t.tempC, ' °C')),
+          SizedBox(width: gap),
+          Expanded(child: _envChip('Kelembapan', t.humidityPct, ' %')),
+        ],
+      ),
+    );
+
+    final footerNote = Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 12),
+      child: Text(
+        'Sinkron online aktif (${Uri.parse(_base).host}), skala gelas ${_glassDisplayMl.toInt()} ml.',
+        style: shcSans(11, color: ShcPalette.muted),
+        textAlign: TextAlign.center,
+      ),
+    );
+
+    if (!isWide) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _syncLine(),
+          SizedBox(height: gap),
+          _glassCard(t),
+          SizedBox(height: gap),
+          _badgeCard(t),
+          SizedBox(height: gap),
+          _countdownCard(t),
+          SizedBox(height: gap),
+          _goalCard(t),
+          SizedBox(height: gap),
+          envRow,
+          SizedBox(height: gap),
+          _dailyCard(t),
+          if (_history.isNotEmpty) ...[
+            SizedBox(height: gap),
+            _historyCard(),
+          ],
+          SizedBox(height: gap),
+          _reminderCard(),
+          SizedBox(height: gap),
+          _controlsCard(),
+          SizedBox(height: gap),
+          footerNote,
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 5,
+              child: FocusTraversalGroup(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _syncLine(),
+                    SizedBox(height: gap),
+                    _glassCard(t),
+                    SizedBox(height: gap),
+                    _badgeCard(t),
+                    SizedBox(height: gap),
+                    _countdownCard(t),
+                    SizedBox(height: gap),
+                    _goalCard(t),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              flex: 7,
+              child: FocusTraversalGroup(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    envRow,
+                    SizedBox(height: gap),
+                    _dailyCard(t),
+                    if (_history.isNotEmpty) ...[
+                      SizedBox(height: gap),
+                      _historyCard(),
+                    ],
+                    SizedBox(height: gap),
+                    _reminderCard(),
+                    SizedBox(height: gap),
+                    _controlsCard(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: gap),
+        footerNote,
+      ],
+    );
+  }
 
   Future<void> _loadReminder() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1246,8 +1444,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  ReminderPlan? _plan;
-
   void _syncReminderOnData() {
     if (!_remindOn) return;
     final t = _t;
@@ -1296,8 +1492,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       final allowed = await ReminderService.requestNotificationPermission();
       if (!allowed && mounted) {
         setState(() => _remindOn = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Izin notifikasi ditolak. Pengingat tidak bisa berbunyi.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Izin notifikasi ditolak. Pengingat tidak bisa berbunyi.'),
+          ),
+        );
         return;
       }
     }
@@ -1325,7 +1524,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tidak bisa membaca berkas audio itu.')));
+        const SnackBar(content: Text('Tidak bisa membaca berkas audio itu.')),
+      );
       return;
     }
     setState(() => _remindSound = 'file://${dest.path}');
@@ -1347,30 +1547,48 @@ class _DashboardScreenState extends State<DashboardScreen>
           children: [
             Row(
               children: [
-                Text('Pengingat minum', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
-                const Spacer(),
-                Switch(
-                  value: _remindOn,
-                  activeThumbColor: _water,
-                  onChanged: _toggleRemind,
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      'Pengingat minum',
+                      style: shcSans(13, color: ShcPalette.ink, weight: FontWeight.w700),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Semantics(
+                  label: 'Pengingat minum',
+                  child: Switch(
+                    value: _remindOn,
+                    onChanged: _toggleRemind,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               _remindOn
                   ? (_remindLeft != null
                       ? 'Berbunyi dalam ${Telemetry.mmss(_remindLeft!.inSeconds)}'
-                      : 'Menunggu jadwal dari alat…')
+                      : 'Menunggu jadwal dari tatakan...')
                   : 'Nonaktif',
-              style: _monoStyle(12, color: _remindOn ? _water : _dim, weight: FontWeight.w600),
+              style: shcSans(
+                12,
+                color: _remindOn ? ShcPalette.accent : ShcPalette.inkSoft,
+                weight: FontWeight.w500,
+              ),
             ),
             if (_remindOn) ...[
               const SizedBox(height: 10),
-              Text(_remindSound == null
-                      ? 'Nada: bawaan'
-                      : 'Nada: ${_shortPath(_remindSound!)}',
-                  style: _monoStyle(11, color: _dim), overflow: TextOverflow.ellipsis),
+              Text(
+                _remindSound == null
+                    ? 'Nada: bawaan'
+                    : 'Nada: ${_shortPath(_remindSound!)}',
+                style: shcSans(12, color: ShcPalette.muted),
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -1379,33 +1597,41 @@ class _DashboardScreenState extends State<DashboardScreen>
                   OutlinedButton(
                     onPressed: _pickSound,
                     style: _reminderBtn(),
-                    child: Text('Pilih audio', style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
+                    child: const Text('Pilih audio'),
                   ),
                   OutlinedButton(
                     onPressed: _useDefaultSound,
                     style: _reminderBtn(),
-                    child: Text('Nada bawaan', style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
+                    child: const Text('Nada bawaan'),
                   ),
                   OutlinedButton(
                     onPressed: () => ReminderService.preview(_remindSound),
                     style: _reminderBtn(),
-                    child: Text('Uji', style: _monoStyle(11, color: _water, weight: FontWeight.w600)),
+                    child: const Text('Uji'),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Text('Getar', style: _monoStyle(11, color: _dim)),
-                  const Spacer(),
-                  Switch(
-                    value: _remindVibrate,
-                    activeThumbColor: _water,
-                    onChanged: (v) async {
-                      setState(() => _remindVibrate = v);
-                      await _saveReminderPrefs();
-                      await _syncReminder();
-                    },
+                  Expanded(
+                    child: Text(
+                      'Getar',
+                      style: shcSans(12, color: ShcPalette.inkSoft, weight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Semantics(
+                    label: 'Getar saat pengingat',
+                    child: Switch(
+                      value: _remindVibrate,
+                      onChanged: (v) async {
+                        setState(() => _remindVibrate = v);
+                        await _saveReminderPrefs();
+                        await _syncReminder();
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -1414,8 +1640,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     'Izin alarm tepat waktu belum aktif. Pengingat bisa meleset beberapa menit; '
-                    'aktifkan di Pengaturan › Aplikasi › Alarm & pengingat.',
-                    style: _monoStyle(11, color: _warn),
+                    'aktifkan di Pengaturan > Aplikasi > Alarm & pengingat.',
+                    style: shcSans(11, color: ShcPalette.warn, weight: FontWeight.w500),
                   ),
                 ),
             ],
@@ -1424,9 +1650,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       );
 
   ButtonStyle _reminderBtn() => OutlinedButton.styleFrom(
-        side: const BorderSide(color: _line),
+        foregroundColor: ShcPalette.accent,
+        side: const BorderSide(color: ShcPalette.controlBorder),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        minimumSize: const Size(0, 40),
+        minimumSize: const Size(48, 48),
         padding: const EdgeInsets.symmetric(horizontal: 12),
       );
 
@@ -1435,9 +1662,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     return name.length > 28 ? '…${name.substring(name.length - 26)}' : name;
   }
 
-  int? _lastHb;
-  DateTime? _lastHbAt;
-
   void _trackHeartbeat(Telemetry t) {
     if (t.heartbeat == 0) return;
     if (t.heartbeat != _lastHb) {
@@ -1445,10 +1669,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       _lastHbAt = DateTime.now();
     }
   }
-
-  List<MapEntry<String, Map<String, dynamic>>> _history = const [];
-  bool _historyLoading = false;
-  int? _historyDrinks;
 
   void _maybeReloadHistory(Telemetry t) {
     if (_historyDrinks == t.drinkCount) return;
@@ -1468,8 +1688,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (raw is! Map) return;
       final entries = raw.entries
           .where((e) => e.value is Map)
-          .map((e) => MapEntry(e.key as String,
-              Map<String, dynamic>.from(e.value as Map)))
+          .map((e) => MapEntry(e.key as String, Map<String, dynamic>.from(e.value as Map)))
           .toList()
         ..sort((a, b) => b.key.compareTo(a.key));
       if (!mounted) return;
@@ -1479,11 +1698,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       _historyLoading = false;
     }
   }
-
-  int _goalMl = 2000;
-  DateTime? _dayKey;
-  double _dayBaseMl = 0;
-  int _dayBaseDrink = 0;
 
   String _todayKey() =>
       '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-'
@@ -1533,9 +1747,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
-  double _dayMl = 0;
-  bool _dayFresh = false;
-
   Widget _goalCard(Telemetry t) {
     final ml = _dayMl;
     final pct = _goalMl > 0 ? (ml / _goalMl).clamp(0.0, 1.0) : 0.0;
@@ -1546,90 +1757,136 @@ class _DashboardScreenState extends State<DashboardScreen>
         children: [
           Row(
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: _water,
-                  shape: BoxShape.circle,
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    'Hari ini',
+                    style: shcSans(14, color: ShcPalette.ink, weight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              Text('Hari ini', style: _monoStyle(12, color: _ink, weight: FontWeight.w700)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _panel2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _line),
+              Flexible(
+                child: InkWell(
+                  onTap: _editGoalSheet,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Semantics(
+                    label: 'Ubah target minum harian $_goalMl ml',
+                    excludeSemantics: true,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: ShcPalette.subtle,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Target $_goalMl ml',
+                                style: shcSans(12, color: ShcPalette.inkSoft, weight: FontWeight.w500),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.edit_outlined, size: 14, color: ShcPalette.inkSoft),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                child: Text('Target $_goalMl ml',
-                    style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Center(
-            child: SizedBox(
-              width: 148,
-              height: 148,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CustomPaint(
-                    size: const Size(148, 148),
-                    painter: _RadialRingPainter(
-                      progress: pct,
-                      trackColor: _panel2,
-                      progressColor: _water,
-                      strokeWidth: 11,
+            child: Semantics(
+              label: 'Progres hidrasi hari ini $percentInt persen, ${ml.toStringAsFixed(0)} dari $_goalMl ml',
+              excludeSemantics: true,
+              child: SizedBox(
+                width: 144,
+                height: 144,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size(144, 144),
+                      painter: HydrationRingPainter(
+                        progress: pct,
+                      ),
                     ),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '$percentInt%',
-                        style: _monoStyle(30, color: _ink, weight: FontWeight.w700),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '$percentInt%',
+                              style: shcMono(28, color: ShcPalette.ink, weight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${ml.toStringAsFixed(0)} / $_goalMl ml',
+                              style: shcMono(12, color: ShcPalette.accent, weight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${ml.toStringAsFixed(0)} / $_goalMl ml',
-                        style: _monoStyle(12, color: _water, weight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: _panel2,
+              color: ShcPalette.subtle,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _line),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Status Hidrasi', style: _monoStyle(11, color: _dim)),
-                Text(
-                  pct >= 1.0
-                      ? 'Target harian terpenuhi'
-                      : '${(_goalMl - ml > 0 ? (_goalMl - ml) : 0).toStringAsFixed(0)} ml lagi',
-                  style: _monoStyle(11, color: pct >= 1.0 ? _ok : _ink, weight: FontWeight.w600),
-                ),
-              ],
+            child: MergeSemantics(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Status hidrasi',
+                      style: shcSans(12, color: ShcPalette.inkSoft),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      pct >= 1.0
+                          ? 'Target harian terpenuhi'
+                          : '${(_goalMl - ml > 0 ? (_goalMl - ml) : 0).toStringAsFixed(0)} ml lagi',
+                      textAlign: TextAlign.end,
+                      overflow: TextOverflow.ellipsis,
+                      style: shcSans(
+                        12,
+                        color: pct >= 1.0 ? ShcPalette.ok : ShcPalette.ink,
+                        weight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           if (_dayFresh) ...[
             const SizedBox(height: 10),
             Text(
               'Hari baru: hitungan dimulai dari posisi saat aplikasi dibuka.',
-              style: _monoStyle(10, color: _dim),
+              style: shcSans(11, color: ShcPalette.muted),
             ),
           ],
         ],
@@ -1643,28 +1900,27 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Riwayat', style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
-          const SizedBox(height: 10),
-          for (final e in _history)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Expanded(child: Text(e.key, style: _monoStyle(12, color: _ink))),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _water.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      '${(e.value['total_ml'] as num? ?? 0).toStringAsFixed(1)} ml',
-                      style: _monoStyle(12, color: _water, weight: FontWeight.w600),
-                    ),
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    'Riwayat',
+                    style: shcSans(14, color: ShcPalette.ink, weight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Text(
+                '7 hari terakhir',
+                style: shcSans(11, color: ShcPalette.muted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          HistoryBarsList(entries: _history, goalMl: _goalMl),
         ],
       ),
     );
@@ -1674,39 +1930,32 @@ class _DashboardScreenState extends State<DashboardScreen>
     final stale = _lastHbAt != null &&
         DateTime.now().difference(_lastHbAt!).inSeconds > 90;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _line),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x050F172A),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: shcCardDecoration(
+        color: stale ? ShcPalette.dangerBg : ShcPalette.surface,
+        borderColor: stale ? ShcPalette.dangerBorder : ShcPalette.hairline,
+        radius: 12,
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: (stale ? _alarm : _water).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text('CLOUD',
-                style: _monoStyle(10, color: stale ? _alarm : _water, weight: FontWeight.w700)),
+          Icon(
+            stale ? Icons.sync_problem : Icons.cloud_done_outlined,
+            size: 16,
+            color: stale ? ShcPalette.danger : ShcPalette.accent,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               stale
                   ? 'Alat tidak mengirim data (${DateTime.now().difference(_lastHbAt!).inSeconds} detik)'
                   : _lastSync == null
-                      ? 'menunggu sinkron pertama…'
-                      : 'sinkron ${TimeOfDay.fromDateTime(_lastSync!).format(context)}',
-              style: _monoStyle(11, color: stale ? _alarm : _ink),
+                      ? 'Menunggu pembaruan pertama...'
+                      : 'Sinkron online ${TimeOfDay.fromDateTime(_lastSync!).format(context)}',
+              style: shcSans(
+                12,
+                color: stale ? ShcPalette.danger : ShcPalette.inkSoft,
+                weight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -1714,13 +1963,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _card({required Widget child, EdgeInsetsGeometry? padding, Color? color}) => Container(
-        decoration: BoxDecoration(
-          color: color ?? _panel,
-          border: Border.all(color: _line),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: _cardShadow,
-        ),
+  Widget _card({
+    required Widget child,
+    EdgeInsetsGeometry? padding,
+    Color? color,
+    Color? borderColor,
+  }) =>
+      Container(
+        decoration: shcCardDecoration(color: color, borderColor: borderColor),
         padding: padding ?? const EdgeInsets.all(18),
         child: child,
       );
@@ -1734,51 +1984,79 @@ class _DashboardScreenState extends State<DashboardScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(
-                width: 110,
-                height: 156,
-                child: CustomPaint(
-                  painter: _GlassPainter(
-                    fill: fill,
-                    present: t.cupPresent,
-                    water: _water,
-                    line: _line,
+              Semantics(
+                label: 'Ilustrasi gelas berisi ${t.waterMl.toStringAsFixed(0)} ml',
+                child: SizedBox(
+                  width: 108,
+                  height: 152,
+                  child: CustomPaint(
+                    painter: CoasterGlassPainter(
+                      fill: fill,
+                      present: t.cupPresent,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 20),
+              const SizedBox(width: 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Berat', style: _monoStyle(11, color: _dim)),
-                    const SizedBox(height: 2),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(t.weightG.toStringAsFixed(1),
-                            style: _monoStyle(34,
-                                color: _ink, weight: FontWeight.w700)),
-                        const SizedBox(width: 4),
-                        Text('gram', style: _monoStyle(11, color: _dim)),
-                      ],
+                    MergeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Berat', style: shcSans(12, color: ShcPalette.inkSoft)),
+                          const SizedBox(height: 2),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Text(
+                                    t.weightG.toStringAsFixed(1),
+                                    style: shcMono(32, color: ShcPalette.ink, weight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text('gram', style: shcSans(12, color: ShcPalette.muted)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 14),
-                    Text('Air terdeteksi', style: _monoStyle(11, color: _dim)),
-                    const SizedBox(height: 2),
-                    Text('${t.waterMl.toStringAsFixed(0)} ml',
-                        style: _monoStyle(18, color: _water, weight: FontWeight.w600)),
+                    MergeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Air terdeteksi', style: shcSans(12, color: ShcPalette.inkSoft)),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${t.waterMl.toStringAsFixed(0)} ml',
+                            style: shcMono(18, color: ShcPalette.accent, weight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
                     if (!t.cupPresent) ...[
                       const SizedBox(height: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: _warn.withValues(alpha: 0.12),
+                          color: ShcPalette.warnBg,
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: ShcPalette.warnBorder),
                         ),
-                        child: Text('Gelas tidak di tatakan',
-                            style: _monoStyle(11, color: _warn, weight: FontWeight.w600)),
+                        child: Text(
+                          'Gelas tidak di tatakan',
+                          style: shcSans(11, color: ShcPalette.warn, weight: FontWeight.w700),
+                        ),
                       ),
                     ],
                   ],
@@ -1787,46 +2065,56 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
           const SizedBox(height: 12),
-          Text('Skala gelas tampilan: ${_glassDisplayMl.toInt()} ml',
-              style: _monoStyle(11, color: _dim)),
+          Text(
+            'Kapasitas gelas acuan: ${_glassDisplayMl.toInt()} ml',
+            style: shcSans(12, color: ShcPalette.muted),
+          ),
         ],
       ),
     );
   }
 
-  Widget _badgeCard(Telemetry t, bool reduceMotion) {
-    final color = _stateColor(t.canonicalState);
-    final name = t.stateName;
-    return AnimatedBuilder(
-      animation: _pulse,
-      builder: (context, _) {
-        final c = (t.isAlert && !reduceMotion)
-            ? Color.lerp(color, _panel, _pulse.value * 0.6)!
-            : color;
-        return Container(
-          decoration: BoxDecoration(
-            color: _panel,
-            border: Border.all(color: c, width: 2),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: _cardShadow,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(name,
-                  style: TextStyle(
-                      fontFamily: _display,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: color,
-                      letterSpacing: .4)),
-              const SizedBox(height: 4),
-              Text(t.reason, style: _monoStyle(12, color: _ink)),
-            ],
-          ),
-        );
-      },
+  Widget _badgeCard(Telemetry t) {
+    final tone = _stateTone(t.canonicalState);
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: _card(
+        color: tone.bg,
+        borderColor: tone.border,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(tone.icon, color: tone.fg, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t.stateName,
+                    style: shcSans(
+                      20,
+                      color: tone.fg,
+                      weight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    t.reason,
+                    style: shcSans(13, color: ShcPalette.ink, height: 1.35),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1842,42 +2130,61 @@ class _DashboardScreenState extends State<DashboardScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: timing ? _water : _dim,
-                  shape: BoxShape.circle,
+              Expanded(
+                child: Text(
+                  'Sisa waktu',
+                  style: shcSans(13, color: ShcPalette.ink, weight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
-              Text('Sisa waktu', style: _monoStyle(12, color: _ink, weight: FontWeight.w700)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _panel2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _line),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: ShcPalette.subtle,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'target ${_fmtTargetMnt(t.targetIntervalMin)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: shcSans(11, color: ShcPalette.inkSoft, weight: FontWeight.w500),
+                  ),
                 ),
-                child: Text('target ${_fmtTargetMnt(t.targetIntervalMin)}',
-                    style: _monoStyle(11, color: _dim)),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(timing ? Telemetry.mmss(rem) : '--:--',
-              style: _monoStyle(36, color: _ink, weight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              timing ? Telemetry.mmss(rem) : '--:--',
+              style: shcMono(34, color: ShcPalette.ink, weight: FontWeight.w600),
+            ),
+          ),
           const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 8,
-              backgroundColor: _panel2,
-              valueColor: const AlwaysStoppedAnimation(_water),
+          Semantics(
+            label: timing ? 'Sisa waktu ${Telemetry.mmss(rem)}' : 'Penghitung waktu berhenti',
+            excludeSemantics: true,
+            child: Container(
+              decoration: BoxDecoration(
+                color: ShcPalette.subtle,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: ShcPalette.controlBorder.withValues(alpha: 0.45),
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 8,
+                  backgroundColor: Colors.transparent,
+                  valueColor: const AlwaysStoppedAnimation(ShcPalette.accent),
+                ),
+              ),
             ),
           ),
         ],
@@ -1885,90 +2192,117 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _envChip(String label, double value, String unit) => _card(
-        padding: const EdgeInsets.all(16),
+  Widget _envChip(String label, double value, String unit) {
+    final isTemp = label == 'Suhu';
+    return _card(
+      padding: const EdgeInsets.all(16),
+      child: MergeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: label == 'Suhu' ? _warn : _water,
-                    shape: BoxShape.circle,
-                  ),
+                Icon(
+                  isTemp ? Icons.thermostat_outlined : Icons.water_drop_outlined,
+                  size: 16,
+                  color: isTemp ? ShcPalette.warn : ShcPalette.accent,
                 ),
                 const SizedBox(width: 6),
-                Text(label, style: _monoStyle(11, color: _dim, weight: FontWeight.w600)),
+                Expanded(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: shcSans(12, color: ShcPalette.inkSoft, weight: FontWeight.w500),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
-            Text('${value.toStringAsFixed(1)}$unit',
-                style: _monoStyle(22, color: _ink, weight: FontWeight.w700)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${value.toStringAsFixed(1)}$unit',
+                style: shcMono(22, color: ShcPalette.ink, weight: FontWeight.w600),
+              ),
+            ),
             const SizedBox(height: 4),
-            Text(label == 'Suhu' ? 'Sensor DHT11' : 'Kelembapan ruang',
-                style: _monoStyle(10, color: _dim)),
+            Text(
+              isTemp ? 'Suhu ruangan' : 'Kelembapan ruang',
+              style: shcSans(11, color: ShcPalette.muted),
+            ),
           ],
         ),
-      );
+      ),
+    );
+  }
 
   Widget _dailyCard(Telemetry t) => _card(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: _ok,
-                    shape: BoxShape.circle,
+                Expanded(
+                  child: Text(
+                    'Akumulasi sesi',
+                    overflow: TextOverflow.ellipsis,
+                    style: shcSans(13, color: ShcPalette.ink, weight: FontWeight.w700),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text('Akumulasi sesi', style: _monoStyle(12, color: _ink, weight: FontWeight.w700)),
-                const Spacer(),
-                Text('${t.totalMl.toStringAsFixed(1)} ml',
-                    style: _monoStyle(20, color: _water, weight: FontWeight.w700)),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '${t.totalMl.toStringAsFixed(1)} ml',
+                      style: shcMono(19, color: ShcPalette.accent, weight: FontWeight.w600),
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _countCell('Minum', '${t.drinkCount}', _ok, isFirst: true),
-                _countCell('Isi ulang', '${t.refillCount}', _water),
-                _countCell('Tegukan kecil', '${t.cheatCount}', _alarm, isLast: true),
-              ],
+            const SizedBox(height: 14),
+            Container(
+              decoration: BoxDecoration(
+                color: ShcPalette.subtle,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: IntrinsicHeight(
+                child: Row(
+                  children: [
+                    _countCell('Minum', '${t.drinkCount}', ShcPalette.ok),
+                    const VerticalDivider(color: ShcPalette.hairline, width: 1),
+                    _countCell('Isi ulang', '${t.refillCount}', ShcPalette.accent),
+                    const VerticalDivider(color: ShcPalette.hairline, width: 1),
+                    _countCell('Tegukan kecil', '${t.cheatCount}', ShcPalette.warn),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       );
 
-  Widget _countCell(String label, String value, Color color, {bool isFirst = false, bool isLast = false}) => Expanded(
+  Widget _countCell(String label, String value, Color color) => Expanded(
         child: Semantics(
           label: '$label: $value',
           excludeSemantics: true,
-          child: Container(
-            margin: EdgeInsets.only(
-              left: isFirst ? 0 : 4,
-              right: isLast ? 0 : 4,
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: _panel2,
-              border: Border.all(color: _line),
-              borderRadius: BorderRadius.circular(14),
-            ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(value,
-                    style: _monoStyle(20, color: color, weight: FontWeight.w700)),
+                Text(value, style: shcMono(20, color: color, weight: FontWeight.w600)),
                 const SizedBox(height: 2),
-                Text(label, style: _monoStyle(11, color: _dim)),
+                Text(
+                  label,
+                  style: shcSans(11, color: ShcPalette.inkSoft),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
@@ -1983,50 +2317,96 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Kontrol', style: _monoStyle(11, color: _water, weight: FontWeight.w700)),
-          const SizedBox(height: 8),
+          Semantics(
+            header: true,
+            child: Text(
+              'Pengaturan',
+              style: shcSans(14, color: ShcPalette.ink, weight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: Text('Buzzer', style: _monoStyle(13, color: _ink, weight: FontWeight.w500))),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: (muted ? _warn : _ok).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
+              Expanded(
+                child: Text(
+                  'Buzzer',
+                  style: shcSans(13, color: ShcPalette.ink, weight: FontWeight.w500),
                 ),
-                child: Text(muted ? 'OFF' : 'ON',
-                    style: _monoStyle(11, color: muted ? _warn : _ok, weight: FontWeight.w700)),
+              ),
+              ExcludeSemantics(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: muted ? ShcPalette.warnBg : ShcPalette.okBg,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: muted ? ShcPalette.warnBorder : ShcPalette.okBorder,
+                    ),
+                  ),
+                  child: Text(
+                    muted ? 'OFF' : 'ON',
+                    style: shcSans(
+                      11,
+                      color: muted ? ShcPalette.warn : ShcPalette.ok,
+                      weight: FontWeight.w700,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
-              Switch(
-                value: muted,
-                activeThumbColor: _water,
-                onChanged: _setMuted,
+              Semantics(
+                label: 'Bisukan buzzer',
+                child: Switch(
+                  value: muted,
+                  onChanged: _setMuted,
+                ),
               ),
             ],
           ),
-          const Divider(color: _line, height: 24),
-          Text('Mode timer', style: _monoStyle(12, color: _ink, weight: FontWeight.w600)),
+          const Divider(color: ShcPalette.hairline, height: 24),
+          Text(
+            'Mode pengingat',
+            style: shcSans(13, color: ShcPalette.ink, weight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           SegmentedButton<String>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(
-                  value: 'DEMO',
-                  label: Text('DEMO 15 dtk', style: TextStyle(fontFamily: _mono, fontSize: 11))),
+                value: 'DEMO',
+                label: FittedBox(fit: BoxFit.scaleDown, child: Text('DEMO 15 dtk')),
+              ),
               ButtonSegment(
-                  value: 'AUTO_DHT',
-                  label: Text('AUTO_DHT', style: TextStyle(fontFamily: _mono, fontSize: 11))),
+                value: 'AUTO_DHT',
+                label: FittedBox(fit: BoxFit.scaleDown, child: Text('AUTO_DHT')),
+              ),
               ButtonSegment(
-                  value: 'MANUAL',
-                  label: Text('MANUAL', style: TextStyle(fontFamily: _mono, fontSize: 11))),
+                value: 'MANUAL',
+                label: FittedBox(fit: BoxFit.scaleDown, child: Text('MANUAL')),
+              ),
             ],
             selected: {mode},
             style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected) ? _water.withValues(alpha: 0.12) : _panel2),
-              foregroundColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected) ? _water : _dim),
-              side: WidgetStateProperty.all(const BorderSide(color: _line)),
+              minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              ),
+              textStyle: WidgetStatePropertyAll(
+                shcSans(11, weight: FontWeight.w700),
+              ),
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? ShcPalette.accentSoft
+                    : ShcPalette.subtle,
+              ),
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? ShcPalette.accent
+                    : ShcPalette.inkSoft,
+              ),
+              side: const WidgetStatePropertyAll(
+                BorderSide(color: ShcPalette.controlBorder),
+              ),
             ),
             onSelectionChanged: (s) => _setMode(s.first),
           ),
@@ -2038,31 +2418,20 @@ class _DashboardScreenState extends State<DashboardScreen>
                   child: TextField(
                     controller: _intervalCtrl,
                     keyboardType: TextInputType.number,
-                    style: _monoStyle(13, color: _ink),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: 'Interval dasar (menit)',
-                      labelStyle: _monoStyle(11, color: _dim),
-                      filled: true,
-                      fillColor: _panel2,
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: _line)),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: _water, width: 2)),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _sendInterval(),
+                    style: shcMono(13, color: ShcPalette.ink),
+                    decoration: shcInputDecoration(
+                      label: 'Interval dasar (menit)',
+                      dense: true,
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 OutlinedButton(
                   onPressed: _sendInterval,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: _line),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    minimumSize: const Size(88, 44),
-                  ),
-                  child: Text('Kirim', style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(84, 48)),
+                  child: const Text('Kirim'),
                 ),
               ],
             ),
@@ -2074,104 +2443,110 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: TextField(
                   controller: _emptyCupCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: _monoStyle(13, color: _ink),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    labelText: 'Berat gelas kosong (g)',
-                    labelStyle: _monoStyle(11, color: _dim),
-                    filled: true,
-                    fillColor: _panel2,
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: _line)),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: _water, width: 2)),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _sendEmptyCup(),
+                  style: shcMono(13, color: ShcPalette.ink),
+                  decoration: shcInputDecoration(
+                    label: 'Berat gelas kosong (g)',
+                    dense: true,
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               OutlinedButton(
                 onPressed: _sendEmptyCup,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _line),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  minimumSize: const Size(88, 44),
-                ),
-                child: Text('Simpan', style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(minimumSize: const Size(84, 48)),
+                child: const Text('Simpan'),
               ),
             ],
           ),
           if (_hintTargetLama != null) ...[
             const SizedBox(height: 10),
-            Text(
-              'Pengaturan baru aktif siklus berikutnya (saat ini masih memakai target ${_fmtTargetMnt(_hintTargetLama!)}).',
-              style: _monoStyle(11, color: _warn),
+            Semantics(
+              container: true,
+              liveRegion: true,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: ShcPalette.warnBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: ShcPalette.warnBorder),
+                ),
+                child: Text(
+                  'Pengaturan baru aktif siklus berikutnya (saat ini masih memakai target ${_fmtTargetMnt(_hintTargetLama!)}).',
+                  style: shcSans(12, color: ShcPalette.warn, weight: FontWeight.w500),
+                ),
+              ),
             ),
           ],
-          const Divider(color: _line, height: 24),
-          Text('Sesi', style: _monoStyle(12, color: _ink, weight: FontWeight.w600)),
+          const Divider(color: ShcPalette.hairline, height: 24),
+          Text(
+            'Sesi minum',
+            style: shcSans(13, color: ShcPalette.ink, weight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           if (_t?.standby == true)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Text('Mode siaga aktif. Sesi belum dimulai, alarm dan timer berhenti.',
-                  style: _monoStyle(11, color: _warn)),
+              child: Text(
+                'Mode istirahat aktif. Pengingat dan hitungan sedang berhenti.',
+                style: shcSans(12, color: ShcPalette.warn, weight: FontWeight.w500),
+              ),
             ),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: FilledButton(
                   onPressed: _mulaiSesi,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: _line),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    minimumSize: const Size(0, 44),
-                  ),
-                  child: Text('Mulai sesi', style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
+                  child: const Text('Mulai sesi'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton(
                   onPressed: _akhiriSesi,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: _line),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    minimumSize: const Size(0, 44),
-                  ),
-                  child: Text('Akhiri sesi', style: _monoStyle(12, color: _dim, weight: FontWeight.w500)),
+                  child: const Text('Akhiri sesi'),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text('Kalibrasi bobot kosong dapat disimpan via cloud atau USB.',
-              style: _monoStyle(11, color: _dim)),
+          const SizedBox(height: 10),
+          Text(
+            'Kalibrasi bobot gelas kosong bisa langsung disimpan lewat cloud.',
+            style: shcSans(11, color: ShcPalette.muted),
+          ),
           if (widget.onClaimDevice != null) ...[
-            const Divider(color: _line, height: 24),
-            Text('Alat', style: _monoStyle(12, color: _ink, weight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Text(
-              _session.hasDevice
-                  ? 'tertaut: ${_session.deviceUid}'
-                  : 'belum tertaut ke alat',
-              style: _monoStyle(11, color: _session.hasDevice ? _ok : _warn, weight: FontWeight.w600),
-            ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton(
-                onPressed: widget.onClaimDevice,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _line),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  minimumSize: const Size(0, 44),
+            const Divider(color: ShcPalette.hairline, height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tatakan tertaut',
+                        style: shcSans(13, color: ShcPalette.ink, weight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _session.hasDevice
+                            ? 'Perangkat tersambung ke akun'
+                            : 'Belum ada perangkat ditautkan',
+                        style: shcSans(
+                          12,
+                          color: _session.hasDevice ? ShcPalette.ok : ShcPalette.warn,
+                          weight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Text(_session.hasDevice ? 'Ganti alat' : 'Tautkan alat',
-                    style: _monoStyle(12, color: _water, weight: FontWeight.w600)),
-              ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: widget.onClaimDevice,
+                  child: Text(_session.hasDevice ? 'Ganti alat' : 'Tautkan alat'),
+                ),
+              ],
             ),
           ],
         ],
@@ -2180,7 +2555,19 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 }
 
-// ── Layar klaim alat ────────────────────────────────────────────────────────
+class _StateTone {
+  final Color fg;
+  final Color bg;
+  final Color border;
+  final IconData icon;
+
+  const _StateTone({
+    required this.fg,
+    required this.bg,
+    required this.border,
+    required this.icon,
+  });
+}
 
 class ClaimScreen extends StatefulWidget {
   final String url;
@@ -2188,8 +2575,15 @@ class ClaimScreen extends StatefulWidget {
   final void Function(String deviceUid) onClaimed;
   final VoidCallback? onCancel;
   final http.Client? client;
-  const ClaimScreen({super.key, required this.url, required this.session,
-      required this.onClaimed, this.onCancel, this.client});
+  const ClaimScreen({
+    super.key,
+    required this.url,
+    required this.session,
+    required this.onClaimed,
+    this.onCancel,
+    this.client,
+  });
+
   @override
   State<ClaimScreen> createState() => _ClaimScreenState();
 }
@@ -2197,107 +2591,177 @@ class ClaimScreen extends StatefulWidget {
 class _ClaimScreenState extends State<ClaimScreen> {
   final _code = TextEditingController();
   String? _error;
+  String? _info;
   bool _busy = false;
 
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+      _info = null;
+    });
     try {
       final deviceUid = await claimDevice(
-          base: widget.url, code: _code.text, session: widget.session,
-          client: widget.client);
+        base: widget.url,
+        code: _code.text,
+        session: widget.session,
+        client: widget.client,
+      );
       if (!mounted) return;
       widget.onClaimed(deviceUid);
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.toString().replaceFirst('Exception: ', ''); });
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
     } finally {
-      if (mounted) setState(() { _busy = false; });
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _findOwn() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      final linked = await discoverDevice(
+        base: widget.url,
+        session: widget.session,
+        client: widget.client,
+      );
+      if (linked.isNotEmpty) {
+        final updated = widget.session.copyWith(deviceUid: linked);
+        await saveSession(updated);
+        if (!mounted) return;
+        widget.onClaimed(linked);
+        return;
+      }
+      final code = await findOwnClaimCode(
+        base: widget.url,
+        session: widget.session,
+        client: widget.client,
+      );
+      if (!mounted) return;
+      if (code.isNotEmpty) {
+        _code.text = code;
+        setState(() {
+          _info = 'Kode ditemukan: $code. Tekan tombol Tautkan.';
+        });
+      } else {
+        setState(() {
+          _error = 'Belum ada kode tersimpan di akun. Ketik 8 karakter dari stiker atau panduan alat.';
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Gagal mencari tatakan. Periksa jaringan lalu coba lagi.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: _bg,
+        backgroundColor: ShcPalette.canvas,
         body: SafeArea(
           child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: _panel,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _line),
-                      boxShadow: _cardShadow,
-                    ),
-                    padding: const EdgeInsets.all(28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text('Tautkan alat',
-                            style: TextStyle(fontFamily: _display, fontSize: 28,
-                                fontWeight: FontWeight.w600, color: _ink, height: 1.15)),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Container(
+                  decoration: shcCardDecoration(radius: 20),
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Tautkan alat',
+                        style: shcSans(
+                          24,
+                          color: ShcPalette.ink,
+                          weight: FontWeight.w700,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Masukkan kode 8 karakter dari stiker tatakan atau panduan alat agar data sinkron di HP dan web.',
+                        style: shcSans(13, color: ShcPalette.inkSoft, height: 1.45),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _code,
+                        textCapitalization: TextCapitalization.characters,
+                        textInputAction: TextInputAction.go,
+                        onSubmitted: (_) => _submit(),
+                        maxLength: 8,
+                        style: shcMono(
+                          22,
+                          color: ShcPalette.ink,
+                          weight: FontWeight.w600,
+                          letterSpacing: 3,
+                        ),
+                        decoration: shcInputDecoration(
+                          label: 'Kode tatakan (8 karakter)',
+                          hint: 'A1B2C3D4',
+                          error: _error,
+                        ).copyWith(counterText: ''),
+                      ),
+                      if (_info != null) ...[
                         const SizedBox(height: 10),
-                        Text('Masukkan kode 8 karakter dari alat.',
-                            style: _monoStyle(12, color: _ink, weight: FontWeight.w500)),
-                        const SizedBox(height: 6),
-                        Text('Masukkan 8 karakter kode alat dari stiker perangkat atau log koneksi. '
-                            'Kode yang sama dapat digunakan di aplikasi web.',
-                            style: _monoStyle(11, color: _dim)),
-                        const SizedBox(height: 24),
-                        TextField(
-                          controller: _code,
-                          textCapitalization: TextCapitalization.characters,
-                          textInputAction: TextInputAction.go,
-                          onSubmitted: (_) => _submit(),
-                          maxLength: 8,
-                          style: _monoStyle(22, color: _ink, weight: FontWeight.w700),
-                          decoration: InputDecoration(
-                            counterText: '',
-                            hintText: 'A1B2C3D4',
-                            hintStyle: _monoStyle(22, color: _dim.withValues(alpha: 0.5)),
-                            filled: true,
-                            fillColor: _panel2,
-                            enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: _line)),
-                            focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: _water, width: 2)),
-                            errorText: _error,
-                            errorStyle: _monoStyle(11, color: _alarm),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          height: 48,
-                          child: FilledButton(
-                            onPressed: _busy ? null : _submit,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _water,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        Semantics(
+                          container: true,
+                          liveRegion: true,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: ShcPalette.okBg,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: ShcPalette.okBorder),
                             ),
-                            child: Text(_busy ? 'Menautkan…' : 'Tautkan',
-                                style: _monoStyle(13, color: Colors.white, weight: FontWeight.w600)),
+                            child: Text(
+                              _info!,
+                              style: shcSans(12, color: ShcPalette.ok, weight: FontWeight.w500),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        Text('Sudah ditautkan di perangkat lain? Cukup masukkan kodenya sekali lagi.',
-                            style: _monoStyle(11, color: _dim), textAlign: TextAlign.center),
-                        if (widget.onCancel != null) ...[
-                          const SizedBox(height: 16),
-                          TextButton(
-                            onPressed: _busy ? null : widget.onCancel,
-                            child: Text('Lewati untuk sekarang',
-                                style: _monoStyle(12, color: _dim)),
-                          ),
-                        ],
                       ],
-                    ),
+                      const SizedBox(height: 18),
+                      FilledButton(
+                        onPressed: _busy ? null : _submit,
+                        child: Text(_busy ? 'Menautkan...' : 'Tautkan'),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _findOwn,
+                        icon: const Icon(Icons.search, size: 18),
+                        label: const Text('Cari tatakan saya'),
+                      ),
+                      if (widget.onCancel != null) ...[
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: _busy ? null : widget.onCancel,
+                          style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                          child: Text(
+                            'Lewati untuk sekarang',
+                            style: shcSans(13, color: ShcPalette.inkSoft, weight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -2305,208 +2769,91 @@ class _ClaimScreenState extends State<ClaimScreen> {
       );
 }
 
-// ── Gelas: Nordic tumbler visualizer + coaster pedestal ─────────────────────
-
-class _GlassPainter extends CustomPainter {
-  final double fill; // 0..1
-  final bool present;
-  final Color water;
-  final Color line;
-
-  _GlassPainter({
-    required this.fill,
-    required this.present,
-    required this.water,
-    required this.line,
-  });
+class _GoalSheetBody extends StatefulWidget {
+  final int initialGoal;
+  const _GoalSheetBody({required this.initialGoal});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // Coaster pedestal di bagian bawah
-    final coasterRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(w * 0.08, h - 14, w * 0.84, 8),
-      const Radius.circular(4),
-    );
-    final coasterPaint = Paint()
-      ..color = present ? line : line.withValues(alpha: 0.5)
-      ..style = PaintingStyle.fill;
-    canvas.drawRRect(coasterRect, coasterPaint);
-
-    final coasterRim = Paint()
-      ..color = present ? line.withValues(alpha: 0.8) : line.withValues(alpha: 0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    canvas.drawRRect(coasterRect, coasterRim);
-
-    // Dimensi tumbler kaca
-    const insetX = 14.0;
-    const topY = 12.0;
-    final bottomY = h - 16.0;
-    final glassRect = RRect.fromRectAndRadius(
-      Rect.fromLTRB(insetX, topY, w - insetX, bottomY),
-      const Radius.circular(12),
-    );
-
-    // Latar belakang frost porselen saat gelas ada
-    if (present) {
-      final frostPaint = Paint()
-        ..color = const Color(0xFFF1F5F9).withValues(alpha: 0.6)
-        ..style = PaintingStyle.fill;
-      canvas.drawRRect(glassRect, frostPaint);
-    }
-
-    // Kolom air dengan Nordic water gradient
-    if (present && fill > 0) {
-      final totalWaterHeight = (bottomY - topY - 4) * fill;
-      final waterTopY = bottomY - totalWaterHeight;
-      final waterRect = RRect.fromRectAndRadius(
-        Rect.fromLTRB(insetX + 2, waterTopY, w - insetX - 2, bottomY - 2),
-        const Radius.circular(10),
-      );
-
-      canvas.save();
-      canvas.clipRRect(glassRect);
-
-      final waterPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF38BDF8),
-            water,
-          ],
-        ).createShader(Rect.fromLTRB(insetX, waterTopY, w - insetX, bottomY));
-      canvas.drawRRect(waterRect, waterPaint);
-
-      // Garis permukaan meniskus air
-      final meniscusPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.75)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2;
-      canvas.drawLine(
-        Offset(insetX + 6, waterTopY + 1),
-        Offset(w - insetX - 6, waterTopY + 1),
-        meniscusPaint,
-      );
-
-      // Refleksi vertikal halus pada sisi kiri tumbler
-      final reflectPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.25)
-        ..style = PaintingStyle.fill;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(insetX + 5, waterTopY + 4, 3, totalWaterHeight - 8),
-          const Radius.circular(2),
-        ),
-        reflectPaint,
-      );
-
-      canvas.restore();
-    }
-
-    // Garis luar kontur gelas
-    final glassOutline = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = present ? line : line.withValues(alpha: 0.4);
-
-    if (present) {
-      canvas.drawRRect(glassRect, glassOutline);
-
-      // Garis ketebalan dasar gelas khas Nordic glassware
-      final baseLine = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = line.withValues(alpha: 0.6);
-      canvas.drawLine(
-        Offset(insetX + 4, bottomY - 6),
-        Offset(w - insetX - 4, bottomY - 6),
-        baseLine,
-      );
-
-      // Skala takaran halus di samping gelas (25%, 50%, 75%)
-      final tickPaint = Paint()
-        ..color = line.withValues(alpha: 0.7)
-        ..strokeWidth = 1;
-      for (final fraction in [0.25, 0.50, 0.75]) {
-        final tickY = bottomY - (bottomY - topY) * fraction;
-        canvas.drawLine(
-          Offset(w - insetX - 6, tickY),
-          Offset(w - insetX - 2, tickY),
-          tickPaint,
-        );
-      }
-    } else {
-      final dashPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
-        ..color = line.withValues(alpha: 0.5);
-      canvas.drawRRect(glassRect, dashPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GlassPainter old) =>
-      old.fill != fill ||
-      old.present != present ||
-      old.water != water ||
-      old.line != line;
+  State<_GoalSheetBody> createState() => _GoalSheetBodyState();
 }
 
-// ── Visualizer Cincin Hidrasi Melingkar (Circular Radial Progress Ring) ──────
-class _RadialRingPainter extends CustomPainter {
-  final double progress;
-  final Color trackColor;
-  final Color progressColor;
-  final double strokeWidth;
-
-  const _RadialRingPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.progressColor,
-    this.strokeWidth = 11.0,
-  });
+class _GoalSheetBodyState extends State<_GoalSheetBody> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.initialGoal.toString());
+  String? _err;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (math.min(size.width, size.height) - strokeWidth) / 2;
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
-    // Lingkar latar porselen
-    final trackPaint = Paint()
-      ..color = trackColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawCircle(center, radius, trackPaint);
-
-    // Lingkar progres aktif
-    if (progress > 0) {
-      final sweepAngle = 2 * math.pi * progress.clamp(0.0, 1.0);
-      final progressPaint = Paint()
-        ..color = progressColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round;
-
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -math.pi / 2, // Mulai tepat dari arah jam 12 (-90 derajat)
-        sweepAngle,
-        false,
-        progressPaint,
-      );
+  void _submit() {
+    final val = int.tryParse(_ctrl.text.trim());
+    if (val == null || val < 500 || val > 6000) {
+      setState(() => _err = 'Target harus antara 500 dan 6000 ml.');
+      return;
     }
+    Navigator.pop(context, val);
   }
 
   @override
-  bool shouldRepaint(covariant _RadialRingPainter old) =>
-      old.progress != progress ||
-      old.trackColor != trackColor ||
-      old.progressColor != progressColor ||
-      old.strokeWidth != strokeWidth;
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      'Atur target harian',
+                      style: shcSans(16, color: ShcPalette.ink, weight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Tutup',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, color: ShcPalette.inkSoft),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Masukkan target minum harian antara 500 sampai 6000 ml.',
+              style: shcSans(12, color: ShcPalette.inkSoft),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _ctrl,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              style: shcMono(15, color: ShcPalette.ink, weight: FontWeight.w600),
+              decoration: shcInputDecoration(
+                label: 'Target minum (ml)',
+                error: _err,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _submit,
+              child: const Text('Simpan target'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

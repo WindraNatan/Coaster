@@ -201,4 +201,58 @@ void main() {
         client: client);
     expect(uid, isEmpty);
   });
+
+  group('findOwnClaimCode', () {
+    test('membaca /private/claimCode dulu bila tersedia', () async {
+      final paths = <String>[];
+      final client = MockClient((req) async {
+        paths.add(req.url.path);
+        if (req.url.path == '/users/uid-akun/private/claimCode.json') {
+          return Response('"fyxfrb4n"', 200);
+        }
+        return Response('null', 200);
+      });
+      final code = await findOwnClaimCode(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client,
+      );
+      expect(code, 'FYXFRB4N');
+      expect(paths, ['/users/uid-akun/private/claimCode.json']);
+    });
+
+    test('jatuh ke jalur lama saat /private kosong atau 401', () async {
+      final paths = <String>[];
+      final client = MockClient((req) async {
+        paths.add(req.url.path);
+        if (req.url.path == '/users/uid-akun/private/claimCode.json') {
+          return Response('Unauthorized', 401);
+        }
+        if (req.url.path == '/users/uid-akun/smart_coaster/claimCode.json') {
+          return Response('"AB23CD45"', 200);
+        }
+        return Response('null', 200);
+      });
+      final code = await findOwnClaimCode(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client,
+      );
+      expect(code, 'AB23CD45');
+      expect(paths, [
+        '/users/uid-akun/private/claimCode.json',
+        '/users/uid-akun/smart_coaster/claimCode.json',
+      ]);
+    });
+
+    test('mengembalikan string kosong saat kedua jalur null', () async {
+      final client = MockClient((req) async => Response('null', 200));
+      final code = await findOwnClaimCode(
+        base: _url,
+        session: const AuthSession('tok', 'a@b.c', 'uid-akun', 9999999999999),
+        client: client,
+      );
+      expect(code, isEmpty);
+    });
+  });
 }

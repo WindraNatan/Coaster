@@ -185,6 +185,38 @@ Future<String> discoverDevice({
   }
 }
 
+/// Cari kode klaim milik akun sendiri: coba node privat baru dulu, lalu node
+/// lama sebagai cadangan untuk firmware sebelum pemisahan `/private`.
+Future<String> findOwnClaimCode({
+  required String base,
+  required AuthSession session,
+  http.Client? client,
+}) async {
+  if (session.uid.isEmpty || session.token.isEmpty) return '';
+  final c = client ?? http.Client();
+  final uid = Uri.encodeComponent(session.uid);
+  final paths = [
+    '$base/users/$uid/private/claimCode.json${session.suffix}',
+    '$base/users/$uid/smart_coaster/claimCode.json${session.suffix}',
+  ];
+  try {
+    for (final p in paths) {
+      final res = await c.get(Uri.parse(p)).timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        if (decoded is String && decoded.trim().isNotEmpty) {
+          return decoded.trim().toUpperCase();
+        }
+      }
+    }
+    return '';
+  } catch (_) {
+    return '';
+  } finally {
+    if (client == null) c.close();
+  }
+}
+
 /// UID alat yang sudah ditautkan, atau kosong. Dipakai saat boot sebelum
 /// [claimDevice] pernah dipanggil di perangkat ini.
 Future<String> loadDeviceUid() async {
