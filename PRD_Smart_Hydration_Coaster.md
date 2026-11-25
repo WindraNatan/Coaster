@@ -1,4 +1,4 @@
-# PRODUCT REQUIREMENTS DOCUMENT (PRD) & SPESIFIKASI TEKNIS — FINAL
+# PRODUCT REQUIREMENTS DOCUMENT (PRD) & SPESIFIKASI TEKNIS - FINAL
 ## Smart Hydration Coaster: Sistem Kendali & Pemantau Hidrasi Adaptif
 **Versi:** 2.0 FINAL (keputusan terkunci, 2026-10-07)
 **Target Mata Kuliah:** RSK-352 Sistem Kendali (2 SKS) & RSK-354 Internet of Things (3 SKS)
@@ -19,11 +19,11 @@ Aplikasi pengingat minum di ponsel bekerja *open-loop*: alarm berbunyi tanpa ver
 
 ### 2.1 Sensor
 1. **Load Cell 1 kg / 5 kg + modul ADC HX711 24-bit.** Mengukur massa total gelas + air dalam gram secara real-time. Prinsip: perubahan resistansi jembatan Wheatstone diperkuat PGA internal HX711, dikonversi 24-bit.
-2. **DHT11** (suhu 0–50 °C, RH 20–90%). Variabel input lingkungan untuk memodulasi durasi timer pada mode adaptif.
+2. **DHT11** (suhu 0-50 °C, RH 20-90%). Variabel input lingkungan untuk memodulasi durasi timer pada mode adaptif.
 
 ### 2.2 Aktuator (keduanya modul dengan driver onboard)
 1. **Modul Active Buzzer 3-pin** (VCC/GND/I-O). Modul sudah berisi transistor PNP S8550 + resistor base onboard, sehingga pin GPIO hanya menggerakkan basis transistor. **Polaritas ACTIVE-LOW** (tanda `低电平触发`: LOW = bunyi). Tidak perlu transistor, resistor, atau dioda eksternal.
-2. **Modul Vibration Motor DC (motor koin) 3-pin** (VCC/GND/IN). Modul sudah berisi transistor NPN S8050 + resistor onboard; arus motor 60–90 mA tidak melewati pin GPIO. **Active-HIGH** (HIGH = getar) dan mendukung PWM. Firmware memakai pola pulsing digital on/off; kemampuan PWM modul dicatat sebagai cadangan, bukan klaim implementasi.
+2. **Modul Vibration Motor DC (motor koin) 3-pin** (VCC/GND/IN). Modul sudah berisi transistor NPN S8050 + resistor onboard; arus motor 60-90 mA tidak melewati pin GPIO. **Active-HIGH** (HIGH = getar) dan mendukung PWM. Firmware memakai pola pulsing digital on/off; kemampuan PWM modul dicatat sebagai cadangan, bukan klaim implementasi.
 
 ### 2.3 Tabel Pinout ESP32 DevKit V1
 
@@ -135,7 +135,7 @@ stateDiagram-v2
 
 Semantik "stabil": kandidat berat disimpan saat berat berubah >3 g; transisi terjadi hanya bila berat bertahan dalam ±3 g selama 1.500 ms. Timer stabilitas di-reset di setiap perpindahan state. Semua arah naik/turun pada setiap state mengikuti satu tabel transisi (ΔW turun ≥ 20 g = minum, naik ≥ 30 g = isi ulang).
 
-**Setiap keputusan ΔW wajib menunggu berat baru stabil.** Cabang minum dan isi ulang di `STATE_TIMING`, `STATE_ALERT_DRINK`, dan `STATE_ALERT_CHEAT` tidak boleh dieksekusi pada sampel pertama yang melewati ambang; ia menunggu dulu `isStable()` terpenuhi untuk berat baru. Alasannya fisik: mengangkat gelas bukan satu langkah, melainkan turun bertahap sekitar 46 g per sampel pada 10 Hz. Tanpa gerbang ini, delapan sampel saat mengangkat gelas terbaca sebagai delapan kali minum berturut-turut (pernah terukur 4–6 minum palsu per pengangkatan, total melonjak ke 276 g), timer terus ter-reset sehingga `ALERT_DRINK` tidak pernah muncul, baseline ikut rusak ke nilai terangkat, dan `ALERT_CHEAT` menjadi mustahil dicapai karena selisihnya selalu terbaca sebagai minum sah. Gerbang yang sama berlaku untuk sedotan, isi ulang di atas tatakan, dan pemulihan dari `ALERT_REFILL`.
+**Setiap keputusan ΔW wajib menunggu berat baru stabil.** Cabang minum dan isi ulang di `STATE_TIMING`, `STATE_ALERT_DRINK`, dan `STATE_ALERT_CHEAT` tidak boleh dieksekusi pada sampel pertama yang melewati ambang; ia menunggu dulu `isStable()` terpenuhi untuk berat baru. Alasannya fisik: mengangkat gelas bukan satu langkah, melainkan turun bertahap sekitar 46 g per sampel pada 10 Hz. Tanpa gerbang ini, delapan sampel saat mengangkat gelas terbaca sebagai delapan kali minum berturut-turut (pernah terukur 4-6 minum palsu per pengangkatan, total melonjak ke 276 g), timer terus ter-reset sehingga `ALERT_DRINK` tidak pernah muncul, baseline ikut rusak ke nilai terangkat, dan `ALERT_CHEAT` menjadi mustahil dicapai karena selisihnya selalu terbaca sebagai minum sah. Gerbang yang sama berlaku untuk sedotan, isi ulang di atas tatakan, dan pemulihan dari `ALERT_REFILL`.
 
 ### 4.5 Pola Modulasi Aktuator
 
@@ -238,7 +238,7 @@ Aturan sketch Arduino: satu sketch = satu folder, nama file `.ino` wajib sama de
 
 ## 8. Casing Sasis Kapsul 28 mm
 
-1. **Desain final:** sasis kapsul, bukan PVC foam board — kompartemen belakang 28,0 mm, bibir depan 23,2 mm. Model parametriknya `cad/coaster_casing.scad`; rincian dimensi komponen, grid perfboard, dan bukaan USB di `CLAUDE.md` §5.
+1. **Desain final:** sasis kapsul, bukan PVC foam board (kompartemen belakang 28,0 mm, bibir depan 23,2 mm). Model parametriknya `cad/coaster_casing.scad`; rincian dimensi komponen, grid perfboard, dan bukaan USB di `CLAUDE.md` §5.
 2. **Piringan akrilik** bertumpu pada ujung bebas load cell (puncak 24,2 mm, 1,0 mm di atas bibir depan) sehingga gelas menumpu hanya pada piringan. Modul buzzer, DHT11, dan motor ditempel datar. Kabelnya disolder permanen ke papan di satu ujung dan memakai konektor female di ujung modul, jadi sensor masih bisa dicabut tanpa menyentuh sambungan papan.
 
 ---

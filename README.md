@@ -20,8 +20,13 @@ ESP32 DevKit V1 · load cell 5 kg lewat HX711 · DHT11 · buzzer · motor getar.
 
 ## Menjalankan
 
-**Web.** Buka `web/index.html` di browser, atau layani dengan server statis
-apa pun. Simulator langsung jalan tanpa perangkat.
+**Web.** Aplikasi React + Vite. Jalankan server dev atau build produksi dari folder `web/`. Simulator langsung jalan tanpa perangkat:
+
+```
+cd web
+npm install
+npm run dev          # atau: npm run build
+```
 
 **Aplikasi Android.**
 
@@ -31,8 +36,9 @@ flutter pub get
 flutter run
 ```
 
-Build rilis: `python tools/rilis_apk.py v1.0.0-betaN` — membangun APK release,
-mengunggahnya sebagai GitHub Release, dan mencetak tautan unduh.
+Build rilis: `python tools/rilis_apk.py v1.0.0-betaN` membangun APK release,
+mengunggahnya sebagai GitHub Release, dan mencetak tautan unduh. Tambahkan
+`--skip-build` bila APK di `app/build/app/outputs/flutter-apk/` sudah siap.
 
 **Firmware.** Butuh core ESP32 3.x dan library WiFiManager, HX711, DHT. Salin
 `SmartHydrationCoaster/secrets.h.example` menjadi `secrets.h` (tidak di-commit)
@@ -45,12 +51,11 @@ arduino-cli compile --fqbn esp32:esp32:esp32doit-devkit-v1 SmartHydrationCoaster
 ## Verifikasi
 
 ```
-python test_simulation.py                 # 21 skenario FSM (Python)
-node web/fsm.test.js                      # paritas FSM di JS
-node web/daily-history.test.js            # riwayat + hitungan harian
+python test_simulation.py                 # 24 skenario FSM (Python)
+cd web && npm test                        # fsm, daily-history, daily-cloud, protocol
 python tools/cad_check/verify_stackup.py  # 60 pemeriksaan tata letak sasis
 python tools/cek_aturan_berkas.py         # berkas aturan Firebase
-cd app && flutter analyze && flutter test # 55 tes
+cd app && flutter analyze && flutter test # 74 tes Flutter
 
 # Harness FSM (C++): dikompilasi dulu, binernya tidak disimpan di repo.
 cd tools/uji_fsm

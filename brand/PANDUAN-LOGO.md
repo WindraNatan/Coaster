@@ -51,7 +51,7 @@ Aturan versi ini:
    meminta latar, pakai `logo-sticker-yellow-preview` yang kuningnya sudah
    tercetak.
 
-Ukuran cetak yang masuk akal untuk tutup belakang: lebar sticker 60–70 mm.
+Ukuran cetak yang masuk akal untuk tutup belakang: lebar sticker 60-70 mm.
 
 ## Warna
 

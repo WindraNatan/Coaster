@@ -52,8 +52,8 @@
 | `--ease-calm` | `cubic-bezier(0.16, 1, 0.3, 1)` | Kurva gerak tunggal transisi UI | Gerak tenang |
 
 ### B. Tipografi & Aturan Numerik
-* **Antarmuka & Judul (`--font-sans`):** *Instrument Sans* dengan bobot `400` (Reguler), `500` (Medium), dan `600` (Semi-bold) saja (tanpa bobot `700`/`800`/`900`).
-* **Angka Murni (`--font-mono`):** *IBM Plex Mono* bobot `500` dengan `font-variant-numeric: tabular-nums`. Aturan ketat anti-slop (`Hallmark REFLEX 64`): `font-mono` hanya diterapkan pada elemen yang berisi angka murni (misalnya hitung mundur `00:15` atau bobot `350.0`), sedangkan kata, label, dan satuan (`ml`, `g`, `°C`, `%`) selalu menggunakan *Instrument Sans*.
+* **Antarmuka & Judul (`--font-sans`):** *Instrument Sans* di Web PWA (dan *Space Grotesk* bundel offline di aplikasi Flutter `app/lib/theme.dart`) dengan bobot `400` (Reguler), `500` (Medium), dan `600` (Semi-bold) saja (tanpa bobot `700`/`800`/`900`).
+* **Angka Murni (`--font-mono`):** *IBM Plex Mono* di Web PWA (dan *JetBrains Mono* bundel offline di aplikasi Flutter `app/lib/theme.dart`) bobot `500` dengan `font-variant-numeric: tabular-nums`. Aturan ketat anti-slop (`Hallmark REFLEX 64`): `font-mono` hanya diterapkan pada elemen yang berisi angka murni (misalnya hitung mundur `00:15` atau bobot `350.0`), sedangkan kata, label, dan satuan (`ml`, `g`, `°C`, `%`) selalu menggunakan font sans utama.
 
 ### C. Radius, Elevasi, dan Gerak
 * **Radius:** Kartu utama `16px` (`rounded-2xl`), petak internal `12px` (`rounded-xl`), kontrol/tombol/input `8px` (`rounded-lg`) hingga `12px` (`rounded-xl`).
@@ -124,12 +124,12 @@ Daftar pemetaan status protokol internal ke salinan ramah pengguna di Web PWA:
 
 ---
 
-## 6. Matriks Kompatibilitas & Pelestarian 69 Widget Tests Flutter (`app/`)
+## 6. Matriks Kompatibilitas & Pelestarian 74 Widget Tests Flutter (`app/`)
 
-Aplikasi Android/multiplatform Flutter (`app/`) kini menerapkan token *Mineral Stoneware & Deep Spring Teal* (`app/lib/theme.dart` dan `app/lib/painters.dart`), tata letak adaptif 1 kolom ponsel (`< 880 px`) vs 2 kolom tablet/laptop (`>= 880 px`), grafik riwayat 7 hari (`HistoryBarsList`), penyesuaian target harian berbasis modal sheet, dan pencari tatakan pribadi `findOwnClaimCode()`, sambil mempertahankan perilaku native mobile (pengingat alarm lokal Android, `RefreshIndicator`, `HapticFeedback`, menu AppBar). Seluruh 69 pengujian otomatis di `app/test/` memverifikasi alur otentikasi, klaim perangkat, kontrol sesi, telemetri awan, tata letak adaptif, dan paritas FSM. Setiap pengembang atau agen pemelihara antarmuka **DILARANG MENGUBAH ATAU MENGHAPUS** teks target, hierarki tata letak, dan kunci widget (*keys*) berikut di `app/`:
+Aplikasi Android/multiplatform Flutter (`app/`) kini menerapkan token *Mineral Stoneware & Deep Spring Teal* (`app/lib/theme.dart` dan `app/lib/painters.dart`), tata letak adaptif 1 kolom ponsel (`< 880 px`) vs 2 kolom tablet/laptop (`>= 880 px`), grafik riwayat 7 hari (`HistoryBarsList`), penyesuaian target harian berbasis modal sheet, dan pencari tatakan pribadi `findOwnClaimCode()`, sambil mempertahankan perilaku native mobile (pengingat alarm lokal Android, `RefreshIndicator`, `HapticFeedback`, menu AppBar). Seluruh 74 pengujian otomatis di `app/test/` memverifikasi alur otentikasi, klaim perangkat, kontrol sesi, telemetri awan, tata letak adaptif, dan paritas FSM. Setiap pengembang atau agen pemelihara antarmuka **DILARANG MENGUBAH ATAU MENGHAPUS** teks target, hierarki tata letak, dan kunci widget (*keys*) berikut di `app/`:
 
 ### Rincian Pengujian Berdasarkan Berkas (`app/test/`)
-* **`cloud_flow_test.dart` (25 Pengujian):**
+* **`cloud_flow_test.dart` (35 Pengujian):**
   * `find.text('Menghubungkan ke Firebase…')`
   * Teks metrik numerik persis: `find.text('315.0')`, `find.text('185 ml')`, `find.text('07:03')`, `find.text('750.0 ml')`, `find.text('27.0 °C')`, `find.text('60.0 %')`.
   * Status FSM Badge: `find.text('TIMING')`, `find.text('REFILL')`.
@@ -143,11 +143,11 @@ Aplikasi Android/multiplatform Flutter (`app/`) kini menerapkan token *Mineral S
   * Header dan Tombol Reset Harian: `find.text('Hari ini')`, `find.textContaining('150 / 2000 ml')`, dan `find.textContaining('Hari baru')`.
   * Penanganan Error Jaringan: `find.textContaining('Gagal membaca cloud:')`, `find.textContaining('HTTP 500')`, `find.textContaining('Belum ada data telemetry.')`.
   * Form Masuk Akun: `TextField.at(0)` untuk email, `TextField.at(1)` untuk password, dan tombol aksi `find.text('Masuk')`.
-* **`connect_screen_test.dart` (15 Pengujian):**
+* **`connect_screen_test.dart` (7 Pengujian):**
   * `find.text('Email')`, `find.text('Password')`, `find.text('Masuk')`, `find.text('URL Firebase RTDB')`, `find.text('Web API Key proyek Firebase')`, `find.text(kFirebaseApiKey)`, `find.text('AIzaSalahSekali')`.
 * **`claim_device_test.dart` (18 Pengujian):**
   * `GET /claims/<KODE>.json` -> `PUT /links/<uid-akun>/<uid-alat>.json`; `findOwnClaimCode()` membaca `/users/<uid>/private/claimCode.json` lalu jalur fallback; validasi panjang 8 karakter.
-* **`telemetry_test.dart` (8 Pengujian):**
+* **`telemetry_test.dart` (11 Pengujian):**
   * Pemetaan JSON telemetri, `ALERT_MISSING_CUP` -> `ALERT_REFILL` (`missingCup: true`, `'gelas belum kembali ke tatakan'`), `STATE_IDLE` (`'taruh gelas untuk mulai'`).
 * **`auth_keystore_test.dart` (3 Pengujian):**
   * Penyimpanan sesi otentikasi SharedPreferences.
@@ -158,5 +158,5 @@ Aplikasi Android/multiplatform Flutter (`app/`) kini menerapkan token *Mineral S
 - [x] Rujukan sistem visual & anti-slop `style.ai.id` (`Heritage`, `Apple`, `Anthropic`, `Antislop`) terdokumentasi di `DESIGN.md` v4.0.
 - [x] Seluruh warna dan tipografi melalui token `:root` tanpa warna default Tailwind (`slate-*`, `sky-*`, dsb.).
 - [x] Kontras WCAG AA terverifikasi lewat `contrast-check.py`.
-- [x] Bebas *em dash* (`—`), bebas *card inside card*, bebas `transition-all`, bebas `animate-pulse`, dan bebas istilah pengembang di layar konsumen Web PWA.
-- [x] Seluruh uji paritas 4 lapis (Node JS tests, Python 24 skenario, C++ 78 cek, Flutter 69 unit/widget tests) serta `Hallmark sloplint` (`0 FAIL`, `0 REFLEX`) terpenuhi.
+- [x] Bebas *em dash*, bebas *card inside card*, bebas `transition-all`, bebas `animate-pulse`, dan bebas istilah pengembang di layar konsumen Web PWA.
+- [x] Seluruh uji paritas 4 lapis (Node JS tests, Python 24 skenario, C++ 78 cek, Flutter 74 unit/widget tests) serta `Hallmark sloplint` (`0 FAIL`, `0 REFLEX`) terpenuhi.
