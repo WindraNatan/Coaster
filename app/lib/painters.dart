@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 
 import 'theme.dart';
 
-/// Visualizer tumbler kaca dan tatakan stoneware dengan bayangan kontak fisik.
 class CoasterGlassPainter extends CustomPainter {
   final double fill;
   final bool present;
@@ -144,7 +143,6 @@ class CoasterGlassPainter extends CustomPainter {
       old.fill != fill || old.present != present;
 }
 
-/// Cincin progres hidrasi harian.
 class HydrationRingPainter extends CustomPainter {
   final double progress;
   final Color trackColor;
@@ -197,7 +195,6 @@ class HydrationRingPainter extends CustomPainter {
       old.strokeWidth != strokeWidth;
 }
 
-/// Daftar batang progres riwayat harian (maksimal 7 hari terakhir).
 class HistoryBarsList extends StatelessWidget {
   final List<MapEntry<String, Map<String, dynamic>>> entries;
   final int goalMl;

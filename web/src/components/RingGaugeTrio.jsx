@@ -10,15 +10,14 @@ export default function RingGaugeTrio({
   targetSec = 15,
   stateString = 'IDLE',
   standby = false,
+  deviceOffline = false,
   targetLabel = '15 detik'
 }) {
   const C = 251.327; // 2 * PI * 40
 
-  // 1. Target hidrasi harian
   const dailyPct = goalMax > 0 ? Math.min(100, Math.max(0, (goalCur / goalMax) * 100)) : 0;
   const dailyOffset = C * (1 - dailyPct / 100);
 
-  // 2. Isi gelas
   const isLifted = stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP';
   const isNoCup = !isLifted && weight < 25;
   const isCupEmptyAlert = stateString === 'ALERT_EMPTY_CUP' || (!isNoCup && !isLifted && cupMl <= 15);
@@ -35,8 +34,7 @@ export default function RingGaugeTrio({
         ? 'Air hampir habis'
         : `${Math.round(cupPct)}% dari ${cupMax} ml`;
 
-  // 3. Hitung mundur jadwal minum
-  const isTiming = !standby && stateString === 'TIMING';
+  const isTiming = !deviceOffline && !standby && stateString === 'TIMING';
   const hasRem = remSec !== null && remSec !== undefined && !isNaN(remSec);
   let cdText = '--:--';
   let cdPct = 0;
@@ -48,25 +46,27 @@ export default function RingGaugeTrio({
     if (targetSec > 0) {
       cdPct = Math.min(100, Math.max(0, (s / targetSec) * 100));
     }
-  } else if (!standby && stateString === 'ALERT_DRINK') {
+  } else if (!deviceOffline && !standby && stateString === 'ALERT_DRINK') {
     cdText = '00:00';
     cdPct = 0;
   }
   const cdOffset = C * (1 - cdPct / 100);
-  const isDrinkDue = !standby && (stateString === 'ALERT_DRINK' || (isTiming && hasRem && remSec <= 3));
-  const cdSubLabel = standby
-    ? 'sedang istirahat'
-    : isDrinkDue
-      ? 'waktunya minum'
-      : isTiming
-        ? 'sisa waktu'
-        : stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP'
-          ? 'gelas diangkat'
-          : stateString === 'ALERT_EMPTY_CUP' || stateString === 'ALERT_REFILL'
-            ? 'isi ulang air'
-            : stateString === 'ALERT_CHEAT'
-              ? 'minum lagi'
-              : 'menunggu gelas';
+  const isDrinkDue = !deviceOffline && !standby && (stateString === 'ALERT_DRINK' || (isTiming && hasRem && remSec <= 3));
+  const cdSubLabel = deviceOffline
+    ? 'alat terputus'
+    : standby
+      ? 'sedang istirahat'
+      : isDrinkDue
+        ? 'waktunya minum'
+        : isTiming
+          ? 'sisa waktu'
+          : stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP'
+            ? 'gelas diangkat'
+            : stateString === 'ALERT_EMPTY_CUP' || stateString === 'ALERT_REFILL'
+              ? 'isi ulang air'
+              : stateString === 'ALERT_CHEAT'
+                ? 'minum lagi'
+                : 'menunggu gelas';
 
   return (
     <section
@@ -74,7 +74,6 @@ export default function RingGaugeTrio({
       aria-label="Ringkasan tiga indikator hidrasi"
     >
       <div className="grid grid-cols-2 gap-y-4 gap-x-3 sm:grid-cols-3 sm:gap-0 sm:divide-x divide-hairline">
-        {/* Ring 1: Target harian */}
         <div className="min-w-0 sm:pr-4 flex flex-col items-center">
           <div className="text-xs font-semibold text-ink-soft mb-2">
             Target harian
@@ -116,7 +115,6 @@ export default function RingGaugeTrio({
           </div>
         </div>
 
-        {/* Ring 2: Isi gelas */}
         <div className="min-w-0 sm:px-4 flex flex-col items-center">
           <div className="text-xs font-semibold text-ink-soft mb-2">
             Isi gelas
@@ -163,7 +161,6 @@ export default function RingGaugeTrio({
           </div>
         </div>
 
-        {/* Ring 3: Jadwal minum (tampil utama di bagian atas pada layar ponsel) */}
         <div className="order-first sm:order-last col-span-2 sm:col-span-1 min-w-0 pb-4 sm:pb-0 sm:pl-4 border-b sm:border-b-0 border-hairline flex flex-row sm:flex-col items-center justify-between sm:justify-center gap-4 sm:gap-0">
           <div className="hidden sm:block text-xs font-semibold text-ink-soft mb-2">
             Jadwal minum

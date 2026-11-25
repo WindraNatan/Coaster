@@ -606,6 +606,13 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   DateTime _now() => widget.now?.call() ?? DateTime.now();
 
+  bool get _isDeviceStale =>
+      _lastHbAt != null &&
+      _now().difference(_lastHbAt!).inSeconds > kDeviceStaleSeconds;
+
+  int get _staleSeconds =>
+      _lastHbAt == null ? 0 : _now().difference(_lastHbAt!).inSeconds;
+
   void _catatUbahTimer() {
     setState(() {
       _hintTargetLama =
@@ -1125,21 +1132,26 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   Widget build(BuildContext context) {
     final t = _t;
-    final statusIcon = _t != null && _error == null
-        ? Icons.cloud_done_outlined
-        : _error != null
-            ? Icons.cloud_off_outlined
-            : Icons.sync;
-    final statusColor = _t != null && _error == null
-        ? ShcPalette.ok
-        : _error != null
-            ? ShcPalette.danger
+    final stale = _isDeviceStale;
+    final statusIcon = _error != null
+        ? Icons.cloud_off_outlined
+        : stale
+            ? Icons.sync_problem
+            : _t != null
+                ? Icons.cloud_done_outlined
+                : Icons.sync;
+    final statusColor = _error != null || stale
+        ? ShcPalette.danger
+        : _t != null
+            ? ShcPalette.ok
             : ShcPalette.muted;
     final statusLabel = _error != null
         ? 'Koneksi bermasalah'
-        : _t != null
-            ? 'Terhubung'
-            : 'Menghubungkan';
+        : stale
+            ? 'Alat terputus'
+            : _t != null
+                ? 'Terhubung'
+                : 'Menghubungkan';
 
     return Scaffold(
       backgroundColor: ShcPalette.canvas,
@@ -1368,7 +1380,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     final footerNote = Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 12),
       child: Text(
-        'Sinkron online aktif (${Uri.parse(_base).host}), skala gelas ${_glassDisplayMl.toInt()} ml.',
+        _isDeviceStale
+            ? 'Tatakan terputus (${Uri.parse(_base).host}), skala gelas ${_glassDisplayMl.toInt()} ml.'
+            : 'Sinkron online aktif (${Uri.parse(_base).host}), skala gelas ${_glassDisplayMl.toInt()} ml.',
         style: shcSans(11, color: ShcPalette.muted),
         textAlign: TextAlign.center,
       ),
@@ -1494,7 +1508,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _startRemindTick() {
     _remindTick?.cancel();
     _remindTick = Timer.periodic(const Duration(seconds: 1), (_) async {
-      final left = _remindOn ? await ReminderService.timeLeft() : null;
+      if (_isDeviceStale && _plan != null) {
+        _plan = null;
+        await ReminderService.cancel();
+      }
+      final left = (_remindOn && !_isDeviceStale)
+          ? await ReminderService.timeLeft()
+          : null;
       if (!mounted) return;
       if (_remindOn || _t?.canonicalState == 'TIMING' || _lastHbAt != null) {
         setState(() => _remindLeft = left);
@@ -1515,6 +1535,13 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   void _syncReminderOnData() {
     if (!_remindOn) return;
+    if (_isDeviceStale) {
+      if (_plan != null) {
+        _plan = null;
+        ReminderService.cancel();
+      }
+      return;
+    }
     final t = _t;
     if (t == null) return;
     if (!stateAllowsReminder(t.canonicalState)) {
@@ -1536,7 +1563,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Future<void> _syncReminder() async {
-    if (!_remindOn) {
+    if (!_remindOn || _isDeviceStale) {
+      _plan = null;
       await ReminderService.cancel();
       return;
     }
@@ -1735,7 +1763,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (t.heartbeat == 0) return;
     if (t.heartbeat != _lastHb) {
       _lastHb = t.heartbeat;
-      _lastHbAt = DateTime.now();
+      _lastHbAt = _now();
     }
   }
 
@@ -1996,8 +2024,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _syncLine() {
-    final stale = _lastHbAt != null &&
-        DateTime.now().difference(_lastHbAt!).inSeconds > 90;
+    final stale = _isDeviceStale;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       decoration: shcCardDecoration(
@@ -2016,7 +2043,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           Expanded(
             child: Text(
               stale
-                  ? 'Alat tidak mengirim data (${DateTime.now().difference(_lastHbAt!).inSeconds} detik)'
+                  ? 'Alat terputus ($_staleSeconds detik tanpa data). Periksa daya atau Wi-Fi tatakan.'
                   : _lastSync == null
                       ? 'Menunggu pembaruan pertama...'
                       : 'Sinkron online ${TimeOfDay.fromDateTime(_lastSync!).format(context)}',
@@ -2027,6 +2054,21 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
           ),
+          if (stale) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: _poll,
+              style: TextButton.styleFrom(
+                foregroundColor: ShcPalette.danger,
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              child: Text(
+                'Cek',
+                style: shcSans(12, color: ShcPalette.danger, weight: FontWeight.w700),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2144,7 +2186,19 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _badgeCard(Telemetry t) {
-    final tone = _stateTone(t.canonicalState);
+    final stale = _isDeviceStale;
+    final tone = stale
+        ? const _StateTone(
+            fg: ShcPalette.danger,
+            bg: ShcPalette.dangerBg,
+            border: ShcPalette.dangerBorder,
+            icon: Icons.link_off,
+          )
+        : _stateTone(t.canonicalState);
+    final title = stale ? 'ALAT TERPUTUS' : t.stateName;
+    final reason = stale
+        ? 'Data terakhir membeku karena ESP32 berhenti mengirim pembaruan.'
+        : t.reason;
     return Semantics(
       container: true,
       liveRegion: true,
@@ -2165,7 +2219,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    t.stateName,
+                    title,
                     style: shcSans(
                       20,
                       color: tone.fg,
@@ -2175,7 +2229,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    t.reason,
+                    reason,
                     style: shcSans(13, color: ShcPalette.ink, height: 1.35),
                   ),
                 ],
@@ -2188,8 +2242,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _countdownCard(Telemetry t) {
+    final stale = _isDeviceStale;
     final targetSec = (t.targetIntervalMin * 60).round();
-    final timing = !t.standby && t.canonicalState == 'TIMING';
+    final timing = !stale && !t.standby && t.canonicalState == 'TIMING';
     final rem = _liveRemaining(t);
     final progress = (timing && targetSec > 0)
         ? (1 - rem / targetSec).clamp(0.0, 1.0)
@@ -2233,6 +2288,13 @@ class _DashboardScreenState extends State<DashboardScreen>
               style: shcMono(34, color: ShcPalette.ink, weight: FontWeight.w600),
             ),
           ),
+          if (stale) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Hitung mundur dijeda karena tatakan terputus.',
+              style: shcSans(11, color: ShcPalette.danger, weight: FontWeight.w500),
+            ),
+          ],
           const SizedBox(height: 12),
           Semantics(
             label: timing ? 'Sisa waktu ${Telemetry.mmss(rem)}' : 'Penghitung waktu berhenti',
@@ -2379,6 +2441,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       );
 
   Widget _controlsCard() {
+    final stale = _isDeviceStale;
     final cfg = _cfg;
     final mode = cfg?.timerMode ?? 'AUTO_DHT';
     final muted = cfg?.muted ?? _t?.muted ?? false;
@@ -2393,6 +2456,21 @@ class _DashboardScreenState extends State<DashboardScreen>
               style: shcSans(14, color: ShcPalette.ink, weight: FontWeight.w700),
             ),
           ),
+          if (stale) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: ShcPalette.dangerBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: ShcPalette.dangerBorder),
+              ),
+              child: Text(
+                'Kendali dijeda saat tatakan tidak terhubung.',
+                style: shcSans(12, color: ShcPalette.danger, weight: FontWeight.w500),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -2427,7 +2505,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 label: 'Bisukan buzzer',
                 child: Switch(
                   value: muted,
-                  onChanged: _setMuted,
+                  onChanged: stale ? null : _setMuted,
                 ),
               ),
             ],
@@ -2477,7 +2555,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 BorderSide(color: ShcPalette.controlBorder),
               ),
             ),
-            onSelectionChanged: (s) => _setMode(s.first),
+            onSelectionChanged: stale ? null : (s) => _setMode(s.first),
           ),
           if (mode == 'MANUAL') ...[
             const SizedBox(height: 14),
@@ -2486,6 +2564,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Expanded(
                   child: TextField(
                     controller: _intervalCtrl,
+                    enabled: !stale,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _sendInterval(),
@@ -2498,7 +2577,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 const SizedBox(width: 10),
                 OutlinedButton(
-                  onPressed: _sendInterval,
+                  onPressed: stale ? null : _sendInterval,
                   style: OutlinedButton.styleFrom(minimumSize: const Size(84, 48)),
                   child: const Text('Kirim'),
                 ),
@@ -2511,6 +2590,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               Expanded(
                 child: TextField(
                   controller: _emptyCupCtrl,
+                  enabled: !stale,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _sendEmptyCup(),
@@ -2523,7 +2603,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
               const SizedBox(width: 10),
               OutlinedButton(
-                onPressed: _sendEmptyCup,
+                onPressed: stale ? null : _sendEmptyCup,
                 style: OutlinedButton.styleFrom(minimumSize: const Size(84, 48)),
                 child: const Text('Simpan'),
               ),
@@ -2566,14 +2646,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             children: [
               Expanded(
                 child: FilledButton(
-                  onPressed: _mulaiSesi,
+                  onPressed: stale ? null : _mulaiSesi,
                   child: const Text('Mulai sesi'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _akhiriSesi,
+                  onPressed: stale ? null : _akhiriSesi,
                   child: const Text('Akhiri sesi'),
                 ),
               ),

@@ -14,11 +14,7 @@ enum CoasterState {
     STATE_ALERT_REFILL
 };
 
-// Fix C1: stabilitas dihitung per WAKTU (STABILITY_TIME_MS), bukan per pemanggilan
-// update(). Fix C2: timer stabilitas di-reset di setiap transisi state.
-// Fix C4: semua keputusan berbasis delta berat (minum / isi ulang) menunggu berat
-// baru stabil dulu. Tanpa gerbang ini, penurunan saat mengangkat gelas terbaca
-// sebagai deretan minum palsu.
+// Mirror 1:1 dengan test_simulation.py dan web/fsm.js; ubah ketiganya bersamaan.
 class CoasterFSM {
 public:
     CoasterFSM()
@@ -47,19 +43,13 @@ public:
 
     void setInterval(uint32_t intervalMs) { monitorIntervalMs = intervalMs; }
 
-    // Interval dikunci saat siklus mulai. Tanpa ini, target yang menyusut
-    // karena suhu berubah bisa langsung memenuhi elapsed >= target dan alarm
-    // berbunyi lebih awal dari yang dirancang. Target baru berlaku di siklus
-    // berikutnya, jadi hitungan tetap utuh sekali dimulai.
+    // Kunci target per siklus agar perubahan suhu tidak memicu alarm mendadak.
     void startCycle(uint32_t nowMs) {
         timerStartMs = nowMs;
         cycleTargetMs = monitorIntervalMs;
     }
 
-    // Dipakai jalur standby: hentikan siklus yang sedang berjalan dan kembali ke
-    // IDLE tanpa menyentuh statistik. Timer lama tidak dibawa, karena selisihnya
-    // sudah melewati target dan alarm akan langsung berbunyi begitu update()
-    // dipanggil lagi.
+    // Reset siklus untuk mode istirahat tanpa menghapus statistik harian.
     void toIdle(uint32_t nowMs) {
         currentState = STATE_IDLE;
         missingCupAlert = false;
@@ -80,9 +70,7 @@ public:
             baselineWeight = weightG;
             if (currentState != STATE_IDLE) {
                 missingCupAlert = false;
-                // K3: setter memaksa ALERT_REFILL tanpa tahu isi gelas. Tandai
-                // supaya update() menyelaraskan baseline ke berat aktual dulu,
-                // tidak menghitung isi ulang untuk air yang sudah ada di gelas.
+                // Tandai agar update() menyelaraskan baseline tanpa menghitung refill.
                 calibrationAlign = true;
                 currentState = STATE_ALERT_REFILL;
             }
@@ -142,26 +130,14 @@ public:
                     break;
                 }
                 if (currentWeight - baselineWeight >= REFILL_DELTA) {
-                    // Isi ulang langsung di atas tatakan (PRD skenario 8).
-                    // Fix C4: keputusan baru sah setelah berat BARU stabil. Tanpa ini,
-                    // hentakan peletakan dan tekanan jari ikut terbaca sebagai isi ulang.
-                    // K1: dicatat sebagai pending sampai terbukti bertahan
-                    // (lihat registerRefill/refillReversed).
                     if (isStable(currentWeight, nowMs)) {
                         registerRefill(baselineWeight, currentWeight, nowMs);
                     }
                     break;
                 }
                 if (baselineWeight - currentWeight >= MIN_DRINK_DELTA) {
-                    // Fix C4: gerbang stabilitas WAJIB. Mengangkat gelas menurunkan
-                    // berat ~46 g per sampel (10 Hz), dan tanpa gerbang ini setiap
-                    // sampel turun dicatat sebagai satu kali minum: 4-5 minum palsu
-                    // per pengangkatan, timer terus ter-reset, baseline rusak, dan
-                    // cabang ALERT_CHEAT jadi mustahil tercapai.
+                    // Wajib tunggu stabil agar penurunan saat gelas diangkat tidak tercatat sebagai minum.
                     if (isStable(currentWeight, nowMs)) {
-                        // K1: bila ini penurunan kembali setelah isi ulang pending
-                        // (tekan-lepas), recordDrink membatalkan isi ulangnya dan
-                        // minum tidak dicatat.
                         if (recordDrink(baselineWeight - currentWeight, currentWeight, nowMs)) {
                             baselineWeight = currentWeight;
                             if (currentWeight <= emptyLimit) {
@@ -200,7 +176,6 @@ public:
                     break;
                 }
                 if (currentWeight - baselineWeight >= REFILL_DELTA) {
-                    // Fix C4: sama seperti TIMING, tunggu berat baru stabil
                     if (isStable(currentWeight, nowMs)) {
                         registerRefill(baselineWeight, currentWeight, nowMs);
                         enterState(STATE_TIMING, currentWeight, nowMs);
@@ -208,10 +183,7 @@ public:
                     break;
                 }
                 if (baselineWeight - currentWeight >= MIN_DRINK_DELTA) {
-                    // Fix C4: gerbang stabilitas sebelum mencatat minum
                     if (isStable(currentWeight, nowMs)) {
-                        // K1: false = tekan-lepas terdeteksi, isi ulang pending
-                        // dibatalkan dan minum tidak dicatat.
                         if (recordDrink(baselineWeight - currentWeight, currentWeight, nowMs)) {
                             baselineWeight = currentWeight;
                             if (currentWeight <= emptyLimit) {
@@ -240,19 +212,12 @@ public:
                     break;
                 }
                 if (currentWeight <= emptyLimit) {
-                    // K3: gelas kosong teramati di state ini. Kalibrasi dapat
-                    // memaksa state ini dengan gelas berisi (calibrationAlign);
-                    // bila gelas lalu diangkat, flag itu basi dan menekan
-                    // refillCount yang sah. Berat kosong = aman menghitung isi
-                    // ulang lagi.
+                    // Hapus flag kalibrasi begitu gelas benar-benar kosong teramati.
                     calibrationAlign = false;
                     break;
                 }
                 if (calibrationAlign) {
-                    // K3: setEmptyCupWeight memaksa ALERT_REFILL tanpa tahu isi
-                    // gelas. Bila berat aktual jauh di atas batas kosong, air itu
-                    // sudah ada sebelum kalibrasi: selaraskan baseline ke berat
-                    // aktual, jangan hitung isi ulang.
+                    // Selaraskan baseline ke isi gelas yang sudah ada sebelum kalibrasi.
                     if (isStable(currentWeight, nowMs)) {
                         calibrationAlign = false;
                         if (currentWeight > emptyLimit) {
@@ -277,8 +242,6 @@ public:
     uint16_t getDrinkCount() const { return drinkCount; }
     uint16_t getCheatCount() const { return cheatCount; }
     uint16_t getRefillCount() const { return refillCount; }
-    // Siklus berjalan memakai target yang dikunci; di luar itu yang berlaku
-    // adalah target berikutnya, supaya angka di layar tidak melompat sendiri.
     uint32_t getTargetIntervalMs() const {
         return currentState == STATE_TIMING ? cycleTargetMs : monitorIntervalMs;
     }
@@ -316,7 +279,6 @@ public:
     }
 
 private:
-    // C1: stabil = berat bertahan dalam +-STABILITY_BAND_G selama STABILITY_TIME_MS
     bool isStable(float currentWeight, uint32_t nowMs) {
         if (currentWeight - stableCandidateWeight > STABILITY_BAND_G ||
             stableCandidateWeight - currentWeight > STABILITY_BAND_G) {
@@ -327,19 +289,14 @@ private:
         return (nowMs - stableStartMs) >= STABILITY_TIME_MS;
     }
 
-    // C2: setiap transisi state men-reset timer & kandidat stabilitas
     void enterState(CoasterState next, float currentWeight, uint32_t nowMs) {
         currentState = next;
         stableCandidateWeight = currentWeight;
         stableStartMs = nowMs;
     }
 
-    // K1: isi ulang langsung di tatakan hanya sah jika berat baru bertahan
-    // melewati REFILL_CONFIRM_MS. Load cell tidak bisa membedakan tuangan dari
-    // jari yang menekan, tapi tuangan tidak pernah kembali ke baseline lama;
-    // tekan-lepas ya. Ini heuristik: menekan lebih lama dari REFILL_CONFIRM_MS
-    // tetap lolos. Batas absolut butuh mengunci isi ulang ke state LIFTED
-    // (menghilangkan PRD skenario 8).
+    // Batalkan refill langsung jika berat kembali ke baseline lama dalam REFILL_CONFIRM_MS.
+    // Heuristik tekan-lepas; penekanan lebih lama tetap lolos.
     bool refillReversed(float currentWeight, uint32_t nowMs) {
         if (!refillPending || nowMs - lastRefillMs > REFILL_CONFIRM_MS) return false;
         float diff = currentWeight - preRefillBaseline;
@@ -347,8 +304,6 @@ private:
     }
 
     void registerRefill(float oldBaseline, float newWeight, uint32_t nowMs) {
-        // K1: simpan state & timer pra-isi-ulang supaya pembatalan (tekan-lepas)
-        // bisa memulihkannya — lihat cancelPendingRefill.
         preRefillState = currentState;
         preRefillTimerStartMs = timerStartMs;
         preRefillCycleTargetMs = cycleTargetMs;
@@ -364,12 +319,8 @@ private:
         refillCount--;
         refillPending = false;
         baselineWeight = preRefillBaseline;
-        // K1: pulihkan state & timer pra-tekanan. Tanpa ini, tekan-lepas
-        // membunuh alarm minum sampai interval penuh berikutnya dan menekan
-        // berulang menunda pengingat tanpa batas. LIFTED/ALERT_REFILL sengaja
-        // tidak dipulihkan: gelas sudah kembali di tatakan, memulihkan LIFTED
-        // mengevaluasi ulang kembalinya gelas (cheat palsu) dan memulihkan
-        // ALERT_REFILL bisa menyangkutkan gelas penuh di alarm kosong.
+        // Pulihkan state dan timer pra-tekanan agar tekan-lepas tidak menunda alarm.
+        // LIFTED dan ALERT_REFILL dilewati agar tidak memicu evaluasi cheat atau kosong palsu.
         if (preRefillState == STATE_TIMING ||
             preRefillState == STATE_ALERT_DRINK ||
             preRefillState == STATE_ALERT_CHEAT) {
@@ -381,7 +332,7 @@ private:
         }
     }
 
-    // Mengembalikan false bila minum dibatalkan karena pola tekan-lepas.
+    // Kembalikan false jika minum dibatalkan oleh pola tekan-lepas.
     bool recordDrink(float grams, float currentWeight, uint32_t nowMs) {
         if (refillReversed(currentWeight, nowMs)) {
             cancelPendingRefill(nowMs);
@@ -400,7 +351,6 @@ private:
 
         if (currentWeight <= emptyLimit) {
             if (decreased >= MIN_DRINK_DELTA) {
-                // K1: false = tekan-lepas, isi ulang pending sudah dibatalkan
                 recordDrink(decreased, currentWeight, nowMs);
             }
             baselineWeight = currentWeight;
@@ -415,9 +365,6 @@ private:
         }
 
         if (decreased >= MIN_DRINK_DELTA) {
-            // K1: bila false, ini tekan-lepas: isi ulang pending sudah
-            // dibatalkan di dalam recordDrink, baseline pulih ke berat
-            // pra-tekanan, minum tidak dicatat.
             recordDrink(decreased, currentWeight, nowMs);
             baselineWeight = currentWeight;
             startCycle(nowMs);

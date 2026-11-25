@@ -1,7 +1,5 @@
-// Uji paritas fsm.h di PC (tanpa ESP32).
-// Jalankan dari folder ini:
+// Uji paritas fsm.h di PC terhadap test_simulation.py dan web/fsm.js.
 //   g++ -std=c++17 -Wall -Wextra -I. -I../../SmartHydrationCoaster -o uji_fsm uji_fsm.cpp && ./uji_fsm
-// Skenario harus identik dengan test_simulation.py (Python) dan web/index.html (JS).
 
 #include <cstdio>
 #include <cmath>
@@ -19,7 +17,6 @@ static void settle(CoasterFSM& f, float w, uint32_t t0){
 }
 
 int main(){
-    // 1. Formula adaptif kontinu DHT11 -- nilai harapan sama dengan test_simulation.py dan web.
     const uint32_t baseMs = BASE_INTERVAL_MS;
     CHECK(computeAdaptiveIntervalMs(baseMs, 34.0f, 55.0f) == 900000u,  "1. 34C/55% -> 15,0 mnt");
     CHECK(computeAdaptiveIntervalMs(baseMs, 30.0f, 55.0f) == 1350000u, "1b. 30C/55% (interpolasi) -> 22,5 mnt");
@@ -34,7 +31,7 @@ int main(){
     CoasterFSM f;
     f.setEmptyCupWeight(130.0f);
     f.setInterval(15000);
-    f.setMaxLiftDuration(10000);   // mode demo, seperti updateAdaptiveInterval() di .ino
+    f.setMaxLiftDuration(10000);
 
     f.update(30, 100);   CHECK(f.getState() == STATE_IDLE, "2. 30g tetap IDLE");
     f.update(38, 200);   CHECK(f.getState() == STATE_STABLE, "2b. 38g -> STABLE");
@@ -77,7 +74,6 @@ int main(){
     settle(f, 410, 38800);
     CHECK(f.getState() == STATE_TIMING && f.getRefillCount() == 2, "12. refill +240g -> refill=2");
 
-    // 14/15. REGRESI: angkat gelas bertahap (~46 g/sampel)
     CoasterFSM g;
     g.setEmptyCupWeight(130.0f);
     g.setInterval(15000);
@@ -108,8 +104,6 @@ int main(){
     CHECK(fabs(g.getTotalDrank() - 650.0f) < 0.01f && g.getDrinkCount() == 4 && g.getRefillCount() == 2 && g.getCheatCount() == 1 && g.getTargetIntervalMs() == 15000u,
           "17c. restoreDailyStats & getTargetIntervalMs memulihkan nilai NVS dengan akurat");
 
-    // 18. K1: tekan-lepas gelas di TIMING tidak boleh menghasilkan isi ulang/minum palsu.
-    //     Eksploit audit: 5x tekan-lepas 35g -> 175 ml minum + 5x isi ulang palsu.
     CoasterFSM k;
     k.setEmptyCupWeight(130.0f);
     k.setInterval(15000);
@@ -125,16 +119,12 @@ int main(){
           "18d. lepas tekan -> refill dibatalkan, 0 minum palsu, baseline utuh");
     CHECK(k.getState() == STATE_ALERT_DRINK, "18e. alarm dipulihkan, tidak dibunuh tekan-lepas");
 
-    // 19. K3: kalibrasi (Simpan Gelas) saat gelas BERISI di tatakan tidak boleh
-    //     memicu isi ulang palsu 250 g.
     k.setEmptyCupWeight(130.0f);
     CHECK(k.getState() == STATE_ALERT_REFILL && !k.isMissingCup(), "19a. kalibrasi dengan gelas berisi -> ALERT_EMPTY_CUP");
     settle(k, 380, 36000);
     CHECK(k.getRefillCount() == 0 && k.getDrinkCount() == 0 && k.getTotalDrank() == 0.0f && k.getState() == STATE_TIMING && fabs(k.getBaselineWeight() - 380.0f) < 0.01f,
           "19b. gelas berisi 380g saat kalibrasi -> 0 refill palsu, baseline 380, TIMING");
 
-    // 20. K1: tekan-lepas di TIMING tidak boleh menunda timer. Alarm yang ditunda
-    //     sekali bisa ditunda berulang kali (pengingat tak pernah bunyi).
     CoasterFSM m;
     m.setEmptyCupWeight(130.0f);
     m.setInterval(15000);
@@ -149,8 +139,6 @@ int main(){
     m.update(380, 17700);
     CHECK(m.getState() == STATE_ALERT_DRINK, "20d. 17700-2600 >= 15000 -> alarm tidak tertunda");
 
-    // 21. K3: flag kalibrasi tidak boleh basi — kalibrasi dengan gelas berisi,
-    //     gelas diangkat lalu kembali kosong, isi ulang cepat tetap terhitung.
     CoasterFSM n;
     n.setEmptyCupWeight(130.0f);
     n.setInterval(15000);
@@ -164,27 +152,23 @@ int main(){
     settle(n, 100, 4000);
     CHECK(n.getState() == STATE_ALERT_REFILL && n.getDrinkCount() == 1, "21d. kembali kosong -> ALERT_EMPTY_CUP (minum 30g dari baseline kalibrasi)");
     settle(n, 400, 5700);
-    // refill == 1: isi ulang sah. Tanpa re-arm: 0 (align menyerap isi ulang).
     CHECK(n.getRefillCount() == 1 && n.getState() == STATE_TIMING && fabs(n.getBaselineWeight() - 400.0f) < 0.01f,
           "21e. isi ulang cepat setelah lift tetap terhitung");
 
-    // 22. Target berubah di tengah siklus tidak boleh mempercepat alarm.
     CoasterFSM o;
     o.setInterval(15000);
     o.setMaxLiftDuration(10000);
     settle(o, 380, 1000);
     o.update(380, 5000);
-    o.setInterval(5000);   // target menyusut di bawah elapsed
+    o.setInterval(5000);
     o.update(380, 5200);
     CHECK(o.getState() == STATE_TIMING, "22a. target menyusut tidak memicu ALERT_DRINK lebih awal");
     CHECK(o.getRemainingTimeMs(5200) > 0, "22b. sisa waktu tetap dihitung dari target siklus");
-    // Siklus mulai di 2500 (stabil 1,5 dtk), target 15000 -> alarm di 17500.
     o.update(380, 17400);
     CHECK(o.getState() == STATE_TIMING, "22c. sebelum 17500 masih TIMING");
     o.update(380, 17600);
     CHECK(o.getState() == STATE_ALERT_DRINK, "22d. alarm berbunyi di target awal, bukan di 7500");
 
-    // 23. Siklus yang dimulai setelah setInterval memakai target baru.
     CoasterFSM q;
     q.setInterval(5000);
     q.setMaxLiftDuration(10000);
@@ -192,8 +176,6 @@ int main(){
     CHECK(q.getTargetIntervalMs() == 5000, "23a. siklus baru memakai target baru");
     CHECK(q.getRemainingTimeMs(3500) == 4000, "23b. sisa waktu mengikuti target 5000");
 
-    // 24. Standby: toIdle menghentikan siklus, mematikan alarm, statistik utuh.
-    // Dipakai jalur "akhiri sesi": perangkat berhenti menilai berat selama tidur.
     CoasterFSM r;
     r.setEmptyCupWeight(130.0f);
     r.setInterval(5000);
@@ -209,49 +191,42 @@ int main(){
     r.update(340, 5000);
     CHECK(r.getState() == STATE_STABLE, "24e. setelah standby, update mulai dari IDLE, bukan melanjutkan siklus lama");
 
-    // 25. SessionGate: siapa yang menang antara perintah lokal z/x dan
-    // session.json. Bug yang dijaga: poll sesi tiap 10 dtk membaca nilai yang
-    // sama terus, jadi tanpa aturan "cloud hanya menang saat nilainya berubah",
-    // perintah lokal langsung dibatalkan poll berikutnya.
     {
         SessionGate g;
-        g.fromCloud(false);            // session.json aktif, atau field tidak ada
+        g.fromCloud(false);
         CHECK(!g.sleep, "25a. cloud aktif -> alat tidak tidur");
-        g.fromCloud(true);             // klien menekan Akhiri Sesi
+        g.fromCloud(true);
         CHECK(g.sleep, "25b. cloud menutup sesi -> alat tidur");
 
         SessionGate h;
         h.fromCloud(false);
-        h.local(true);                 // 'z' dari Serial Monitor
+        h.local(true);
         CHECK(h.sleep, "25c. perintah lokal tidur langsung berlaku");
-        h.fromCloud(false);            // poll 10 dtk, nilai cloud tidak berubah
+        h.fromCloud(false);
         h.fromCloud(false);
         h.fromCloud(false);
         CHECK(h.sleep, "25d. poll dengan nilai cloud yang sama tidak membangunkan alat");
-        h.fromCloud(true);             // klien benar-benar menekan tombol
+        h.fromCloud(true);
         CHECK(h.sleep && !h.localHold, "25e. nilai cloud yang berubah menimpa perintah lokal");
 
         SessionGate i;
-        i.fromCloud(true);             // sesi sedang ditutup
-        i.local(false);                // 'x' dari Serial Monitor
+        i.fromCloud(true);
+        i.local(false);
         CHECK(!i.sleep, "25f. perintah lokal bangun langsung berlaku");
         i.fromCloud(true);
         CHECK(!i.sleep, "25g. cloud yang diam tidak menidurkan alat kembali");
-        i.fromCloud(false);            // klien menekan Mulai Sesi
+        i.fromCloud(false);
         CHECK(!i.sleep && !i.localHold, "25h. klien memulai sesi -> pegangan lokal dilepas");
 
         SessionGate j;
         j.fromCloud(false);
         j.local(true);
-        j.fromCloud(true);             // akhiri sesi dari klien
+        j.fromCloud(true);
         CHECK(j.sleep, "25i. akhiri sesi dari klien tetap tidur");
-        j.fromCloud(false);            // lalu mulai sesi lagi
+        j.fromCloud(false);
         CHECK(!j.sleep, "25j. mulai sesi dari klien membangunkan alat");
     }
 
-    // 26. CloudConfigParser: regresi commit 5285621 menghapus parsing "muted"
-    // dari config.json. Pastikan semua 4 field config.json diparsing dengan
-    // benar, termasuk pretty-print JSON dan validasi batas rentang.
     {
         CloudConfigState st = { false, true, false, BASE_INTERVAL_MS, DEFAULT_EMPTY_CUP_G };
         bool c1 = parseCloudConfigJson("{\"muted\": true}", st);

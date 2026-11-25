@@ -13,6 +13,8 @@ export default function EnvironmentSessionBar({
   refillCount = 0,
   cheatCount = 0,
   standby = false,
+  deviceOffline = false,
+  controlsDisabled = false,
   onOpenStartSession,
   onEndSession,
   sessionBusy = false
@@ -38,7 +40,6 @@ export default function EnvironmentSessionBar({
       aria-label="Kondisi ruangan dan sesi minum"
     >
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-0 items-center">
-        {/* 1. Suhu & Kelembapan Ruangan */}
         <div className="md:col-span-4 md:pr-4 md:border-r border-hairline min-w-0">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-ink-soft whitespace-nowrap">
@@ -69,7 +70,6 @@ export default function EnvironmentSessionBar({
           </p>
         </div>
 
-        {/* 2. Ringkasan Sesi Saat Ini (tanpa kartu di dalam kartu) */}
         <div className="md:col-span-5 md:px-5 md:border-r border-hairline pt-3 md:pt-0 border-t md:border-t-0 min-w-0">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs font-semibold text-ink-soft">
@@ -105,18 +105,21 @@ export default function EnvironmentSessionBar({
           </div>
         </div>
 
-        {/* 3. Kendali Sesi */}
         <div className="md:col-span-3 md:pl-4 pt-3 md:pt-0 border-t md:border-t-0 border-hairline flex flex-col justify-between gap-2 min-w-0">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-ink-soft">Status sesi</span>
-            <span className={`text-xs font-semibold ${standby ? 'text-ink-muted' : 'text-ok'}`}>
-              {standby ? 'Istirahat' : 'Aktif'}
+            <span
+              className={`text-xs font-semibold ${
+                deviceOffline ? 'text-danger' : standby ? 'text-ink-muted' : 'text-ok'
+              }`}
+            >
+              {deviceOffline ? 'Terputus' : standby ? 'Istirahat' : 'Aktif'}
             </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
             <button
               type="button"
-              disabled={sessionBusy}
+              disabled={sessionBusy || controlsDisabled}
               onClick={onOpenStartSession}
               className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-accent-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
             >
@@ -125,7 +128,7 @@ export default function EnvironmentSessionBar({
             </button>
             <button
               type="button"
-              disabled={sessionBusy || standby}
+              disabled={sessionBusy || standby || controlsDisabled}
               onClick={onEndSession}
               className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
             >

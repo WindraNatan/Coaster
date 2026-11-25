@@ -62,6 +62,7 @@ export default function VisualTumblerCoaster({
   weight = 0,
   isStable = false,
   standby = false,
+  deviceOffline = false,
   cupMl = 0,
   cupMax = 500,
   emptyCup = 130,
@@ -72,27 +73,36 @@ export default function VisualTumblerCoaster({
   onPour,
   onEmpty
 }) {
-  const meta = standby
+  const meta = deviceOffline
     ? {
-        label: 'Mode istirahat',
-        desc: 'Pengingat sedang diistirahatkan. Tekan Mulai sesi saat ingin memakai lagi.',
-        badge: 'bg-subtle text-ink-soft border-hairline',
-        ringColor: 'var(--border-control)'
+        label: 'Alat terputus',
+        desc: 'Data terakhir membeku karena ESP32 berhenti mengirim pembaruan. Pemantauan lanjut saat alat kembali terhubung.',
+        badge: 'bg-danger-bg text-danger border-danger-border',
+        ringColor: 'var(--danger)'
       }
-    : (STATUS_META[stateString] || STATUS_META.IDLE);
+    : standby
+      ? {
+          label: 'Mode istirahat',
+          desc: 'Pengingat sedang diistirahatkan. Tekan Mulai sesi saat ingin memakai lagi.',
+          badge: 'bg-subtle text-ink-soft border-hairline',
+          ringColor: 'var(--border-control)'
+        }
+      : (STATUS_META[stateString] || STATUS_META.IDLE);
 
   const isLifted = stateString === 'LIFTED' || stateString === 'ALERT_MISSING_CUP';
   const isNoCup = !isLifted && weight < 25;
   const isCupOffCoaster = isLifted || isNoCup;
   const waterPct = isCupOffCoaster ? 0 : Math.min(1, Math.max(0, cupMl / cupMax));
 
-  const stabilityLabel = standby
-    ? 'Istirahat'
-    : weight < 25
-      ? 'Belum ada gelas'
-      : isStable
-        ? 'Gelas tenang'
-        : 'Menyesuaikan posisi';
+  const stabilityLabel = deviceOffline
+    ? 'Koneksi terputus'
+    : standby
+      ? 'Istirahat'
+      : weight < 25
+        ? 'Belum ada gelas'
+        : isStable
+          ? 'Gelas tenang'
+          : 'Menyesuaikan posisi';
 
   return (
     <section

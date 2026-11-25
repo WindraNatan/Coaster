@@ -70,8 +70,7 @@ inline bool parseCloudJsonStringEq(const char* s, const char* key, const char* e
     return strncmp(v, expected, len) == 0 && v[len] == '"';
 }
 
-// Mem-parsing JSON config.json dari RTDB tanpa mutasi lintas-core langsung.
-// Mengembalikan true hanya bila ada field valid yang mengubah state saat ini.
+// Kembalikan true hanya jika ada field valid yang mengubah state.
 inline bool parseCloudConfigJson(const char* json, CloudConfigState& st) {
     if (!json || !*json) return false;
     bool changed = false;
@@ -84,8 +83,7 @@ inline bool parseCloudConfigJson(const char* json, CloudConfigState& st) {
             st.demoMode = hasDemo;
             changed = true;
         }
-        // Saat DEMO aktif, pilihan AUTO_DHT/MANUAL lama disimpan supaya
-        // kembali apa adanya ketika keluar dari DEMO.
+        // Pertahankan pilihan AUTO_DHT/MANUAL saat DEMO aktif.
         if (!hasDemo) {
             bool wantAuto = hasAuto;
             if (wantAuto != st.autoDhtTimerMode) {

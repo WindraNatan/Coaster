@@ -45,8 +45,7 @@ class MainActivity : FlutterActivity() {
                 "canExact" -> result.success(Reminder.canExact(this))
                 "canNotify" -> result.success(Reminder.canNotify(this))
                 "requestNotificationPermission" -> {
-                    // Manifest saja tidak cukup di Android 13+: notify() dibuang
-                    // diam-diam tanpa izin runtime.
+                    // Android 13+ membuang notify() diam-diam tanpa izin runtime.
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                         Reminder.canNotify(this)
                     ) {
@@ -77,16 +76,10 @@ class MainActivity : FlutterActivity() {
     }
 }
 
-/// Menjadwalkan pengingat minum dan menampilkan notifikasinya.
-///
-/// Suara pilihan pengguna TIDAK dipasang ke kanal notifikasi: Android 8+ mengunci
-/// konfigurasi kanal saat dibuat, dan setiap ganti audio berarti kanal baru yang
-/// menumpuk di Pengaturan. Audio diputar ReminderSoundService, notifikasi tetap
-/// tampil lewat kanal bersuara senyap.
+// Audio diputar lewat ReminderSoundService dengan kanal notifikasi senyap
+// karena kanal Android 8+ mengunci suara secara permanen saat dibuat.
 object Reminder {
-    // Dua kanal dengan ID stabil: kanal menyimpan setelan getar saat dibuat, jadi
-    // pilihan getar ON/OFF butuh kanal berbeda. ID-nya tetap supaya daftar kanal
-    // di Pengaturan tidak tumbuh setiap pengguna mengubah pilihan.
+    // Dua ID kanal tetap (getar ON/OFF) agar daftar kanal di Pengaturan tidak bertambah.
     private const val CHANNEL_ID = "shc_reminder"
     private const val CHANNEL_ID_NO_VIB = "shc_reminder_no_vibrate"
     const val NOTIF_ID = 1001
@@ -102,7 +95,6 @@ object Reminder {
         for ((id, name, vib) in channels) {
             if (mgr.getNotificationChannel(id) != null) continue
             val c = NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
-                // Bunyi ditangani service; kanal senyap mencegah bunyi ganda.
                 setSound(null, null)
                 enableVibration(vib)
                 enableLights(true)
@@ -133,8 +125,7 @@ object Reminder {
         ensureChannel(ctx)
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = alarmIntent(ctx, sound, vibrate)
-        // setExactAndAllowWhileIdle menembus Doze. Tanpa izin alarm tepat, turun ke
-        // setAndAllowWhileIdle: meleset beberapa menit lebih baik daripada senyap.
+        // Pakai exact alarm bila diizinkan; fallback inexact lebih baik daripada senyap.
         try {
             if (canExact(ctx)) {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
@@ -157,7 +148,6 @@ object Reminder {
         return (at - System.currentTimeMillis()).coerceAtLeast(0L)
     }
 
-    /// Memutar cuplikan audio tanpa notifikasi, untuk tombol Uji.
     fun preview(ctx: Context, sound: String?): Boolean = try {
         val mp = MediaPlayer()
         mp.setAudioAttributes(alarmAttributes())
@@ -201,8 +191,7 @@ object Reminder {
         return Notification.Builder(ctx, channelFor(vibrate))
             .setContentTitle("Waktunya minum")
             .setContentText("Angkat gelas dan minum sedikit air.")
-            // Small icon notifikasi harus drawable satu warna; launcher
-            // adaptive-icon tidak boleh dipakai di sini.
+            // Small icon notifikasi wajib drawable monokrom, bukan adaptive icon.
             .setSmallIcon(R.drawable.ic_stat_coaster)
             .setContentIntent(open)
             .setAutoCancel(true)
@@ -215,7 +204,6 @@ object Reminder {
         val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         mgr.notify(NOTIF_ID, buildNotification(ctx, vibrate))
 
-        // Layar menyala supaya pengingat terlihat tanpa membuka aplikasi.
         try {
             val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
             @Suppress("DEPRECATION")
@@ -234,8 +222,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val sound = intent.getStringExtra("sound")
         val vibrate = intent.getBooleanExtra("vibrate", true)
         Reminder.showNow(ctx, sound, vibrate)
-        // Audio diputar di FOREGROUND SERVICE, bukan di sini: onReceive kembali
-        // segera, lalu proses boleh dibunuh dan MediaPlayer berhenti di tengah lagu.
+        // Putar audio di foreground service agar proses tidak dimatikan setelah onReceive().
         val svc = Intent(ctx, ReminderSoundService::class.java).putExtra("sound", sound)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -244,8 +231,7 @@ class ReminderReceiver : BroadcastReceiver() {
                 ctx.startService(svc)
             }
         } catch (_: Exception) {
-            // Sebagian OEM menolak startForegroundService dari background.
-            // Notifikasi sudah tampil, jadi pengingat tidak hilang.
+            // Fallback jika OEM memblokir startForegroundService dari background.
         }
     }
 }

@@ -1,8 +1,6 @@
 name: Deploy web PWA
 
-# Pages dari branch hanya bisa root atau /docs, sedangkan situs ada di web/.
-# Action ini mengunggah isi web/ sebagai root artifact, jadi URL-nya bersih:
-# https://<user>.github.io/Coaster/
+# Unggah isi web/ sebagai root artifact agar URL Pages bersih di root.
 on:
   push:
     branches: [master]
@@ -24,8 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Tes sebelum deploy: paritas fsm.js (8 tombol skenario wajib hijau) dan
-      # presedensi muted. Tanpa langkah ini, regresi web terkirim diam-diam.
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -67,8 +63,7 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v5
 
-  # Tes aplikasi Android. Dipisah dari job deploy supaya kegagalan Flutter tidak
-  # menahan penerbitan web, tetapi tetap menjadi gerbang sebelum rilis APK.
+  # Tes Flutter dipisah agar kegagalan app tidak memblokir deploy web.
   test-app:
     runs-on: ubuntu-latest
     steps:

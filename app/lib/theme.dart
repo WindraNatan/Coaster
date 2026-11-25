@@ -1,6 +1,5 @@
 import 'package:material_ui/material_ui.dart';
 
-/// Palet Mineral Stoneware & Deep Spring Teal (selaras DESIGN.md v4.0).
 abstract final class ShcPalette {
   static const canvas = Color(0xFFF4F6F5);
   static const surface = Color(0xFFFBFCFB);

@@ -4,10 +4,6 @@
 #include <Arduino.h>
 #include "config.h"
 
-// Faktor diambil dari config.h, bukan ditulis ulang di sini. Sebelumnya nilainya
-// digandakan secara hardcode di file ini sementara config.h mendefinisikan angka
-// yang sama dengan komentar "harus identik dengan test_simulation.py dan web" --
-// definenya jadi mati dan setiap perubahan hanya menyentuh satu salinan.
 inline uint32_t computeAdaptiveIntervalMs(uint32_t baseIntervalMs, float tempC, float humidityPct) {
     if (isnan(tempC) || isnan(humidityPct)) {
         return baseIntervalMs;

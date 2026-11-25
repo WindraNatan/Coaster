@@ -1,6 +1,4 @@
-// Golden widget test untuk tangkapan layar aplikasi.
-//
-// Tangkap ulang: flutter test test/golden_capture.dart --update-goldens
+// Tangkap ulang golden: flutter test test/golden_capture.dart --update-goldens
 import 'dart:convert';
 import 'dart:io';
 

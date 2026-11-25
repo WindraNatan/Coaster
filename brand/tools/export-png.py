@@ -1,8 +1,4 @@
-"""Menghitung ukuran ekspor PNG dan memeriksa hasilnya di disk.
-
-Ekspornya sendiri dijalankan lewat browser (lihat PANDUAN-LOGO.md) memakai
-deviceScaleFactor 3. Skrip ini menghitung target dan membandingkannya dengan
-berkas yang benar-benar ada, supaya tidak ada klaim ukuran tanpa bukti.
+"""Memeriksa ukuran ekspor PNG hasil tangkapan browser terhadap target 3x viewBox.
 
 Dijalankan: python brand/tools/export-png.py
 """
@@ -13,8 +9,7 @@ import re
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, 'brand')
 
-# 3x viewBox. Lockup selebar 1378 px menjadi 4134 px: 350 mm pada 300 DPI,
-# cukup untuk sampul A4 (210 mm) dengan margin.
+# 3x viewBox: 1378 px menjadi 4134 px (350 mm pada 300 DPI untuk sampul A4).
 SCALE = 3
 
 

@@ -16,7 +16,7 @@ import {
 
 export default function LoginModal({ isOpen, onClose, onAuthChanged }) {
   const dialogRef = useRef(null);
-  const [tab, setTab] = useState('login'); // 'login' | 'register'
+  const [tab, setTab] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [claimCode, setClaimCode] = useState('');

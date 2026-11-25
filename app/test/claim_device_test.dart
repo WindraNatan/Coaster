@@ -1,6 +1,3 @@
-// Alur klaim alat: kode 8 karakter -> /claims/<kode> -> /links/<akun>/<alat>.
-// Membuktikan jalur REST persis dan bahwa UID alat (bukan UID akun) yang dipakai
-// sebagai node data sesudahnya.
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart';
@@ -70,8 +67,6 @@ void main() {
     expect(calls, ['GET']);
   });
 
-  // Tatakan tidak punya layar: pesan ini muncul tepat saat pengguna salah ketik,
-  // jadi tidak boleh menyuruh mencari tampilan yang tidak ada.
   test('pesan kode salah mengarahkan ke Serial Monitor', () async {
     final client = MockClient((req) async => Response('null', 200));
     try {
@@ -106,8 +101,7 @@ void main() {
     expect(s.coasterUrl(_url), '$_url/users/uid-alat/smart_coaster');
   });
 
-  // Akun B login setelah akun A tidak boleh mewarisi alat A: kalau tertinggal,
-  // penemuan tautan dilewati dan B membaca node milik A.
+  // Cegah akun berikutnya mewarisi UID perangkat dari sesi akun sebelumnya.
   test('login akun lain menghapus UID alat sebelumnya', () async {
     await saveSession(const AuthSession(
         'tokA', 'a@b.c', 'uid-akun-a', 9999999999999, 'refA', 'uid-alat-a'));
@@ -156,9 +150,7 @@ void main() {
     expect(paths, ['GET /links/uid-akun.json']);
   });
 
-  // Aturan RTDB tidak menaikkan izin ke node induk: kalau `.read` hanya ada di
-  // links/$ownerUid/$deviceUid, permintaan daftar tautan selalu 401. Tes ini
-  // mengunci bahwa aplikasi tidak bergantung pada izin tingkat $deviceUid.
+  // Izin RTDB tidak naik ke induk; pastikan discovery memanggil jalur daftar $ownerUid.
   test('discoverDevice memakai jalur daftar, bukan per alat', () async {
     final paths = <String>[];
     final client = MockClient((req) async {
@@ -183,7 +175,6 @@ void main() {
     expect(uid, 'alat-baru');
   });
 
-  // Rules belum memuat blok links -> 401. Bukan gagal boot: fallback dipakai.
   test('discoverDevice mengembalikan kosong saat ditolak server', () async {
     final client = MockClient((req) async => Response('Unauthorized', 401));
     final uid = await discoverDevice(

@@ -237,8 +237,15 @@ function isNewTelemetryFrame(prevTlm, nextTlm) {
   );
 }
 
-function computeLiveRemainingSec(tlm, anchoredAtMs, nowMs) {
-  if (!tlm || tlm.standby) return null;
+const DEVICE_STALE_MS = 25000;
+
+function isDeviceStale(lastHbAtMs, nowMs, thresholdMs = DEVICE_STALE_MS) {
+  if (!Number.isFinite(lastHbAtMs) || !Number.isFinite(nowMs)) return false;
+  return nowMs - lastHbAtMs > thresholdMs;
+}
+
+function computeLiveRemainingSec(tlm, anchoredAtMs, nowMs, deviceOffline = false) {
+  if (!tlm || tlm.standby || deviceOffline) return null;
   if (tlm.state === 'ALERT_DRINK') return 0;
   if (tlm.state !== 'TIMING') return null;
   const base = Math.max(0, Math.round(Number(tlm.remainingSec) || 0));
@@ -249,6 +256,7 @@ function computeLiveRemainingSec(tlm, anchoredAtMs, nowMs) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    DEVICE_STALE_MS,
     canonicalState,
     stateBadgeLabel,
     parseCloudTelemetry,
@@ -259,6 +267,7 @@ if (typeof module !== 'undefined' && module.exports) {
     computeEffectiveIntervalMs,
     applySseEvent,
     isNewTelemetryFrame,
+    isDeviceStale,
     computeLiveRemainingSec
   };
 }

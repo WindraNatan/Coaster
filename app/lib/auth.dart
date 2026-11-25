@@ -1,8 +1,4 @@
-// Login Firebase (Email/Password) lewat REST, tanpa SDK. Token disimpan di
-// SharedPreferences dan ditempel ke setiap request RTDB sebagai ?auth=..., karena rules
-// menolak akses anonim.
-// ponytail: satu akun pemilik, bukan multi-user. Kalau nanti tiap coaster punya pemilik
-// sendiri, ganti pembatas path jadi /users/{uid}/smart_coaster dan rules-nya cukup $uid.
+// Autentikasi Firebase REST tanpa SDK; token dikirim lewat query ?auth=.
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -18,7 +14,6 @@ const _kRefresh = 'shc_refresh_token';
 const _kApiKey = 'shc_api_key';
 const _kDeviceUid = 'shc_device_uid';
 
-/// Perpanjang ID token memakai refresh token, tanpa minta password lagi.
 Future<AuthSession?> refreshSession(AuthSession s, {http.Client? client}) async {
   final key = await loadApiKey();
   if (key.isEmpty || s.refreshToken.isEmpty) return null;
@@ -73,8 +68,7 @@ class AuthSession {
   final int expiresAtMs;
   final String refreshToken;
 
-  /// UID alat yang ditautkan akun ini. Berbeda dari [uid] (UID akun): data
-  /// telemetri hidup di node milik alat, sama seperti firmware dan web PWA.
+  /// UID perangkat tertaut; telemetri berada di node perangkat, bukan akun.
   final String deviceUid;
 
   const AuthSession(this.token, this.email, this.uid, this.expiresAtMs,
@@ -91,9 +85,7 @@ class AuthSession {
       ? '?print=silent'
       : '?auth=${Uri.encodeComponent(token)}&print=silent';
 
-  /// Node data milik alat. Kalau alat belum ditautkan, jatuh ke node akun supaya
-  /// instalasi lama tetap berfungsi; [AuthSession.hasDevice] membedakan keduanya
-  /// bagi pemanggil yang perlu tahu.
+  /// Node data perangkat, fallback ke node akun jika belum ditautkan.
   String coasterUrl(String base) => '$base/users/'
       '${Uri.encodeComponent(deviceUid.isEmpty ? uid : deviceUid)}/smart_coaster';
 
@@ -104,8 +96,7 @@ class AuthSession {
       deviceUid ?? this.deviceUid);
 }
 
-/// Klaim kode alat 8 karakter: baca `/claims/<kode>`, lalu tulis tautan
-/// `/links/<uid akun>/<uid alat>`. Rules menolak kalau kode tidak menunjuk alat itu.
+/// Tautkan kode 8 karakter lewat `/claims/<kode>` lalu tulis `/links/<uid>/<deviceUid>`.
 Future<String> claimDevice({
   required String base,
   required String code,
@@ -146,13 +137,8 @@ Future<String> claimDevice({
   }
 }
 
-/// Baca tautan yang sudah ada di `/links/<uid akun>`, supaya menginstal ulang
-/// aplikasi tidak perlu mengetik kode alat lagi. Nilai kosong kalau belum ada
-/// tautan.
-///
-/// Butuh `.read` di level `links/$ownerUid` pada firebase-rules.json: izin RTDB
-/// tidak naik ke node induk, jadi `.read` yang hanya ada di `$deviceUid` membuat
-/// permintaan ini selalu 401.
+/// Baca tautan di `/links/<uid>` agar login ulang tidak perlu klaim lagi.
+/// Butuh .read di level links/$ownerUid (izin RTDB tidak naik ke induk).
 Future<String> discoverDevice({
   required String base,
   required AuthSession session,
@@ -163,13 +149,11 @@ Future<String> discoverDevice({
     final res = await c
         .get(Uri.parse(
             '$base/links/${Uri.encodeComponent(session.uid)}.json${session.suffix}'))
-        // Timeout pendek: ini jalur bonus. Kalau gagal, boot tetap lanjut dengan
-        // node akun, dan pengguna masih bisa menautkan manual lewat tombol.
+        // Timeout pendek agar kegagalan discovery tidak menghambat boot.
         .timeout(const Duration(seconds: 4));
     if (res.statusCode != 200) return '';
     final data = jsonDecode(res.body);
     if (data is! Map || data.isEmpty) return '';
-    // Bisa ada lebih dari satu alat; pakai yang terakhir ditautkan.
     String best = '';
     var bestAt = -1;
     data.forEach((k, v) {
@@ -182,15 +166,13 @@ Future<String> discoverDevice({
     });
     return best;
   } catch (_) {
-    // Jaringan/aturan bermasalah bukan kegagalan boot: tetap pakai fallback.
     return '';
   } finally {
     if (client == null) c.close();
   }
 }
 
-/// Cari kode klaim milik akun sendiri: coba node privat baru dulu, lalu node
-/// lama sebagai cadangan untuk firmware sebelum pemisahan `/private`.
+/// Baca kode klaim dari /private, fallback ke node lama.
 Future<String> findOwnClaimCode({
   required String base,
   required AuthSession session,
@@ -221,14 +203,11 @@ Future<String> findOwnClaimCode({
   }
 }
 
-/// UID alat yang sudah ditautkan, atau kosong. Dipakai saat boot sebelum
-/// [claimDevice] pernah dipanggil di perangkat ini.
 Future<String> loadDeviceUid() async {
   final p = await SharedPreferences.getInstance();
   return p.getString(_kDeviceUid) ?? '';
 }
 
-/// Simpan sesi ke penyimpanan lokal. Nilai kosong menghapus semuanya.
 Future<void> saveSession(AuthSession? s) async {
   final p = await SharedPreferences.getInstance();
   if (s == null) {
@@ -245,9 +224,7 @@ Future<void> saveSession(AuthSession? s) async {
   await p.setString(_kEmail, s.email);
   await p.setString(_kUid, s.uid);
   if (s.refreshToken.isNotEmpty) await p.setString(_kRefresh, s.refreshToken);
-  // Harus menimpa, bukan hanya menulis saat terisi: kalau dibiarkan, akun B
-  // yang login setelah akun A mewarisi UID alat A, melewati penemuan tautan,
-  // dan membaca node milik akun lain.
+  // Timpa atau hapus _kDeviceUid agar akun berikutnya tidak mewarisi perangkat lama.
   if (s.deviceUid.isEmpty) {
     await p.remove(_kDeviceUid);
   } else {
@@ -264,9 +241,7 @@ Future<AuthSession?> loadSession() async {
       p.getString(_kRefresh) ?? '', p.getString(_kDeviceUid) ?? '');
 }
 
-// Nilai tersimpan (diketik pengguna) menang; kalau kosong, pakai tetapan build.
-// refreshSession() memakai fungsi ini, jadi tanpa cadangan tetapan, instalasi
-// baru berhasil login sekali lalu kehilangan sesi setelah token kedaluwarsa.
+// Fallback ke kFirebaseApiKey agar refreshSession() bekerja pada instalasi baru.
 Future<String> loadApiKey() async {
   final p = await SharedPreferences.getInstance();
   final stored = (p.getString(_kApiKey) ?? '').trim();
@@ -278,7 +253,6 @@ Future<void> saveApiKey(String key) async {
   await p.setString(_kApiKey, key.trim());
 }
 
-/// Tukar email+password jadi ID token. Melempar pesan siap tampil kalau gagal.
 Future<AuthSession> signIn({
   required String email,
   required String password,

@@ -1,7 +1,4 @@
-"""Membangun seluruh berkas logo dari satu definisi tanda + wordmark.
-
-Menulis enam SVG di brand/ (tanda dan kuncian, versi terang dan gelap) serta
-web/icon.svg. Semua berasal dari bentuk yang sama, jadi tidak bisa menyimpang.
+"""Membangun seluruh SVG logo di brand/ dan web/icon.svg dari satu geometri.
 
 Dijalankan: python brand/tools/build-brand.py
 """
@@ -46,8 +43,7 @@ def glyphs(text, size):
 
 
 def mark_defs():
-    """Potongan air. Dideklarasikan sekali di akar SVG: di dalam grup yang
-    diskalakan, koordinat clipPath ikut terskala dan air terpotong salah."""
+    """Dideklarasikan di akar SVG agar koordinat clipPath tidak ikut terskala di dalam grup."""
     return '''  <defs>
     <clipPath id="body">
       <path d="M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z"/>
@@ -57,14 +53,10 @@ def mark_defs():
 
 
 def mark(color_mode='dark'):
-    """Tanda: gelas di atas tatakan, tampak sedikit dari atas."""
     if color_mode == 'dark':
         base, face, edge, water, surf, rim = '#071219', '#173743', CYAN, CYAN, '#7FE3F4', '#9FC4CE'
     elif color_mode == 'yellow':
-        # Sticker di casing mustard #EDB651. Cyan di atas kuning nyaris tidak
-        # terbaca (kontras 1,3:1), jadi air dikurung di dalam badan gelas yang
-        # bertinta, dan tatakan diberi muka putih tulang supaya gelas punya
-        # bidang untuk berdiri.
+        # Kurung air dan beri alas putih tulang agar kontras tetap terbaca di atas casing #EDB651.
         base, face, edge, water, surf, rim = '#C9922F', '#FAF5E9', INK, CYAN, '#DDF1F6', INK
     else:
         base, face, edge, water, surf, rim = '#0A1920', '#132B35', '#2FA8C4', CYAN, '#8FE9F7', '#8FB3BD'
@@ -79,13 +71,7 @@ def mark(color_mode='dark'):
 
 
 def sticker_yellow(with_name=True):
-    """Sticker untuk ditempel di casing kuning mustard.
-
-    Latar sengaja kosong: kalau dicetak di vinil bening, kuning casing yang
-    menjadi latarnya. Preview-nya ada di sticker_yellow_preview().
-
-    Nama produk memakai tinta gelap, bukan pucat: pucat di atas kuning hilang.
-    """
+    """Sticker transparan untuk casing #EDB651 memakai tinta gelap agar kontras terjaga."""
     if with_name:
         name, w = glyphs('Smart Hydration Coaster', 56)
     else:
@@ -117,12 +103,10 @@ def sticker_yellow(with_name=True):
 
 
 def sticker_yellow_preview():
-    """Sticker yang sama di atas bidang kuning casing, untuk menilai kontras."""
     satu = sticker_yellow()
     vb = satu.split('viewBox="')[1].split('"')[0].split()
     w, h = int(vb[2]), int(vb[3])
-    # Seluruh isi dipakai apa adanya, termasuk <defs>: clipPath gelas harus
-    # ikut, kalau tidak air menonjol keluar dinding yang meruncing.
+    # Sertakan <defs> dari SVG sumber agar clipPath air tetap berfungsi.
     isi = satu[satu.index('>') + 1:satu.rindex('</svg>')]
     isi = isi[isi.index('</title>') + len('</title>'):]
     pad = 96
@@ -135,7 +119,6 @@ def sticker_yellow_preview():
 
 
 def lockup_horizontal(bg):
-    """Tanda di kiri, nama produk di kanan."""
     name, w = glyphs('Smart Hydration Coaster', 68)
     margin, gap, mark_size = 96, 54, 300
     tx = margin + mark_size + gap
@@ -160,7 +143,6 @@ def lockup_horizontal(bg):
 
 
 def lockup_vertical(bg):
-    """Tanda di atas, nama produk di bawah — untuk kop surat dan sampul."""
     name, w = glyphs('Smart Hydration Coaster', 58)
     mark_size = 300
     width = int(w + 160)
@@ -183,12 +165,7 @@ def lockup_vertical(bg):
 
 
 def icon(scale=0.72, pad=70):
-    """Ikon PWA: tanda yang sama dengan logo, di atas bidang tinta.
-
-    Isi diperkecil ke area aman maskable (72%) supaya tidak terpotong saat
-    launcher memakai bentuk bulat atau squircle. Geometrinya tidak disalin:
-    mark() dipakai apa adanya, jadi ikon tidak bisa menyimpang dari logo.
-    """
+    """Skala 72% menjaga ikon tetap di area aman maskable."""
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Smart Hydration Coaster">
   <title>Smart Hydration Coaster</title>
   <rect width="512" height="512" rx="112" fill="#071219"/>
@@ -205,12 +182,7 @@ def icon(scale=0.72, pad=70):
 
 
 def android_foreground(scale=0.72, pad=70):
-    """Lapisan depan adaptive icon Android, dari bentuk yang sama.
-
-    Android memakai viewport 512 dengan isi diperkecil, jadi koordinatnya
-    identik dengan SVG tanda. Air diklip ke bentuk gelas; tanpa klip, persegi
-    panjang air menonjol keluar dinding yang meruncing.
-    """
+    """Lapisan depan adaptive icon Android dengan viewport dan klip yang sama."""
     body = 'M168,158 L182,372 A74,25 0 0 0 330,372 L344,158 Z'
     return f'''<?xml version="1.0" encoding="utf-8"?>
 <!-- Dihasilkan android_foreground() di brand/tools/build-brand.py.

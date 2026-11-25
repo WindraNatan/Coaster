@@ -1,7 +1,6 @@
 #include <HX711.h>
 
-// Skrip terpisah untuk mencari faktor kalibrasi sensor load cell
-// Unggah skrip ini terlebih dahulu sebelum menjalankan program utama
+// Cari faktor kalibrasi load cell sebelum mengunggah firmware utama.
 
 #define PIN_HX711_DOUT 16
 #define PIN_HX711_SCK  4

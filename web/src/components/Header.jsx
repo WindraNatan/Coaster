@@ -6,11 +6,19 @@ export default function Header({
   setConnMode,
   usbConnected,
   cloudConnected,
+  deviceOffline = false,
   standby,
   userEmail,
   onOpenAuth
 }) {
   const getBadgeInfo = () => {
+    if (deviceOffline) {
+      return {
+        label: 'Alat terputus',
+        cls: 'bg-danger-bg text-danger border-danger-border',
+        dot: 'bg-danger'
+      };
+    }
     if (standby) {
       return {
         label: 'Mode istirahat',

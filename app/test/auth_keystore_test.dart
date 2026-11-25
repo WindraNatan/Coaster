@@ -1,6 +1,4 @@
-// Regresi: refreshSession() mengambil API key dari loadApiKey(). Kalau fungsi
-// itu hanya membaca SharedPreferences, instalasi baru berhasil login sekali
-// lalu sesi mati saat token kedaluwarsa (±55 menit) karena key kosong.
+// Pastikan refreshSession() memakai fallback API key build saat SharedPreferences kosong.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smart_coaster/auth.dart';

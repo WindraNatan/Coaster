@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
-"""Periksa firebase-rules.json memuat izin yang dibutuhkan klien.
+"""Periksa firebase-rules.json memuat izin level-induk dan validasi schema RTDB.
 
-Alasan berkas ini ada: izin RTDB TIDAK naik ke node induk. Kalau `.read` hanya
-ada di links/$ownerUid/$deviceUid, maka GET /links/<uid akun>.json (daftar
-tautan milik sendiri) selalu 401 — penemuan tautan di aplikasi tidak akan
-pernah berhasil, dan tidak ada tes Dart yang bisa menangkapnya karena tes
-memakai klien tiruan yang selalu membalas 200.
-
-Berkas aturan adalah kode produksi; ini tesnya. Jalankan bersama tes lain:
-    python tools/cek_aturan_berkas.py
+Jalankan: python tools/cek_aturan_berkas.py
 """
 import io
 import json
@@ -36,7 +29,7 @@ def main():
             print(f'[GAGAL] {deskripsi}')
             gagal.append(deskripsi)
 
-    # 1. Klien membaca daftar tautan sendiri: butuh .read di level $ownerUid.
+    # Izin RTDB tidak naik ke induk; butuh .read di level $ownerUid.
     links = aturan.get('links', {}).get('$ownerUid', {})
     perlu('links/$ownerUid punya .read (daftar tautan bisa dibaca pemilik)',
           '.read' in links)
@@ -45,13 +38,10 @@ def main():
     perlu('links/$ownerUid/$deviceUid punya .write',
           '.write' in links.get('$deviceUid', {}))
 
-    # 2. Klaim alat: kode harus bisa dibaca per kode, dan hanya bisa ditulis
-    #    oleh penulisnya sendiri (newData.val() === auth.uid).
     claims = aturan.get('claims', {}).get('$code', {})
     perlu('claims/$code punya .read', '.read' in claims)
     perlu('claims/$code punya .write', '.write' in claims)
 
-    # 3. Node data: tidak boleh bisa dibaca tanpa token.
     pengguna = aturan.get('users', {}).get('$uid', {}).get('smart_coaster', {})
     baca = pengguna.get('.read', '')
     perlu('users/$uid/smart_coaster .read memuat auth != null',
@@ -59,7 +49,6 @@ def main():
     perlu('users/$uid/smart_coaster .read memuat cek links (pemilik lain)',
           'links/' in baca)
 
-    # 4. Penguatan keamanan schema & hak tulis:
     perlu('claims/$code memvalidasi format 8 karakter',
           'matches(' in claims.get('.validate', ''))
     tautan_dev = links.get('$deviceUid', {})

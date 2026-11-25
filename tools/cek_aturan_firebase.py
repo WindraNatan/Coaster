@@ -1,21 +1,7 @@
 #!/usr/bin/env python3
-"""Periksa apakah aturan Firebase di konsol sudah lengkap untuk alur tautan alat.
+"""Uji aturan Firebase RTDB langsung di konsol via REST (butuh kredensial login).
 
-Alat ini memakai REST langsung (tanpa HP, tanpa SDK): login dengan email dan
-kata sandi, lalu menguji tiga hal yang tidak bisa diuji oleh MockClient —
-apakah izin tingkat node benar-benar diberikan konsol.
-
-Yang diperiksa:
-  1. /claims/<kode>            -> harus 200 (blok claims ada)
-  2. /links/<uid>              -> harus 200 (`.read` di level $ownerUid ada)
-  3. /users/<uid orang lain>   -> harus 401 (tidak bisa baca node asing)
-
-Poin 2 adalah yang paling mudah terlewat: izin RTDB tidak naik ke node induk,
-jadi `.read` yang hanya ada di links/$ownerUid/$deviceUid membuat permintaan
-daftar tautan selalu 401 dan penemuan tautan tidak pernah jalan.
-
-Pakai:
-    python tools/cek_aturan_firebase.py <email> <password>
+Pakai: python tools/cek_aturan_firebase.py <email> <password>
 """
 import json
 import os

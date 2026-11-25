@@ -19,6 +19,7 @@ import {
   computeEffectiveIntervalMs,
   applySseEvent,
   isNewTelemetryFrame,
+  isDeviceStale,
   computeLiveRemainingSec
 } from './protocol';
 import {
@@ -80,12 +81,12 @@ export default function App() {
     } catch (_) {
       return 'sim';
     }
-  }); // 'sim' | 'usb' | 'cloud'
+  });
   const [usbConnected, setUsbConnected] = useState(false);
-  const [usbStatus, setUsbStatus] = useState('idle'); // 'idle' | 'connecting' | 'connected' | 'unsupported' | 'error'
+  const [usbStatus, setUsbStatus] = useState('idle');
   const [usbError, setUsbError] = useState('');
   const [cloudConnected, setCloudConnected] = useState(false);
-  const [cloudStatus, setCloudStatus] = useState('idle'); // 'idle' | 'loading' | 'connected' | 'unauthenticated' | 'error'
+  const [cloudStatus, setCloudStatus] = useState('idle');
   const [cloudError, setCloudError] = useState('');
 
   const [weight, setWeight] = useState(0);
@@ -158,6 +159,12 @@ export default function App() {
   const lastStreamTlmAtRef = useRef(0);
   const lastStreamCfgAtRef = useRef(0);
   const cloudPollingRef = useRef(false);
+  const lastCloudHbRef = useRef(null);
+  const lastCloudHbAtRef = useRef(null);
+  const [cloudStaleSec, setCloudStaleSec] = useState(0);
+  const cloudStaleLoggedRef = useRef(false);
+  const lastSerialAtRef = useRef(0);
+  const usbIntentionalCloseRef = useRef(false);
 
   useEffect(() => {
     cloudConnectedRef.current = cloudConnected;
@@ -229,7 +236,6 @@ export default function App() {
     } catch (_) {}
   }, []);
 
-  // Inisialisasi gelas kosong dan interval saat pertama dimuat
   useEffect(() => {
     fsm.setEmptyCup(emptyCup);
     const effMs = computeEffectiveIntervalMs({
@@ -246,7 +252,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Selaraskan interval adaptif pada mode simulasi
   useEffect(() => {
     if (connMode !== 'sim') return;
     const effMs = computeEffectiveIntervalMs({
@@ -318,7 +323,6 @@ export default function App() {
     return false;
   }, []);
 
-  // Loop simulator 100 ms
   useEffect(() => {
     if (connMode !== 'sim') return undefined;
 
@@ -381,6 +385,15 @@ export default function App() {
       const t = parseCloudTelemetry(rawTlm);
       if (!t) return;
       const nowMs = Date.now();
+      if (t.hb > 0 && lastCloudHbRef.current !== t.hb) {
+        lastCloudHbRef.current = t.hb;
+        lastCloudHbAtRef.current = nowMs;
+        setCloudStaleSec(0);
+        if (cloudStaleLoggedRef.current) {
+          cloudStaleLoggedRef.current = false;
+          addLog('Koneksi', 'Tatakan kembali terhubung dan mengirim pembaruan.');
+        }
+      }
       if (isNewTelemetryFrame(cloudParsedTlmRef.current, t)) {
         cloudAnchorMsRef.current = nowMs;
       }
@@ -397,7 +410,8 @@ export default function App() {
       setStateString(t.rawState);
       setStandby(t.standby);
       setIsStable(t.state === 'TIMING' || t.state === 'STABLE');
-      setRemSec(computeLiveRemainingSec(t, cloudAnchorMsRef.current, nowMs));
+      const offlineNow = isDeviceStale(lastCloudHbAtRef.current, nowMs);
+      setRemSec(computeLiveRemainingSec(t, cloudAnchorMsRef.current, nowMs, offlineNow));
       setTargetSec(Math.round(t.targetMs / 1000));
 
       const firstHydration = !cloudHydratedRef.current;
@@ -433,7 +447,7 @@ export default function App() {
         syncHistoryNow();
       }
     },
-    [fsm, syncHistoryNow]
+    [fsm, syncHistoryNow, addLog]
   );
 
   const applyCloudConfig = useCallback(
@@ -480,6 +494,10 @@ export default function App() {
     cloudHydratedRef.current = false;
     cloudParsedTlmRef.current = null;
     cloudAnchorMsRef.current = null;
+    lastCloudHbRef.current = null;
+    lastCloudHbAtRef.current = null;
+    cloudStaleLoggedRef.current = false;
+    setCloudStaleSec(0);
     closeSseSockets();
   }, [closeSseSockets]);
 
@@ -704,18 +722,35 @@ export default function App() {
       return undefined;
     }
     startCloudStreams(false);
+    const checkCloudStale = () => {
+      const nowMs = Date.now();
+      if (!isDeviceStale(lastCloudHbAtRef.current, nowMs)) {
+        setCloudStaleSec((prev) => (prev === 0 ? prev : 0));
+        return false;
+      }
+      const secs = Math.floor((nowMs - lastCloudHbAtRef.current) / 1000);
+      setCloudStaleSec(secs);
+      setRemSec(null);
+      if (!cloudStaleLoggedRef.current) {
+        cloudStaleLoggedRef.current = true;
+        addLog('Koneksi', 'Tatakan tidak mengirim data. Hitung mundur dan kendali dijeda.');
+      }
+      return true;
+    };
     const safetyPoll = setInterval(pollCloudOnce, 20000);
     const countdownTick = setInterval(() => {
+      if (checkCloudStale()) return;
       const tlm = cloudParsedTlmRef.current;
       if (!tlm || tlm.standby || simParamsRef.current.standby || tlm.state !== 'TIMING') return;
-      const nextRem = computeLiveRemainingSec(tlm, cloudAnchorMsRef.current, Date.now());
+      const nextRem = computeLiveRemainingSec(tlm, cloudAnchorMsRef.current, Date.now(), false);
       setRemSec((prev) => (prev === nextRem ? prev : nextRem));
     }, 1000);
     const handleWakeup = () => {
       if (document.visibilityState === 'hidden') return;
+      const staleNow = checkCloudStale();
       const tlm = cloudParsedTlmRef.current;
-      if (tlm && !tlm.standby && tlm.state === 'TIMING') {
-        setRemSec(computeLiveRemainingSec(tlm, cloudAnchorMsRef.current, Date.now()));
+      if (!staleNow && tlm && !tlm.standby && tlm.state === 'TIMING') {
+        setRemSec(computeLiveRemainingSec(tlm, cloudAnchorMsRef.current, Date.now(), false));
       }
       if (!sseTlmRef.current || sseTlmRef.current.readyState === 2) {
         startCloudStreams(false);
@@ -732,9 +767,10 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleWakeup);
       closeCloudStreams();
     };
-  }, [connMode, startCloudStreams, pollCloudOnce, closeCloudStreams]);
+  }, [connMode, startCloudStreams, pollCloudOnce, closeCloudStreams, addLog]);
 
-  const disconnectUsbSerial = useCallback(async () => {
+  const disconnectUsbSerial = useCallback(async (intentional = true) => {
+    usbIntentionalCloseRef.current = intentional;
     try {
       if (serialReaderRef.current) {
         await serialReaderRef.current.cancel().catch(() => {});
@@ -765,6 +801,7 @@ export default function App() {
     (line) => {
       const parsed = parseSerialLine(line);
       if (!parsed) return;
+      lastSerialAtRef.current = Date.now();
       setStateString(parsed.rawState);
       if (parsed.weightG !== null) setWeight(parsed.weightG);
       if (parsed.waterMl !== null) setCupMl(parsed.waterMl);
@@ -817,12 +854,14 @@ export default function App() {
       return;
     }
     try {
-      await disconnectUsbSerial();
+      await disconnectUsbSerial(true);
+      usbIntentionalCloseRef.current = false;
       setUsbStatus('connecting');
       setUsbError('');
       const port = await navigator.serial.requestPort();
       await port.open({ baudRate: 115200 });
       serialPortRef.current = port;
+      lastSerialAtRef.current = Date.now();
       setUsbConnected(true);
       setUsbStatus('connected');
       addLog('Koneksi', 'Tatakan tersambung lewat kabel USB.');
@@ -845,13 +884,35 @@ export default function App() {
           });
         }
       }
+      if (!usbIntentionalCloseRef.current && connModeRef.current === 'usb') {
+        setUsbConnected(false);
+        setUsbStatus('error');
+        setUsbError('Kabel USB terputus di tengah jalan. Pasang kembali lalu hubungkan ulang.');
+        setRemSec(null);
+        addLog('Koneksi', 'Kabel USB terputus di tengah jalan.');
+      }
     } catch (err) {
       setUsbConnected(false);
       setUsbStatus('error');
       setUsbError('Sambungan kabel USB dibatalkan atau terputus. Pastikan kabel terpasang lalu coba lagi.');
+      setRemSec(null);
       addLog('Koneksi', `Sambungan kabel terhenti: ${err.message || 'dibatalkan'}.`);
     }
   }, [addLog, disconnectUsbSerial, handleSerialLine]);
+
+  useEffect(() => {
+    if (connMode !== 'usb' || !usbConnected) return undefined;
+    const id = setInterval(() => {
+      if (Date.now() - lastSerialAtRef.current > 4000) {
+        disconnectUsbSerial(false);
+        setUsbStatus('error');
+        setUsbError('Tatakan berhenti mengirim data lewat kabel USB. Periksa daya ESP32 lalu sambungkan ulang.');
+        setRemSec(null);
+        addLog('Koneksi', 'Aliran data USB terhenti lebih dari 4 detik.');
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [connMode, usbConnected, disconnectUsbSerial, addLog]);
 
   const handleSelectConnMode = (nextMode) => {
     if (scenarioTimerRef.current) {
@@ -1068,7 +1129,6 @@ export default function App() {
     }
   };
 
-  // Aksi taktil simulasi gelas
   const handleSimLift = () => {
     if (connMode !== 'sim') return;
     if (weight >= CFG.CUP_ON) lastPlacedWeightRef.current = weight;
@@ -1103,7 +1163,6 @@ export default function App() {
     setWeight(nextW);
   };
 
-  // Pelari skenario uji otomatis untuk demo presentasi
   const runScenario = (id) => {
     if (connMode !== 'sim') return;
     if (scenarioTimerRef.current) {
@@ -1153,7 +1212,6 @@ export default function App() {
         setActiveScenario(null);
       });
     } else if (id === 3) {
-      // Tegukan kecil (< 20 ml): angkat (0 g) lalu letakkan kembali hanya berkurang 10 ml
       setDemo(true);
       settleInTiming(350);
       simClockRef.current += 15500;
@@ -1343,8 +1401,34 @@ export default function App() {
     : `${(targetSec / 60).toFixed(targetSec % 60 === 0 ? 0 : 1)} menit`;
 
   const currentTimerMode = demo ? 'DEMO' : autoDht ? 'AUTO_DHT' : 'MANUAL';
+  const cloudDeviceOffline = connMode === 'cloud' && cloudConnected && cloudStaleSec > 0;
+  const usbDeviceOffline = connMode === 'usb' && !usbConnected && usbStatus === 'error';
+  const deviceOffline = cloudDeviceOffline || usbDeviceOffline;
+  const controlsDisabled =
+    (connMode === 'cloud' && (!cloudConnected || cloudDeviceOffline)) ||
+    (connMode === 'usb' && !usbConnected);
 
   const renderConnectionNotice = () => {
+    if (cloudDeviceOffline) {
+      return (
+        <div
+          className="rounded-2xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs bg-danger-bg border-danger-border text-danger"
+          role="alert"
+        >
+          <span>
+            {`Tatakan tidak mengirim data selama ${cloudStaleSec} detik. Periksa daya atau Wi-Fi ESP32. Hitung mundur dan kendali dijeda.`}
+          </span>
+          <button
+            type="button"
+            onClick={pollCloudOnce}
+            className="px-3 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
+          >
+            Periksa ulang
+          </button>
+        </div>
+      );
+    }
+
     if (connMode === 'cloud' && cloudStatus !== 'connected') {
       const isLoading = cloudStatus === 'loading';
       const isUnauth = cloudStatus === 'unauthenticated' || !shcUid();
@@ -1418,6 +1502,7 @@ export default function App() {
         setConnMode={handleSelectConnMode}
         usbConnected={usbConnected}
         cloudConnected={cloudConnected}
+        deviceOffline={deviceOffline}
         standby={standby}
         userEmail={userEmail}
         onOpenAuth={() => setAuthModalOpen(true)}
@@ -1426,7 +1511,6 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-4 space-y-3 sm:space-y-4">
         {renderConnectionNotice()}
 
-        {/* Baris 1: Gelas di tatakan (Kiri) + Tiga cincin & Kondisi ruangan/sesi (Kanan) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
           <div className="lg:col-span-5">
             <VisualTumblerCoaster
@@ -1434,6 +1518,7 @@ export default function App() {
               weight={weight}
               isStable={isStable}
               standby={standby}
+              deviceOffline={deviceOffline}
               cupMl={cupMl}
               cupMax={500}
               emptyCup={emptyCup}
@@ -1457,6 +1542,7 @@ export default function App() {
               targetSec={targetSec}
               stateString={stateString}
               standby={standby}
+              deviceOffline={deviceOffline}
               targetLabel={targetLabel}
             />
 
@@ -1472,6 +1558,8 @@ export default function App() {
               refillCount={refillCount}
               cheatCount={cheatCount}
               standby={standby}
+              deviceOffline={deviceOffline}
+              controlsDisabled={controlsDisabled}
               onOpenStartSession={() => setSessionModalOpen(true)}
               onEndSession={handleEndSession}
               sessionBusy={sessionBusy}
@@ -1479,11 +1567,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Baris 2: Pengaturan & Riwayat minum */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           <div className="lg:col-span-4">
             <QuickControls
               connMode={connMode}
+              controlsDisabled={controlsDisabled}
+              deviceOffline={deviceOffline}
               emptyCup={emptyCup}
               onCalibrateCup={handleCalibrateCup}
               onTare={handleTare}
@@ -1515,7 +1604,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Baris 3: Simulasi presentasi (khusus mode Simulasi) */}
         {connMode === 'sim' && (
           <LabSimulatorPanel
             weight={weight}

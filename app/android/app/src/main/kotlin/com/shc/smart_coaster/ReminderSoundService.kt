@@ -11,16 +11,8 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 
-/// Memutar audio pengingat di foreground service.
-///
-/// AlarmManager mengirim broadcast lalu `onReceive` kembali. Setelah itu proses
-/// aplikasi boleh dimatikan, sehingga MediaPlayer di dalam receiver berhenti di
-/// tengah lagu. Foreground service menyatakan ke sistem bahwa pemutaran masih
-/// berjalan, jadi proses tetap hidup sampai `onCompletion`.
-///
-/// Kanal notifikasi Android 8+ mengunci suara saat dibuat, sehingga file pilihan
-/// pengguna tidak bisa dipasang lewat konfigurasi kanal. Karena itu audio diputar
-/// di sini, bukan oleh NotificationManager.
+// Putar audio pengingat di foreground service agar tetap hidup sampai onCompletion.
+// Kanal notifikasi Android 8+ mengunci suara, sehingga pemutaran dilakukan di sini.
 class ReminderSoundService : Service() {
     private var player: MediaPlayer? = null
     private var wake: PowerManager.WakeLock? = null
@@ -28,9 +20,7 @@ class ReminderSoundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Lepas pasangan sebelumnya lebih dulu: alarm yang datang saat audio
-        // masih berjalan tidak boleh menumpuk pemutar, dan callback lama tidak
-        // boleh melepas pemutar baru.
+        // Lepas pemutar lama dulu agar alarm beruntun tidak menumpuk audio.
         releasePlayer()
         val sound = intent?.getStringExtra("sound")
         val vibrate = intent?.getBooleanExtra("vibrate", true) ?: true
@@ -54,11 +44,10 @@ class ReminderSoundService : Service() {
                 start()
             }
         } catch (e: Exception) {
-            // Berkas hilang atau format tidak didukung: notifikasi tetap tampil.
             Log.w("shc", "audio pengingat gagal: ${e.message}")
             stopSelfSafely()
         }
-        // NOT_STICKY: jangan ulang pemutaran kalau proses dibunuh sistem.
+        // Jangan ulang audio jika proses dibunuh sistem.
         return START_NOT_STICKY
     }
 

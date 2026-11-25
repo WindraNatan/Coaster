@@ -26,7 +26,6 @@ const pusher = createDailyCloudPusher({
 });
 
 (async () => {
-  // 1. Mode cloud: satu PATCH ke node hari ini, tanpa menyentuh telemetry.
   await pusher.pushDailyCloud();
   assert.strictEqual(panggilan.length, 1, 'satu tulisan saat angka harian berubah');
   const { url, opt } = panggilan[0];
@@ -37,17 +36,14 @@ const pusher = createDailyCloudPusher({
     total_ml: 300, drink_count: 2, refill_count: 0, cheat_count: 0
   });
 
-  // 2. Isi sama: tidak ditulis ulang.
   await pusher.pushDailyCloud();
   assert.strictEqual(panggilan.length, 1, 'isi identik tidak ditulis dua kali');
 
-  // 3. Angka harian berubah: ditulis lagi.
   delta = { total_ml: 450, drink_count: 3, refill_count: 0, cheat_count: 0 };
   await pusher.pushDailyCloud();
   assert.strictEqual(panggilan.length, 2, 'angka harian baru ikut tertulis');
   assert.strictEqual(JSON.parse(panggilan[1].opt.body).total_ml, 450);
 
-  // 4. Isi sama pada hari yang sama dilewati; hari baru tetap ditulis.
   await pusher.pushDailyCloud();
   assert.strictEqual(panggilan.length, 2, 'isi sama pada hari yang sama: lewati');
   tanggal = '2026-11-08';
@@ -55,7 +51,6 @@ const pusher = createDailyCloudPusher({
   assert.strictEqual(panggilan.length, 3, 'hari baru ditulis walau angkanya sama');
   assert.ok(panggilan[2].url.includes('/daily/2026-11-08.json'), 'tanggal baru dipakai');
 
-  // 5. Mode Simulator dan USB tidak menulis dari sini.
   connMode = 'sim';
   delta = { total_ml: 900, drink_count: 9, refill_count: 1, cheat_count: 0 };
   await pusher.pushDailyCloud();
@@ -63,7 +58,6 @@ const pusher = createDailyCloudPusher({
   await pusher.pushDailyCloud();
   assert.strictEqual(panggilan.length, 3, 'sim dan usb tidak menulis /daily dari jalur ini');
 
-  // 6. Gagal jaringan: memo dibuang supaya percobaan berikutnya jalan lagi.
   connMode = 'cloud';
   jawabFetch = false;
   await pusher.pushDailyCloud();

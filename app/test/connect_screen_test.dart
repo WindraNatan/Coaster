@@ -1,5 +1,3 @@
-// Layar masuk setelah URL Firebase ditanam di build (default project_config.dart):
-// pengguna umum hanya melihat email dan password.
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,8 +19,6 @@ void main() {
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Masuk'), findsOneWidget);
-    // Keduanya ditanam di project_config.dart, jadi pengguna umum tidak
-    // pernah melihat kolom teknis.
     expect(find.text('Web API Key proyek Firebase'),
         kFirebaseApiKey.isEmpty ? findsOneWidget : findsNothing);
   });
@@ -36,7 +32,6 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Kolom URL tetap tersembunyi karena nilainya sudah tersimpan.
     expect(find.text('URL Firebase RTDB'), findsNothing);
   });
 
@@ -61,12 +56,9 @@ void main() {
         find.widgetWithText(TextField, 'URL Firebase RTDB'), typed);
     await tester.pump();
 
-    // Teruskan lewat tombol: submit akan memakai isian, bukan kFirebaseUrl.
     expect(find.text(typed), findsOneWidget);
   });
 
-  // Hanya relevan kalau API key tidak ditanam; kalau ditanam, kolomnya memang
-  // tidak pernah tampil sehingga skenario ini tidak ada.
   testWidgets('kolom API key tidak hilang saat pengguna mengetik', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: ConnectScreen(onConnect: (_, _) {}, showKeyField: true),
@@ -78,14 +70,12 @@ void main() {
     await tester.enterText(keyField, 'AIzaSalahSekali');
     await tester.pump();
 
-    // Masih terlihat, jadi key yang salah bisa diperbaiki tanpa keluar layar.
     expect(find.text('Web API Key proyek Firebase'), findsOneWidget);
     expect(find.text('AIzaSalahSekali'), findsOneWidget);
   });
 
   testWidgets('key tersimpan yang basi tidak mengalahkan tetapan build',
       (tester) async {
-    // Key lama tersimpan (mis. dari build tanpa FB_API_KEY).
     SharedPreferences.setMockInitialValues({'shc_api_key': 'AIzaKUNO_LAMA'});
     expect(kFirebaseApiKey, isNotEmpty, reason: 'prasyarat: key ditanam');
 

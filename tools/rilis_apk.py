@@ -1,18 +1,7 @@
 #!/usr/bin/env python3
-"""Build APK release, terbitkan sebagai GitHub Release, cetak tautan unduh.
+"""Build APK release dan unggah ke GitHub Release memakai token GCM.
 
-Dipakai supaya pembaruan aplikasi tidak perlu menyambung kabel USB: pengguna
-mengunduh APK dari tautan rilis dan memasangnya di atas yang lama.
-
-Build release, bukan debug: debug memuat tiga ABI plus simbol dan mencapai
-178 MB, sementara release 50 MB. Kunci tanda tangannya sama-sama kunci debug
-(build.gradle.kts masih TODO), jadi pemasangan di atas versi lama tetap bisa
-tanpa uninstall.
-
-Token diambil dari Git Credential Manager, tidak disimpan ke berkas.
-
-Contoh:
-    python tools/rilis_apk.py 1.0.0-beta2
+Contoh: python tools/rilis_apk.py 1.0.0-beta2
 """
 import io
 import json
@@ -33,7 +22,6 @@ def sh(cmd, **kw):
 
 
 def github_token():
-    """Ambil token dari GCM. Gagal -> keluar dengan pesan jelas."""
     out = sh(['git', 'credential', 'fill'],
              input='protocol=https\nhost=github.com\n\n').stdout
     for line in out.splitlines():
@@ -79,9 +67,7 @@ def main():
     ukuran = os.path.getsize(APK)
 
     tok = github_token()
-    # Sumber rilis harus menunjuk komit yang benar-benar dibangun. Tanpa ini,
-    # tag baru berpijak pada cabang remote, yang bisa tertinggal dari HEAD lokal
-    # sehingga sumber rilis berbeda dari APK yang diunggah.
+    # Targetkan SHA HEAD agar rilis tidak menunjuk cabang remote yang tertinggal.
     sha = sh(['git', 'rev-parse', 'HEAD']).stdout.strip()
     if not sha:
         raise SystemExit('Tidak bisa membaca HEAD; jalankan dari dalam repo git.')
@@ -89,8 +75,7 @@ def main():
     if kotor:
         print('      PERINGATAN: ada perubahan belum di-commit; APK memuat kode '
               'yang tidak ada di komit mana pun.')
-    # Komit yang belum di-push tidak dikenal GitHub, sehingga target_commitish
-    # ditolak 422 dan pesannya menyesatkan (menyebut tag_name juga).
+    # Komit yang belum di-push ditolak API GitHub dengan HTTP 422.
     belum = sh(["git", "rev-list", "--count", "origin/master..HEAD"]).stdout.strip()
     if belum.isdigit() and int(belum) > 0:
         raise SystemExit(

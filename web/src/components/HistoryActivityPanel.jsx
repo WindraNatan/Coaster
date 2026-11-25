@@ -14,7 +14,7 @@ export default React.memo(function HistoryActivityPanel({
   onClearLogs,
   onExportCsv
 }) {
-  const [activeTab, setActiveTab] = useState('history'); // 'history' | 'logs'
+  const [activeTab, setActiveTab] = useState('history');
 
   const days7 = useMemo(() => {
     const days = [];
@@ -104,7 +104,6 @@ export default React.memo(function HistoryActivityPanel({
           </div>
         </div>
 
-        {/* Tab 1: Riwayat 7 hari terakhir */}
         {activeTab === 'history' && (
           <div
             id="panel-history"
@@ -161,7 +160,6 @@ export default React.memo(function HistoryActivityPanel({
           </div>
         )}
 
-        {/* Tab 2: Catatan aktivitas */}
         {activeTab === 'logs' && (
           <div
             id="panel-logs"

@@ -30,13 +30,8 @@ bool actuatorOutputState = false;
 bool demoMode = true;
 bool autoDhtTimerMode = true;
 bool buzzerMuted = false;
-// Perintah serial lokal menyimpan ke NVS tetapi tidak menulis cloud, sehingga
-// bacaan config berikutnya menimpanya kembali. cloudTask (core 0) mengungkap
-// config saat flag ini terpasang — jangan PATCH dari loop() core 1: satu HTTPS
-// butuh 1-3 dtk dan menghentikan sampling 10 Hz.
+// Core 0 mengunggah config saat flag ini aktif; PATCH di Core 1 memblokir sampling 10 Hz.
 volatile bool configDirty = false;
-// Cermin sisi loop dari SessionGate (lihat session_gate.h): dipakai untuk
-// mendeteksi perpindahan sesi dan untuk laporan serial.
 bool standbyActive = false;
 uint32_t customBaseIntervalMs = BASE_INTERVAL_MS;
 
@@ -80,9 +75,7 @@ void loadFromNvs(String& outSsid, String& outPass, String& outUrl) {
     prefs.begin("shc", true);
     float emptyCup = prefs.getFloat("emptyCup", DEFAULT_EMPTY_CUP_G);
     customBaseIntervalMs = prefs.getULong("baseMs", BASE_INTERVAL_MS);
-    // Default false: alat baru harus memakai interval normal 30 menit. Mode demo 15 detik
-    // hanya dipakai saat presentasi, dan dulu default-nya true sehingga alat yang baru
-    // di-flash langsung berperilaku seperti demo.
+    // Default mode normal (30 menit), bukan demo 15 detik.
     demoMode = prefs.getBool("demo", false);
     autoDhtTimerMode = prefs.getBool("autoDht", true);
     buzzerMuted = prefs.getBool("muted", false);
@@ -138,11 +131,7 @@ void handleActuators(CoasterState state, uint32_t nowMs) {
 
 void updateAdaptiveInterval() {
     uint32_t baseMs = demoMode ? DEMO_INTERVAL_MS : customBaseIntervalMs;
-    // Mode demo tidak dikompensasi. DHT11 menempel di board dan membaca panas
-    // ESP32 sendiri (27 -> 31,8 C setelah boot), sehingga 15 detik tampil
-    // sebagai 9 detik dan label "demo 15 s" berbohong. Mode normal tetap
-    // adaptif; di sana faktor 0,64 memotong 30 menit jadi 19 menit, dan itu
-    // soal penempatan sensor, bukan rumus.
+    // Mode demo tidak dikompensasi DHT11 agar 15 detik tidak menyusut akibat panas board.
     if (autoDhtTimerMode && !demoMode) {
         fsm.setInterval(computeAdaptiveIntervalMs(baseMs, roomTempC, roomHumidity));
     } else {
@@ -287,8 +276,7 @@ void handleSerialCommands(float currentFilteredWeight) {
         Serial.println(F("[DITOLAK] URL Firebase wajib diawali https://"));
         }
     } else if (cmd == 'z' || cmd == 'Z') {
-        // Jalan pintas USB untuk "Akhiri Sesi": tanpa ini, tidur hanya bisa
-        // dipicu lewat cloud, padahal demo sering memakai kabel saja.
+        // Pintasan USB untuk mode istirahat tanpa cloud.
         setLocalStandby(true);
         Serial.println(F("[SESI] Diminta tidur dari serial."));
     } else if (cmd == 'x' || cmd == 'X') {
@@ -325,8 +313,6 @@ void loop() {
     uint32_t nowMs = millis();
     float filteredWeight = weightFilter.getAverage();
 
-    // Portal WiFi diproses di sini, bukan di dalam autoConnect(): alat tetap
-    // mengukur 10 Hz dan gerbang stabilitas tetap jalan saat portal terbuka.
     handleWifiPortal();
     checkWifiStale();
 
@@ -376,17 +362,11 @@ void loop() {
 
     filteredWeight = weightFilter.getAverage();
 
-    // Perpindahan sesi: berakhir berarti tidur, dimulai lagi berarti bangun.
     bool standbyNow = standbyActiveNow();
     if (standbyNow != standbyActive) {
         standbyActive = standbyNow;
-        // Kedua arah memakai toIdle: saat tidur supaya state yang dilaporkan
-        // jujur (bukan sisa ALERT_DRINK), saat bangun supaya siklus lama tidak
-        // dilanjutkan dengan selisih waktu yang sudah lewat target.
+        // Reset ke IDLE agar tidak menyisakan alert/timer basi; handleActuators() mematikan aktuator.
         fsm.toIdle(nowMs);
-        // Sekali lewat handleActuators yang sama: cabang !alertActive di sana
-        // yang mematikan ketiga aktuator sekaligus mereset alertModeActive dan
-        // actuatorOutputState, jadi tidak ada salinan logika di sini.
         handleActuators(fsm.getState(), nowMs);
         if (standbyActive) {
             Serial.println(F("[SESI] Sesi berakhir; alat tidur, alarm dan timer berhenti."));
@@ -400,9 +380,7 @@ void loop() {
     bool weightValid = filteredWeight == filteredWeight &&
                        filteredWeight >= WEIGHT_MIN_G && filteredWeight <= WEIGHT_MAX_G;
     if (standbyActive) {
-        // Berat tidak dinilai selama tidur: tidak ada alarm, tidak ada siklus.
-        // Aktuator dipastikan mati setiap putaran, karena handleActuators()
-        // membaca isAlertActive() dari FSM, bukan dari state lokal ini.
+        // Saat istirahat, lewati penilaian FSM agar tidak memicu siklus atau alarm.
         writeActuator(PIN_BUZZER, false, BUZZER_ACTIVE_LOW);
         writeActuator(PIN_MOTOR, false, MOTOR_ACTIVE_LOW);
         writeActuator(PIN_LED_ALERT, false, false);

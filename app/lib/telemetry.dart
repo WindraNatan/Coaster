@@ -1,13 +1,11 @@
-// Kontrak telemetry & config cloud Smart Hydration Coaster.
-// Nama field dan pemetaan state mencerminkan web/index.html (pollCloudOnce,
-// pushCloudConfig) dan firmware cloud_sync.h; semantik state turunan
-// ALERT_EMPTY_CUP / ALERT_MISSING_CUP mengikuti CLAUDE.md §3 (flag dari
-// ALERT_REFILL, bukan state tersendiri).
+// Model telemetry dan config RTDB; ALERT_EMPTY_CUP/MISSING_CUP dipetakan ke ALERT_REFILL.
 
-const double kCupOffThresholdG = 25.0; // config.h CUP_OFF_THRESHOLD
-const double kCupOnThresholdG = 35.0; // config.h CUP_ON_THRESHOLD
-const int kMinManualIntervalMin = 1; // config.h MIN_CUSTOM_INTERVAL_MIN
-const int kMaxManualIntervalMin = 180; // config.h MAX_CUSTOM_INTERVAL_MIN
+// Diselaraskan dengan SmartHydrationCoaster/config.h.
+const double kCupOffThresholdG = 25.0;
+const double kCupOnThresholdG = 35.0;
+const int kMinManualIntervalMin = 1;
+const int kMaxManualIntervalMin = 180;
+const int kDeviceStaleSeconds = 25;
 
 class Telemetry {
   final double weightG;
@@ -22,17 +20,12 @@ class Telemetry {
   final int cheatCount;
   final bool muted;
 
-  /// Alat sedang tidur karena sesinya ditutup (session.json active:false).
-  /// Berat tetap terkirim, tetapi tidak ada alarm dan tidak ada siklus berjalan.
+  /// True saat sesi ditutup (berat tetap terkirim, siklus dan alarm nonaktif).
   final bool standby;
 
-  /// State mentah dari firmware: salah satu dari 7 state FSM, atau string
-  /// turunan ALERT_EMPTY_CUP / ALERT_MISSING_CUP.
   final String rawState;
 
-  /// Nomor urut kiriman firmware. Naik setiap push, termasuk saat angkanya
-  /// tidak berubah. Dipakai untuk membedakan "alat diam" dari "alat mati":
-  /// berat dan suhu bisa identik antar-kiriman, counter tidak.
+  /// Counter push firmware untuk membedakan alat diam dari alat mati.
   final int heartbeat;
 
   const Telemetry({
@@ -71,8 +64,6 @@ class Telemetry {
 
   bool get cupPresent => weightG >= kCupOffThresholdG;
 
-  /// State kanonik: dua string alert turunan dipetakan ke ALERT_REFILL
-  /// (identik dengan web/fsm.js dan firmware).
   String get canonicalState =>
       (rawState == 'ALERT_EMPTY_CUP' || rawState == 'ALERT_MISSING_CUP')
           ? 'ALERT_REFILL'
@@ -82,8 +73,7 @@ class Telemetry {
   bool get emptyCup => rawState == 'ALERT_EMPTY_CUP';
   bool get isAlert => canonicalState.startsWith('ALERT_');
 
-  /// Nama state untuk badge. ALERT_ hanya dipertahankan pada DRINK; REFILL dan
-  /// CHEAT sudah terjelaskan di baris alasannya, jadi cukup namanya saja.
+  /// Label ringkas badge state; alasan ditampilkan terpisah.
   String get stateName {
     switch (canonicalState) {
       case 'ALERT_REFILL':
@@ -141,7 +131,7 @@ class CloudConfig {
 
   factory CloudConfig.fromJson(Map<String, dynamic> j) => CloudConfig(
         timerMode: (j['timer_mode'] as String?) ?? 'AUTO_DHT',
-        manualIntervalMin: _int(j['manual_interval_min'], 30), // BASE_INTERVAL_MS = 30 mnt
+        manualIntervalMin: _int(j['manual_interval_min'], 30),
         emptyCupWeightG: _num(j['empty_cup_weight_g'], 130.0),
         muted: j['muted'] == true,
       );

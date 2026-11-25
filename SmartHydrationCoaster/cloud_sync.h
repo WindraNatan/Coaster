@@ -16,11 +16,7 @@
 #include <ESPmDNS.h>
 #include <esp_mac.h>
 
-// ponytail: satu transport cloud saja (HTTPS REST ke Firebase RTDB). MQTT sengaja
-// dilewat: RTDB sudah push realtime + last-known state, dan konsumen tambahan
-// (app mobile nanti) cukup pakai node yang sama lewat skema JSON di bawah.
-// Upgrade: publish PubSubClient paralel (~30 baris, additive) hanya jika perlu
-// mode LAN/demo tanpa internet.
+// ponytail: hanya pakai HTTPS REST Firebase RTDB; tambah MQTT hanya jika perlu mode LAN.
 struct CloudSnapshot {
     float weightG;
     float waterMl;
@@ -59,9 +55,7 @@ inline bool consumePendingCloudUpdate(PendingCloudUpdate& out) {
     return has;
 }
 
-// Siapa yang menentukan tidur: perintah lokal (z/x) atau session.json. Aturannya
-// ada di session_gate.h supaya bisa diuji di PC. Ditulis cloudTask (core 0),
-// dibaca loop (core 1), makanya semua akses lewat snapMux.
+// Diakses Core 0 dan Core 1; selalu lindungi dengan snapMux.
 static SessionGate sessionGate;
 
 inline void setLocalStandby(bool sleep) {
@@ -87,27 +81,19 @@ static String activeUid = "";
 static String refreshToken = "";
 static String claimCode = "";
 static bool claimPublished = false;
-// Salinan kode di node pemilik punya status sendiri: /claims sekali tulis, salinan
-// boleh ditulis ulang bila aturannya baru dipasang atau alat di-flash ulang.
 static bool claimMirrored = false;
 static uint32_t claimRetryAfterMs = 0;
 static uint32_t mirrorRetryAfterMs = 0;
-// Sekali per boot isi node diperiksa, supaya gerbang NVS tidak buta terhadap
-// node yang dihapus atau akun yang berganti.
+// Cek node sekali per boot agar NVS tidak basi bila node dihapus.
 static bool claimMirrorChecked = false;
 static char sessionOwner[40] = "";
 static uint32_t tokenExpiryMs = 0;
 
-// Toko token di NVS supaya boot ulang tidak perlu login lagi. Token Firebase berlaku
-// 1 jam; kalau sisa waktunya di bawah 5 menit, ambil yang baru.
+// Token Firebase berlaku 1 jam; perbarui 5 menit sebelum kedaluwarsa.
 static const uint32_t TOKEN_MARGIN_MS = 300000UL;
 static const uint32_t TOKEN_TTL_MS = 3600000UL;
 
-// Password boleh berisi kutip ganda, backslash, atau karakter kontrol (tempelan dari
-// password manager). Tanpa escape, body JSON rusak dan login gagal dengan HTTP 400.
-// ponytail: hanya 4 karakter ini yang di-escape. Nama pengguna/password adalah input
-// operator lewat serial, bukan data pengguna lain. Kalau kelak ada jalur input lain
-// (mis. halaman konfigurasi), ganti dengan encoder JSON penuh.
+// ponytail: hanya escape 4 karakter JSON; ganti encoder penuh jika ada input selain Serial.
 static String jsonEscape(const String& s) {
     String out;
     out.reserve(s.length() + 8);
@@ -125,9 +111,7 @@ static String jsonEscape(const String& s) {
     return out;
 }
 
-// Ambil nilai string dari JSON tanpa parser penuh. Melompati spasi setelah
-// titik dua: API Google (identitytoolkit, securetoken) membalas ber-pretty-print
-// ("idToken": "..."), sehingga pencarian pola rapat selalu gagal.
+// Lewati spasi setelah ':' karena respons Google Auth berformat pretty-print.
 static String jsonField(const String& s, const char* key) {
     String pola = "\"" + String(key) + "\"";
     int k = s.indexOf(pola);
@@ -161,9 +145,6 @@ static bool firebaseLogin() {
     }
     String res = http.getString();
     http.end();
-    // API identitytoolkit mengembalikan JSON ber-pretty-print: ada spasi setelah
-    // titik dua ("idToken": "..."). Pencarian harus melompati spasi, kalau tidak
-    // login HTTP 200 tetap dianggap gagal.
     idToken = jsonField(res, "idToken");
     activeUid = jsonField(res, "localId");
     if (idToken.length() == 0 || activeUid.length() == 0) {
@@ -184,8 +165,6 @@ static bool firebaseLogin() {
     return true;
 }
 
-// Token Firebase berlaku satu jam. Tukar refreshToken (disimpan saat login) jadi token
-// baru, supaya alat yang menyala berhari-hari tidak bergantung pada satu login awal.
 static bool firebaseRefresh() {
     if (refreshToken.length() == 0 || activeApiKey.length() == 0) return false;
     WiFiClientSecure tls;
@@ -199,8 +178,6 @@ static bool firebaseRefresh() {
     if (code != 200) { http.end(); return false; }
     String res = http.getString();
     http.end();
-    // Sama seperti firebaseLogin: balasan ber-pretty-print, jadi harus lewat
-    // jsonField, bukan pencarian pola rapat.
     idToken = jsonField(res, "id_token");
     if (idToken.length() == 0) {
         Serial.println(F("[CLOUD] Respons refresh tidak memuat id_token."));
@@ -225,8 +202,6 @@ static bool ensureToken() {
     return firebaseRefresh() || firebaseLogin();
 }
 
-// Node milik akun ini. Rules menolak akses ke /users/<uid> milik orang lain, jadi UID
-// wajib ikut di path, bukan hanya di token.
 static String userNode() {
     return activeFirebaseUrl + "/users/" + activeUid + "/smart_coaster";
 }
@@ -248,9 +223,7 @@ extern uint32_t customBaseIntervalMs;
 extern CoasterFSM fsm;
 
 
-// Kode klaim: 8 karakter dari alfabet tanpa huruf mirip (0/O, 1/I/L). Dibuat sekali,
-// disimpan di NVS, lalu ditulis ke /claims/<kode> supaya pemilik bisa menautkan alat
-// ini ke akunnya. Kode TIDAK boleh sama dengan UID: UID bukan rahasia.
+// Kode klaim 8 karakter tanpa karakter mirip (0/O, 1/I/L), terpisah dari UID.
 static String makeClaimCode() {
     static const char AB[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
     String out;
@@ -259,8 +232,7 @@ static String makeClaimCode() {
     return out;
 }
 
-// Tulis /claims/<kode> = UID perangkat. Rules hanya mengizinkan penulisan sekali dan
-// hanya kalau nilainya UID si penulis, jadi kode tidak bisa dipalsukan orang lain.
+// Rules hanya mengizinkan PUT sekali dengan nilai sama dengan UID perangkat.
 static bool publishClaimCode() {
     if (claimCode.length() == 0 || activeUid.length() == 0) return false;
     WiFiClientSecure tls;
@@ -289,17 +261,12 @@ static void cloudTask(void*) {
     uint32_t lastPushMs = 0;
     uint32_t lastPollMs = 0;
     uint32_t lastSessMs = 0;
-    // Satu TLS untuk semua request. Sebelumnya tiap request membuat client baru:
-    // handshake 1-3 dtk, dan satu siklus (push + config + session) membayarnya
-    // tiga kali. Itu lag utama yang dirasakan di web dan aplikasi.
-    // shortcut: ESP32 berjalan tanpa jam NTP (CLAUDE.md §4), sehingga verifikasi
-    // masa berlaku sertifikat X.509 mbedTLS terhadap epoch 1970 akan menolak
-    // koneksi. Pinning CA baru aman bila NTP ditambahkan lebih dulu.
+    // Satu soket TLS dipakai ulang sepanjang loop untuk menghindari handshake ulang.
+    // shortcut: tls.setInsecure() karena ESP32 tanpa NTP (validasi X.509 gagal di epoch 1970).
     WiFiClientSecure tls;
     tls.setInsecure();
     tls.setTimeout(8);
-    // Satu HTTPClient untuk semua request RTDB. Destruktor HTTPClient memanggil
-    // client->stop(), jadi objek ini harus hidup selama loop, bukan per blok.
+    // Hidup sepanjang loop karena destruktor HTTPClient memutus soket.
     HTTPClient rtdb;
     rtdb.setReuse(true);
     rtdb.setTimeout(8000);
@@ -321,8 +288,6 @@ static void cloudTask(void*) {
 
     for (;;) {
         if (activeFirebaseUrl.length() == 0 || WiFi.status() != WL_CONNECTED) {
-            // Tanpa baris ini, Wi-Fi yang gagal terhubung terlihat identik dengan
-            // login yang gagal: cloudTask hanya diam. Cetak sesekali saja.
             static uint32_t lastWifiLogMs = 0;
             if ((uint32_t)(millis() - lastWifiLogMs) > 10000UL) {
                 lastWifiLogMs = millis();
@@ -339,8 +304,6 @@ static void cloudTask(void*) {
             vTaskDelay(pdMS_TO_TICKS(2000));
             continue;
         }
-        // Sekali saja: bukti asosiasi Wi-Fi benar-benar selesai, bukan sekadar
-        // WiFi.begin() dipanggil.
         static bool connectedLogged = false;
         if (!connectedLogged) {
             connectedLogged = true;
@@ -359,8 +322,7 @@ static void cloudTask(void*) {
         local = snap;
         portEXIT_CRITICAL(&snapMux);
 
-        // Salinan kode di akun pemilik, terpisah dari /claims dan di luar
-        // /smart_coaster agar tamu tertaut tidak ikut membacanya.
+        // Salinan kode ditaruh di /private agar tamu tertaut tidak ikut membaca.
         if (!claimMirrorChecked && claimMirrored &&
             (int32_t)(now - mirrorRetryAfterMs) >= 0) {
             String cek = activeFirebaseUrl + "/users/" + activeUid +
@@ -374,8 +336,6 @@ static void cloudTask(void*) {
                     cekOk = true;
                     claimMirrorChecked = true;
                     if (isi.indexOf(claimCode) < 0) {
-                        // Node dihapus, atau akun berganti sementara NVS masih
-                        // menyimpan tanda lama. Buka gerbang dan tulis ulang.
                         claimMirrored = false;
                         Preferences mp;
                         mp.begin("shc", false);
@@ -385,7 +345,6 @@ static void cloudTask(void*) {
                     }
                 }
             }
-            // Gagal baca jangan diulang tiap 250 ms; mundur satu jam seperti PUT.
             if (!cekOk) mirrorRetryAfterMs = now + 3600000UL;
         }
 
@@ -398,16 +357,13 @@ static void cloudTask(void*) {
                 rtdb.end();
                 if (mirrorCode == 200) {
                     claimMirrored = true;
-                    // Bukti yang bisa dibaca dari Serial. Tanpa ini, berhasil dan
-                    // belum-dicoba terlihat sama.
                     Serial.printf("[CLOUD] Salinan kode klaim tersimpan (HTTP 200).\n");
                     Preferences mp;
                     mp.begin("shc", false);
                     mp.putBool("claimMirrorDone", true);
                     mp.end();
                 } else {
-                    // 401 = aturan claimCode belum dipasang di konsol.
-                    // Cetak sekali per jam, jangan tiap putaran cloudTask.
+                    // 401 berarti rules claimCode belum dipasang; tunda retry 1 jam.
                     mirrorRetryAfterMs = now + 3600000UL;
                     Serial.printf("[CLOUD] Salinan kode klaim gagal (HTTP %d). Pasang aturan claimCode, atau baca kode dari sini.\n", mirrorCode);
                 }
@@ -415,17 +371,13 @@ static void cloudTask(void*) {
         }
 
         if (!claimPublished && (int32_t)(now - claimRetryAfterMs) >= 0) {
-            // Aturan RTDB menolak PUT kedua selamanya. Gagal sekali = jangan
-            // coba lagi tiap 250 ms; mundur satu jam.
+            // Rules menolak PUT kedua; mundur 1 jam bila gagal.
             claimPublished = publishClaimCode();
             if (!claimPublished) claimRetryAfterMs = now + 3600000UL;
         }
 
         bool stateChanged = strncmp(local.stateStr, lastState, sizeof(lastState)) != 0;
-        // Push hanya saat isi berubah. Sebelumnya ada push buta tiap 5 dtk yang
-        // menulis ulang angka yang sama: kuota terpakai, dan web/aplikasi tetap
-        // menunggu jeda poll-nya sendiri. Pembanding mencakup semua field yang
-        // dikirim, kecuali remaining_sec yang memang berjalan terus.
+        // Kirim hanya saat nilai berubah (kecuali remaining_sec yang berjalan terus).
         bool dataChanged =
             stateChanged ||
             fabsf(local.weightG - lastWeightG) > 0.5f ||
@@ -436,13 +388,9 @@ static void cloudTask(void*) {
             fabsf(local.targetMin - lastTargetMin) > 0.01f ||
             fabsf(local.tempC - lastTempC) > 0.2f ||
             fabsf(local.humPct - lastHumPct) > 1.0f ||
-            // Perpindahan sesi harus terkirim saat itu juga. Kalau alat sudah IDLE
-            // saat sesi ditutup, state-nya tidak berubah, jadi tanpa pembanding ini
-            // klien baru tahu alat tidur dari heartbeat 60 dtk.
             local.standby != lastStandby;
-        // Heartbeat 60 dtk: penanda hidup, bukan data. Klien bisa membedakan
-        // "alat diam" dari "alat mati" tanpa membandingkan nilai yang identik.
-        bool heartbeat = (now - lastPushMs >= 60000UL);
+        // Heartbeat 10 detik agar klien mendeteksi alat putus dalam <= 25 detik.
+        bool heartbeat = (now - lastPushMs >= 10000UL);
         if (dataChanged || heartbeat) {
             strncpy(lastState, local.stateStr, sizeof(lastState) - 1);
             lastState[sizeof(lastState) - 1] = '\0';
@@ -461,6 +409,7 @@ static void cloudTask(void*) {
             if (rtdb.begin(tls, url)) {
                 rtdb.addHeader("Content-Type", "application/json");
                 char body[400];
+                if (++hbCounter == 0) hbCounter = 1;
                 snprintf(body, sizeof(body),
                     "{\"weight_g\":%.1f,\"water_ml\":%.1f,\"temp_c\":%.1f,\"humidity_pct\":%.0f,"
                     "\"fsm_state\":\"%s\",\"remaining_sec\":%lu,\"target_interval_min\":%.2f,"
@@ -470,7 +419,7 @@ static void cloudTask(void*) {
                     local.stateStr, (unsigned long)local.remSec, local.targetMin,
                     local.totalMl, local.drinkCnt, local.refillCnt, local.cheatCnt,
                     local.muted ? "true" : "false", local.standby ? "true" : "false",
-                    (unsigned)(++hbCounter));
+                    (unsigned)hbCounter);
                 int pushCode = rtdb.PATCH((uint8_t*)body, strlen(body));
                 rtdb.end();
                 syncNoDelay();
@@ -478,10 +427,7 @@ static void cloudTask(void*) {
             }
         }
 
-        // Unggah perubahan lokal lebih dulu, supaya GET berikutnya sudah membaca
-        // nilai yang benar. Yang menentukan adalah gerbang if (!configDirty) di
-        // blok apply: tanpa gerbang itu, perintah serial yang jatuh saat GET
-        // berjalan akan tertimpa nilai cloud lama dan NVS-nya ikut ditulis basi.
+        // Unggah perubahan lokal sebelum GET agar tidak tertimpa nilai cloud lama.
         if (configDirty) {
             configDirty = false;
             bool patchOk = false;
@@ -489,9 +435,7 @@ static void cloudTask(void*) {
             if (rtdb.begin(tls, cfgUrl)) {
                 rtdb.addHeader("Content-Type", "application/json");
                 char cfgBody[160];
-                // Demo harus ikut ditulis. Tanpa ini, perintah serial apa pun yang
-                // mengubah config lokal membuat alat mem-PATCH AUTO_DHT/MANUAL dan
-                // pilihan DEMO milik klien ikut terhapus.
+                // Sertakan DEMO agar patch dari Serial tidak menghapus mode demo klien.
                 const char* modeStr =
                     local.demoMode ? "DEMO" : (local.autoDhtTimerMode ? "AUTO_DHT" : "MANUAL");
                 snprintf(cfgBody, sizeof(cfgBody),
@@ -507,9 +451,7 @@ static void cloudTask(void*) {
                 syncNoDelay();
                 if (code == 401) tokenExpiryMs = 0;
             }
-            // PATCH gagal: pasang lagi flag-nya supaya nilai lokal tidak hilang
-            // pada GET berikutnya, tetapi beri jeda agar jaringan mati tidak
-            // memicu PATCH beruntun tiap 250 ms.
+            // Batasi retry saat PATCH gagal agar jaringan mati tidak memicu loop rapat.
             if (!patchOk) {
                 if (cfgPatchFails < 3) {
                     cfgPatchFails++;
@@ -523,8 +465,7 @@ static void cloudTask(void*) {
             }
         }
 
-        // 1 dtk: config adalah perintah (saklar mute, mode timer). Dipisah dari
-        // GET session supaya dua poll tidak memblokir PATCH telemetry di iterasi yang sama.
+        // Poll config tiap 1 detik, dipisah iterasinya dari poll sesi.
         bool polledConfigThisIter = false;
         if (now - lastPollMs >= 1000UL) {
             lastPollMs = now;
@@ -535,11 +476,7 @@ static void cloudTask(void*) {
                 cfgCode = rtdb.GET();
                 if (cfgCode == 200) {
                     String cfg = rtdb.getString();
-                    // Perintah serial lokal (q/m/i/e/c) bisa jatuh selama GET ini
-                    // berjalan (1-3 dtk). Saat itu nilai cloud yang baru dibaca basi:
-                    // lewati penerapan seluruhnya, biarkan flag terpasang supaya tick
-                    // berikut mengunggah nilai lokal. Tanpa gerbang ini, setelan lokal
-                    // tertimpa nilai lama dan NVS-nya ikut ditulis basi.
+                    // Lewati hasil GET jika perintah Serial masuk di tengah request.
                     if (!configDirty) {
                         CloudConfigState st = {
                             local.demoMode,
@@ -564,8 +501,7 @@ static void cloudTask(void*) {
             if (cfgCode == 401) tokenExpiryMs = 0;
         }
 
-        // Sesi bergiliran: cek tiap 2 dtk saat aktif (1 dtk saat standby/alert)
-        // pada iterasi yang tidak menarik config.json supaya respon Istirahatkan cepat.
+        // Poll sesi bergiliran (2 detik aktif, 1 detik standby/alert).
         bool alertNow = strncmp(local.stateStr, "ALERT_", 6) == 0;
         uint32_t sessPeriodMs = (local.standby || alertNow) ? 1000UL : 2000UL;
         if (!polledConfigThisIter && (now - lastSessMs >= sessPeriodMs)) {
@@ -608,16 +544,10 @@ static void cloudTask(void*) {
     }
 }
 
-// Portal tangkap: buka AP sendiri, jadi SSID tidak perlu diketik satu per satu
-// lewat Serial Monitor. Dipakai hanya saat kredensial kosong atau sambungan gagal
-// 20 dtk; pemakaian normal tidak terganggu. Nilai portal ditulis ke NVS dengan
-// kunci yang sama seperti perintah serial `w`, supaya kedua jalur tidak menimpa.
+// Captive portal AP non-blocking; memakai kunci NVS yang sama dengan Serial 'w'.
 static String wifiPortalSsid, wifiPortalPass;
 
-// Bila kredensial tersimpan tidak lagi berlaku (router pindah atau sandi
-// berganti), alat akan diam tanpa portal sampai dicolok USB. Deteksi lewat
-// waktu, bukan lewat penantian yang memblokir: setelah 30 dtk gagal konek,
-// portal dibuka dan pengguna bisa memperbaiki dari ponsel.
+// Buka portal otomatis jika koneksi WiFi gagal lebih dari 30 detik.
 static uint32_t wifiAttemptMs = 0;
 static bool portalConnected = false;
 
@@ -631,28 +561,18 @@ static void wifiOnSaveParams() {
     p.putString("wifiPass", wifiPortalPass);
     p.end();
     Serial.printf("[WIFI] Portal menyimpan SSID \"%s\"\n", wifiPortalSsid.c_str());
-    // Portal tidak memanggil WiFi.begin() sendiri di mode non-blocking. Tanpa
-    // baris ini, portal hanya ditutup lalu dibuka lagi: alat tidak pernah
-    // mencoba kredensial yang baru disimpan.
+    // Mode non-blocking tidak memanggil WiFi.begin() otomatis setelah simpan.
     portalConnected = true;
     WiFi.mode(WIFI_STA);
     WiFi.begin(activeWifiSsid.c_str(), activeWifiPass.c_str());
     wifiAttemptMs = millis();
 }
 
-// Portal dibuka tanpa memblokir: autoConnect() (tidak dipakai di sini) menahan core 1 sampai 180 dtk,
-// dan selama itu sampling 10 Hz serta gerbang stabilitas 1,5 dtk berhenti.
-// handleWifiPortal() dipanggil dari loop() dan hanya memproses satu putaran
-// server, jadi alat tetap mengukur sambil menunggu kredensial.
 static WiFiManager wifiMgr;
 static bool portalActive = false;
 static uint32_t portalStartedMs = 0;
 
-// mDNS: alat mengumumkan dirinya sendiri di LAN sebagai "<Kode>._shc._tcp"
-// beserta teks "code=<Kode>". Aplikasi Firebase Android (NsdManager) atau
-// iOS (NWBrowser) menemukannya tanpa Serial Monitor dan tanpa mengetik
-// apa pun. Didaftarkan sekali sejak boot, jadi namanya tetap sama meski
-// portal dibuka berulang kali.
+// Iklankan kode klaim lewat mDNS (<Kode>._shc._tcp) untuk penemuan LAN.
 
 inline void startClaimBeacon() {
     if (claimCode.length() == 0) return;
@@ -660,9 +580,7 @@ inline void startClaimBeacon() {
         Serial.println(F("[MDNS] Gagal mulai; klaim lewat portal tetap jalan."));
         return;
     }
-    // Portal hidup dalam mode AP saja. Di mode itu antarmuka STA tidak aktif,
-    // dan WiFi.macAddress() mengembalikan 00:00:00:00:00:00. MAC dibaca dari
-    // eFuse supaya TXT tetap berisi alamat perangkat untuk aplikasi Android/iOS.
+    // Baca MAC dari eFuse karena WiFi.macAddress() bernilai nol pada mode AP saja.
     uint8_t macBin[6];
     char macTxt[18];
     esp_efuse_mac_get_default(macBin);
@@ -682,13 +600,10 @@ inline void stopClaimBeacon() {
 inline void startWifiPortal(bool force) {
     if (portalActive) return;
     wifiMgr.setConfigPortalBlocking(false);
-    // Batas waktu tidak berlaku di mode non-blocking; batasnya dijaga sendiri
-    // lewat portalStartedMs di handleWifiPortal().
     wifiMgr.setConnectTimeout(20);
     static WiFiManagerParameter pSsid("ssid", "Nama Wi-Fi (2.4 GHz)", "", 33);
     static WiFiManagerParameter pPass("pass", "Kata sandi", "", 65);
-    // Didaftarkan sekali saja: addParameter menumpuk, dan portal yang dibuka
-    // berulang kali akan menampilkan field ganda.
+    // Daftarkan parameter sekali karena addParameter() menumpuk jika dipanggil ulang.
     static bool paramsAdded = false;
     if (!paramsAdded) {
         paramsAdded = true;
@@ -709,11 +624,8 @@ inline void startWifiPortal(bool force) {
     startClaimBeacon();
 }
 
-// Dipanggil dari loop() core 1. Mengembalikan true bila portal masih terbuka.
-
 inline void checkWifiStale() {
     if (portalActive) return;
-    // Kredensial baru dari portal masih dicoba: beri waktu sebelum menilai gagal.
     if (portalConnected) {
         if (WiFi.status() == WL_CONNECTED) { portalConnected = false; wifiAttemptMs = 0; return; }
         if (millis() - wifiAttemptMs < 30000UL) return;
@@ -787,21 +699,12 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     activeUid = prefs.getString("uid", "");
     refreshToken = prefs.getString("refreshToken", "");
     claimCode = prefs.getString("claimCode", "");
-    // NVS: tanpa ini sessionOwner kembali kosong tiap boot, RTDB masih menyimpan
-    // pemilik lama, dan resetDailyStats() jalan setiap reboot (data harian hilang).
+    // Muat sessionOwner dari NVS agar reboot tidak mereset statistik harian.
     String savedOwner = prefs.getString("sessionOwner", "");
     strncpy(sessionOwner, savedOwner.c_str(), sizeof(sessionOwner) - 1);
     sessionOwner[sizeof(sessionOwner) - 1] = '\0';
-    // Aturan RTDB menolak penulisan kode klaim kedua; setelah berhasil sekali,
-    // jangan PUT lagi (dulu retry 250 ms terus dan membakar kuota).
     claimPublished = prefs.getBool("claimDone", false);
-    // Salinan di node pemilik bukan bagian dari /claims: aturan di sana
-    // tidak melarang PUT ulang. Tandai terpisah supaya alat yang sudah
-    // pernah mengklaim tetap menyalin kodenya setelah firmware ini naik.
     claimMirrored = prefs.getBool("claimMirrorDone", false);
-    // Statusnya dicetak: bila gerbang sudah tertutup, blok salinan tidak jalan
-    // dan tidak ada baris PUT sama sekali. Tanpa baris ini, "sudah tersimpan"
-    // dan "tidak pernah dicoba" tidak bisa dibedakan dari Serial.
     Serial.printf("[CLOUD] Salinan kode klaim: %s\n",
                   claimMirrored ? "sudah tercatat, PUT tidak diulang"
                                 : "belum tercatat, akan dicoba");
@@ -812,14 +715,10 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
         w.putString("claimCode", claimCode);
         w.end();
     }
-    // millis() ulang dari nol setiap boot, jadi cap kedaluwarsa dari boot sebelumnya
-    // tidak bisa dipercaya. Set 0 supaya ensureToken() memaksa perpanjangan/login awal.
+    // Reset tokenExpiryMs saat boot karena millis() mulai ulang dari nol.
     tokenExpiryMs = 0;
     prefs.end();
     Serial.printf("[CLOUD] Kode klaim alat: %s\n", claimCode.c_str());
-    // Ringkasan konfigurasi SEBELUM Wi-Fi dicoba. Tanpa ini, secrets.h yang tidak
-    // ikut ter-compile terlihat identik dengan Wi-Fi gagal: cloudTask tidak pernah
-    // dibuat, jadi tidak ada satu pun baris [CLOUD] sesudah boot.
     Serial.printf("[CLOUD] Konfigurasi: ssid=%u url=%u key=%u email=%u\n",
                   (unsigned)activeWifiSsid.length(), (unsigned)activeFirebaseUrl.length(),
                   (unsigned)activeApiKey.length(), (unsigned)activeUserEmail.length());

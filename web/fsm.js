@@ -1,15 +1,11 @@
 'use strict';
-// FSM Smart Hydration Coaster. Mirror 1:1 dari fsm.h (ESP32) dan
-// test_simulation.py (Python). Jangan ubah salah satu port tanpa yang lain.
-// Diuji oleh web/fsm.test.js (Node).
+// Mirror 1:1 dengan SmartHydrationCoaster/fsm.h dan test_simulation.py.
 
 const CFG = {
   CUP_ON:35.0, CUP_OFF:25.0, DEFAULT_EMPTY:130.0, MAX_EMPTY:300.0,
   EMPTY_TOL:15.0, MIN_DRINK:20.0, REFILL:30.0,
   STAB_BAND:3.0, STAB_MS:1500,
-  // K1: isi ulang langsung di tatakan hanya sah setelah berat baru bertahan
-  // sekian lama. Kembali ke baseline pra-isi-ulang dalam batas ini = pola
-  // tekan-lepas gelas (load cell tak bisa membedakannya dari tuangan).
+  // Jendela konfirmasi isi ulang di tatakan untuk menolak pola tekan-lepas.
   CONFIRM_MS:5000,
   DEMO_INTERVAL:15000,
   DEMO_MAX_LIFT:10000, MAX_LIFT:180000,
@@ -68,12 +64,9 @@ class CoasterFSM {
     return (now - this.stableStart) >= CFG.STAB_MS;
   }
   setInterval_(ms){ this.interval = ms; }
-  // Interval dikunci saat siklus mulai. Menyusutnya target di tengah siklus
-  // tidak boleh mempercepat alarm; target baru berlaku di siklus berikutnya.
+  // Kunci target per siklus agar perubahan suhu tidak memicu alarm mendadak.
   startCycle(now){ this.timerStart = now; this.cycleTarget = this.interval; }
-  // Dipakai jalur standby: hentikan siklus berjalan dan kembali ke IDLE tanpa
-  // menyentuh statistik. Timer lama tidak dibawa karena selisihnya sudah
-  // melewati target dan alarm akan langsung berbunyi.
+  // Reset siklus untuk mode istirahat tanpa menghapus statistik harian.
   toIdle(now){
     this.state = 'IDLE';
     this.missing = false;
@@ -89,9 +82,7 @@ class CoasterFSM {
       this.emptyCup = g; this.baseline = g;
       if (this.state !== 'IDLE'){
         this.missing = false;
-        // K3: setter memaksa ALERT_REFILL tanpa tahu isi gelas. Tandai supaya
-        // update() menyelaraskan baseline ke berat aktual dulu, tidak
-        // menghitung isi ulang untuk air yang sudah ada di gelas.
+        // Tandai agar update() menyelaraskan baseline tanpa menghitung refill.
         this.calibrationAlign = true;
         this.state = 'ALERT_REFILL';
       }
@@ -114,21 +105,17 @@ class CoasterFSM {
     if (this.state !== 'TIMING') return null;
     return Math.max(0, this.cycleTarget - (now - this.timerStart));
   }
-  // Target yang sedang berlaku: siklus berjalan memakai nilai terkunci.
   targetIntervalMs(){ return this.state === 'TIMING' ? this.cycleTarget : this.interval; }
   waterMl(w){ return w <= this.emptyCup ? 0 : w - this.emptyCup; }
 
-  // K1: heuristik pembalik. Menekan lebih lama dari CONFIRM_MS tetap lolos;
-  // batas absolut butuh mengunci isi ulang ke state LIFTED (menghilangkan
-  // PRD skenario 8).
+  // Batalkan refill langsung jika berat kembali ke baseline lama dalam CONFIRM_MS.
+  // Heuristik tekan-lepas; penekanan lebih lama tetap lolos.
   refillReversed(w, now){
     if (!this.refillPending || now - this.lastRefill > CFG.CONFIRM_MS) return false;
     const d = w - this.preRefillBaseline;
     return d <= CFG.STAB_BAND && d >= -CFG.STAB_BAND;
   }
   registerRefill(oldBase, w, now){
-    // K1: simpan state & timer pra-isi-ulang supaya pembatalan (tekan-lepas)
-    // bisa memulihkannya — lihat cancelPendingRefill.
     this.preRefillState = this.state;
     this.preRefillTimerStart = this.timerStart; this.preRefillCycleTarget = this.cycleTarget;
     this.baseline = w; this.startCycle(now); this.refillCount++;
@@ -137,12 +124,8 @@ class CoasterFSM {
   cancelPendingRefill(now){
     this.refillCount--; this.refillPending = false;
     this.baseline = this.preRefillBaseline;
-    // K1: pulihkan state & timer pra-tekanan. Tanpa ini, tekan-lepas membunuh
-    // alarm minum sampai interval penuh berikutnya dan menekan berulang menunda
-    // pengingat tanpa batas. LIFTED/ALERT_REFILL sengaja tidak dipulihkan:
-    // gelas sudah kembali di tatakan, memulihkan LIFTED mengevaluasi ulang
-    // kembalinya gelas (cheat palsu) dan memulihkan ALERT_REFILL bisa
-    // menyangkutkan gelas penuh di alarm kosong.
+    // Pulihkan state dan timer pra-tekanan agar tekan-lepas tidak menunda alarm.
+    // LIFTED dan ALERT_REFILL dilewati agar tidak memicu evaluasi cheat atau kosong palsu.
     if (this.preRefillState === 'TIMING' || this.preRefillState === 'ALERT_DRINK' || this.preRefillState === 'ALERT_CHEAT'){
       this.state = this.preRefillState;
       this.timerStart = this.preRefillTimerStart; this.cycleTarget = this.preRefillCycleTarget;
@@ -150,7 +133,6 @@ class CoasterFSM {
       this.startCycle(now);
     }
   }
-  // false = minum dibatalkan karena pola tekan-lepas
   recordDrink(g, w, now){
     if (this.refillReversed(w, now)){ this.cancelPendingRefill(now); return false; }
     this.refillPending = false;
@@ -176,13 +158,11 @@ class CoasterFSM {
       case 'TIMING':
         if (w < CFG.CUP_OFF){ this.liftStart = now; this.setState('LIFTED', w, now); break; }
         if (w - this.baseline >= CFG.REFILL){
-          // K1: dicatat pending sampai terbukti bertahan
           if (this.isStable(w, now)) this.registerRefill(this.baseline, w, now);
           break;
         }
         if (this.baseline - w >= CFG.MIN_DRINK){
           if (this.isStable(w, now)){
-            // K1: false = tekan-lepas, isi ulang pending dibatalkan
             if (this.recordDrink(this.baseline - w, w, now)){
               this.baseline = w;
               if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
@@ -212,7 +192,6 @@ class CoasterFSM {
         }
         if (this.baseline - w >= CFG.MIN_DRINK){
           if (this.isStable(w, now)){
-            // K1: false = tekan-lepas, minum tidak dicatat
             if (this.recordDrink(this.baseline - w, w, now)){
               this.baseline = w;
               if (w <= el){ this.missing = false; this.setState('ALERT_REFILL', w, now); }
@@ -229,16 +208,12 @@ class CoasterFSM {
         }
         if (w < CFG.CUP_OFF){ this.liftStart = now; this.setState('LIFTED', w, now); break; }
         if (w <= el){
-          // K3: gelas kosong teramati di state ini. Kalibrasi dapat memaksa
-          // state ini dengan gelas berisi (calibrationAlign); bila gelas lalu
-          // diangkat, flag itu basi dan menekan refillCount yang sah. Berat
-          // kosong = aman menghitung isi ulang lagi.
+          // Hapus flag kalibrasi begitu gelas benar-benar kosong teramati.
           this.calibrationAlign = false;
           break;
         }
         if (this.calibrationAlign){
-          // K3: air sudah ada sebelum kalibrasi — selaraskan baseline ke berat
-          // aktual, jangan hitung isi ulang.
+          // Selaraskan baseline ke isi gelas yang sudah ada sebelum kalibrasi.
           if (this.isStable(w, now)){
             this.calibrationAlign = false;
             if (w > el){ this.baseline = w; this.startCycle(now); this.setState('TIMING', w, now); }
@@ -265,7 +240,6 @@ class CoasterFSM {
       this.setState('TIMING', w, now); return;
     }
     if (dec >= CFG.MIN_DRINK){
-      // K1: false = tekan-lepas, isi ulang pending sudah dibatalkan
       this.recordDrink(dec, w, now);
       this.baseline = w; this.startCycle(now);
       this.setState('TIMING', w, now); return;
@@ -274,14 +248,11 @@ class CoasterFSM {
   }
 }
 
-// Presedensi muted harus sama di web dan aplikasi: config adalah perintah dari
-// pengguna, telemetry adalah echo perangkat yang baru berubah setelah ESP32 poll
-// config (15 s). Memakai telemetry lebih dulu membuat saklar membalik sendiri
-// beberapa detik setelah diklik. Dipisah jadi fungsi murni supaya bisa diuji.
+// Config menang atas telemetry karena telemetry adalah echo tertunda dari perangkat.
 function mutedFrom(cfg, tlm){
   if (cfg && typeof cfg.muted === 'boolean') return cfg.muted;
   if (tlm && typeof tlm.muted === 'boolean') return tlm.muted;
-  return null; // tidak ada sumber: pertahankan nilai yang sedang dipakai
+  return null;
 }
 
 if (typeof module !== 'undefined' && module.exports){

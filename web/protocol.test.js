@@ -1,7 +1,8 @@
 'use strict';
-// Uji paritas protokol ESP32 <-> Firebase RTDB <-> Web (web/protocol.js).
+// Uji paritas protokol cloud dan serial USB pada web/protocol.js.
 const assert = require('assert');
 const {
+  DEVICE_STALE_MS,
   canonicalState,
   stateBadgeLabel,
   parseCloudTelemetry,
@@ -12,10 +13,10 @@ const {
   computeEffectiveIntervalMs,
   applySseEvent,
   isNewTelemetryFrame,
+  isDeviceStale,
   computeLiveRemainingSec
 } = require('./protocol.js');
 
-// 1. Pemetaan state kanonik & label badge sesuai DESIGN.md §4 dan app/lib/telemetry.dart
 assert.strictEqual(canonicalState('ALERT_EMPTY_CUP'), 'ALERT_REFILL');
 assert.strictEqual(canonicalState('ALERT_MISSING_CUP'), 'ALERT_REFILL');
 assert.strictEqual(canonicalState('ALERT_DRINK'), 'ALERT_DRINK');
@@ -27,7 +28,6 @@ assert.strictEqual(stateBadgeLabel('ALERT_DRINK'), 'ALERT DRINK');
 assert.strictEqual(stateBadgeLabel('TIMING'), 'TIMING');
 console.log('[PASS] 1. Pemetaan canonicalState & stateBadgeLabel');
 
-// 2. Parsing telemetry.json sesuai key firmware cloud_sync.h:440-443
 const tlm = parseCloudTelemetry({
   weight_g: 345.5,
   water_ml: 215.5,
@@ -63,7 +63,6 @@ assert.strictEqual(tlm.standby, false);
 assert.strictEqual(tlm.hb, 42);
 console.log('[PASS] 2. parseCloudTelemetry membaca skema cloud_sync.h dengan akurat');
 
-// 3. Parsing & pembuatan PATCH config.json sesuai cloud_sync.h:471-472 & telemetry.dart:162
 const cfg = parseCloudConfig({
   timer_mode: 'DEMO',
   manual_interval_min: 25,
@@ -90,7 +89,6 @@ assert.deepStrictEqual(
 );
 console.log('[PASS] 3. parseCloudConfig & buildConfigPatch');
 
-// 4. Format perintah serial USB & parser baris telemetri serial
 assert.strictEqual(formatEmptyCupSerialCmd(145), 'e145.0\n',
   'kalibrasi numerik wajib memakai perintah e<gram>, bukan c<gram>');
 assert.strictEqual(formatEmptyCupSerialCmd(20), null);
@@ -109,7 +107,6 @@ assert.strictEqual(ser.muted, true);
 assert.strictEqual(ser.standby, false);
 console.log('[PASS] 4. formatEmptyCupSerialCmd & parseSerialLine');
 
-// 5. Interval efektif: mode Demo tidak boleh dikompensasi DHT11 (paritas SmartHydrationCoaster.ino:145)
 assert.strictEqual(
   computeEffectiveIntervalMs({ demo: true, autoDht: true, baseIntervalMin: 30, tempC: 34, humidityPct: 30 }),
   15000,
@@ -127,7 +124,6 @@ assert.strictEqual(
 );
 console.log('[PASS] 5. computeEffectiveIntervalMs menjaga paritas mode demo vs adaptif DHT11');
 
-// 6. applySseEvent: root put, sub-path put, root patch, sub-path patch
 const sse1 = applySseEvent(null, 'put', {
   path: '/',
   data: { weight_g: 300, muted: false, fsm_state: 'TIMING', remaining_sec: 15, hb: 1 }
@@ -158,7 +154,6 @@ const sse5 = applySseEvent({ meta: { a: 1 }, muted: false }, 'patch', {
 assert.deepStrictEqual(sse5.next.meta, { a: 1, b: 2 });
 console.log('[PASS] 6. applySseEvent menangani put & patch penuh maupun sub-path');
 
-// 7. isNewTelemetryFrame
 const f1 = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 10 });
 const f1Same = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 10 });
 const f2 = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, hb: 11 });
@@ -172,7 +167,6 @@ assert.strictEqual(isNewTelemetryFrame(z1, z1Same), false);
 assert.strictEqual(isNewTelemetryFrame(z1, z2), true);
 console.log('[PASS] 7. isNewTelemetryFrame membedakan frame baru vs poll ulang');
 
-// 8. computeLiveRemainingSec
 const timingTlm = parseCloudTelemetry({ fsm_state: 'TIMING', remaining_sec: 15, standby: false, hb: 1 });
 assert.strictEqual(computeLiveRemainingSec(timingTlm, 10000, 10000), 15);
 assert.strictEqual(computeLiveRemainingSec(timingTlm, 10000, 11000), 14);
@@ -207,4 +201,12 @@ assert.strictEqual(
   0
 );
 console.log('[PASS] 8. computeLiveRemainingSec menghitung mundur monotoik tanpa poll baru');
+
+assert.strictEqual(DEVICE_STALE_MS, 25000);
+assert.strictEqual(isDeviceStale(null, 50000), false);
+assert.strictEqual(isDeviceStale(NaN, 50000), false);
+assert.strictEqual(isDeviceStale(10000, 35000), false);
+assert.strictEqual(isDeviceStale(10000, 35001), true);
+assert.strictEqual(computeLiveRemainingSec(timingTlm, 10000, 11000, true), null);
+console.log('[PASS] 9. isDeviceStale dan pembekuan hitung mundur saat alat terputus');
 console.log('SEMUA LULUS (protocol.test.js)');

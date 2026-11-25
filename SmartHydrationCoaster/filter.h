@@ -1,7 +1,7 @@
 #ifndef FILTER_H
 #define FILTER_H
 #include <stddef.h>
-// Membutuhkan FILTER_WINDOW_SIZE dari config.h; config.h di-include sebelum berkas ini.
+// Membutuhkan FILTER_WINDOW_SIZE dari config.h.
 class MovingAverageFilter {
 public:
     void add(float sample) {

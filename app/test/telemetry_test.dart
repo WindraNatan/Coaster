@@ -1,5 +1,3 @@
-// Uji kontrak telemetry/config: parsing field cloud, pemetaan state turunan
-// (CLAUDE.md §3), dan formatter countdown. Jalankan: flutter test
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smart_coaster/telemetry.dart';
 
@@ -145,6 +143,7 @@ void main() {
     test('konstanta sesuai config.h', () {
       expect(kMinManualIntervalMin, 1);
       expect(kMaxManualIntervalMin, 180);
+      expect(kDeviceStaleSeconds, 25);
     });
   });
 }

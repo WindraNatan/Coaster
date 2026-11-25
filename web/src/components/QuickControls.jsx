@@ -3,6 +3,8 @@ import { RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 export default React.memo(function QuickControls({
   connMode = 'sim',
+  controlsDisabled = false,
+  deviceOffline = false,
   emptyCup = 130,
   onCalibrateCup,
   onTare,
@@ -72,9 +74,16 @@ export default React.memo(function QuickControls({
         <p className="text-xs text-ink-soft mt-0.5">
           Atur jadwal pengingat, target minum, dan gelas
         </p>
+        {deviceOffline && (
+          <p
+            className="mt-2.5 text-xs font-medium text-danger bg-danger-bg border border-danger-border rounded-xl px-3 py-2"
+            role="status"
+          >
+            Kendali alat dijeda saat tatakan tidak terhubung.
+          </p>
+        )}
       </div>
 
-      {/* Bagian 1: Jadwal pengingat & suara */}
       <div className="space-y-3 pb-4 border-b border-hairline">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-xs font-semibold text-ink-soft">
@@ -82,9 +91,10 @@ export default React.memo(function QuickControls({
           </h3>
           <button
             type="button"
+            disabled={controlsDisabled}
             onClick={onToggleMute}
             aria-pressed={buzzerMuted}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap transition-colors duration-150 ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ${
               buzzerMuted
                 ? 'bg-warn-bg text-warn border-warn-border'
                 : 'bg-ok-bg text-ok border-ok-border'
@@ -106,9 +116,10 @@ export default React.memo(function QuickControls({
         >
           <button
             type="button"
+            disabled={controlsDisabled}
             aria-pressed={activeTimerMode === 'AUTO_DHT'}
             onClick={() => onSelectTimerMode('AUTO_DHT')}
-            className={`min-w-0 px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium text-center leading-tight transition-colors duration-150 ${
+            className={`min-w-0 px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium text-center leading-tight disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ${
               activeTimerMode === 'AUTO_DHT'
                 ? 'bg-surface text-ink font-semibold border border-hairline'
                 : 'text-ink-soft hover:text-ink'
@@ -118,9 +129,10 @@ export default React.memo(function QuickControls({
           </button>
           <button
             type="button"
+            disabled={controlsDisabled}
             aria-pressed={activeTimerMode === 'MANUAL'}
             onClick={() => onSelectTimerMode('MANUAL')}
-            className={`min-w-0 px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium text-center leading-tight transition-colors duration-150 ${
+            className={`min-w-0 px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium text-center leading-tight disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ${
               activeTimerMode === 'MANUAL'
                 ? 'bg-surface text-ink font-semibold border border-hairline'
                 : 'text-ink-soft hover:text-ink'
@@ -130,9 +142,10 @@ export default React.memo(function QuickControls({
           </button>
           <button
             type="button"
+            disabled={controlsDisabled}
             aria-pressed={activeTimerMode === 'DEMO'}
             onClick={() => onSelectTimerMode('DEMO')}
-            className={`min-w-0 px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium text-center leading-tight transition-colors duration-150 ${
+            className={`min-w-0 px-1.5 sm:px-2 py-1.5 rounded-lg text-xs font-medium text-center leading-tight disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 ${
               activeTimerMode === 'DEMO'
                 ? 'bg-surface text-ink font-semibold border border-hairline'
                 : 'text-ink-soft hover:text-ink'
@@ -154,9 +167,10 @@ export default React.memo(function QuickControls({
                 min="1"
                 max="180"
                 step="1"
+                disabled={controlsDisabled}
                 value={inputBaseMin}
                 onChange={(e) => setInputBaseMin(e.target.value)}
-                className="w-full pr-12 pl-3 py-1.5 rounded-xl border border-control bg-surface text-xs font-mono tabular-nums text-ink"
+                className="w-full pr-12 pl-3 py-1.5 rounded-xl border border-control bg-surface disabled:opacity-50 disabled:cursor-not-allowed text-xs font-mono tabular-nums text-ink"
               />
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-muted font-medium pointer-events-none">
                 menit
@@ -164,7 +178,8 @@ export default React.memo(function QuickControls({
             </div>
             <button
               type="submit"
-              className="px-3.5 py-1.5 rounded-xl border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150"
+              disabled={controlsDisabled}
+              className="px-3.5 py-1.5 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150"
             >
               Atur
             </button>
@@ -181,7 +196,6 @@ export default React.memo(function QuickControls({
         )}
       </div>
 
-      {/* Bagian 2: Target harian & ukuran gelas */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-ink-soft">
           Target harian & gelas
@@ -228,9 +242,10 @@ export default React.memo(function QuickControls({
                 min="35"
                 max="300"
                 step="0.5"
+                disabled={controlsDisabled}
                 value={inputEmpty}
                 onChange={(e) => setInputEmpty(e.target.value)}
-                className="w-full pr-7 pl-3 py-1.5 rounded-xl border border-control bg-surface text-xs font-mono tabular-nums text-ink"
+                className="w-full pr-7 pl-3 py-1.5 rounded-xl border border-control bg-surface disabled:opacity-50 disabled:cursor-not-allowed text-xs font-mono tabular-nums text-ink"
               />
               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-muted font-medium pointer-events-none">
                 g
@@ -238,7 +253,8 @@ export default React.memo(function QuickControls({
             </div>
             <button
               type="submit"
-              className="px-3.5 py-1.5 rounded-xl border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150"
+              disabled={controlsDisabled}
+              className="px-3.5 py-1.5 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-colors duration-150"
             >
               Simpan
             </button>
@@ -249,7 +265,7 @@ export default React.memo(function QuickControls({
           <button
             type="button"
             onClick={onTare}
-            disabled={connMode === 'cloud'}
+            disabled={connMode === 'cloud' || controlsDisabled}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
           >
             <RotateCcw className="w-3.5 h-3.5 text-ink-soft" strokeWidth={1.75} aria-hidden="true" />
@@ -259,7 +275,7 @@ export default React.memo(function QuickControls({
           <button
             type="button"
             onClick={onResetDaily}
-            disabled={connMode === 'cloud'}
+            disabled={connMode === 'cloud' || controlsDisabled}
             className="w-full px-3 py-2 rounded-xl border border-danger-border bg-surface hover:bg-danger-bg disabled:opacity-50 disabled:cursor-not-allowed text-danger text-xs font-semibold whitespace-nowrap transition-colors duration-150"
           >
             Mulai hitungan baru
