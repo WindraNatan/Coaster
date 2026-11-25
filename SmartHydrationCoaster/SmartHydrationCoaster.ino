@@ -19,6 +19,7 @@ CoasterFSM fsm;
 uint32_t lastSampleTime = 0;
 uint32_t lastDhtTime = 0;
 uint32_t lastTelemetryTime = 0;
+uint32_t lastCloudSnapTime = 0;
 uint32_t lastActuatorToggle = 0;
 uint32_t lastBadWeightWarn = 0;
 bool alertModeActive = false;
@@ -392,6 +393,8 @@ void loop() {
         } else {
             Serial.println(F("[SESI] Sesi dimulai; alat aktif kembali dari IDLE."));
         }
+        lastCloudSnapTime = nowMs;
+        updateCloudSnapshot(filteredWeight, nowMs, roomTempC, roomHumidity, buzzerMuted);
     }
 
     bool weightValid = filteredWeight == filteredWeight &&
@@ -422,6 +425,10 @@ void loop() {
     if (nowMs - lastTelemetryTime >= 500) {
         lastTelemetryTime = nowMs;
         printTelemetry(filteredWeight, nowMs);
+    }
+
+    if (nowMs - lastCloudSnapTime >= SAMPLE_INTERVAL_MS) {
+        lastCloudSnapTime = nowMs;
         updateCloudSnapshot(filteredWeight, nowMs, roomTempC, roomHumidity, buzzerMuted);
     }
 }

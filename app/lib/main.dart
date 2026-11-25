@@ -918,12 +918,14 @@ class _DashboardScreenState extends State<DashboardScreen>
       await _ensureFreshSession();
       final res = await _client
           .patch(
-            Uri.parse('${_session.coasterUrl(_base)}/config.json${_session.suffix}'),
+            Uri.parse('${_session.coasterUrl(_base)}/config.json${_session.silentSuffix}'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(patch),
           )
           .timeout(const Duration(seconds: 8));
-      if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -936,7 +938,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       await _ensureFreshSession();
       final res = await _client
           .put(
-            Uri.parse('${_session.coasterUrl(_base)}/session.json${_session.suffix}'),
+            Uri.parse('${_session.coasterUrl(_base)}/session.json${_session.silentSuffix}'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'owner': ownerUid,
@@ -945,7 +947,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             }),
           )
           .timeout(const Duration(seconds: 8));
-      return res.statusCode == 200;
+      return res.statusCode >= 200 && res.statusCode < 300;
     } catch (_) {
       return false;
     }

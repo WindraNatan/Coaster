@@ -32,9 +32,10 @@ export function shcToken() {
   }
 }
 
-export function shcAuthSuffix() {
+export function shcAuthSuffix(silent = false) {
   const t = shcToken();
-  return t ? '?auth=' + encodeURIComponent(t) : '';
+  if (t) return '?auth=' + encodeURIComponent(t) + (silent ? '&print=silent' : '');
+  return silent ? '?print=silent' : '';
 }
 
 export function shcUid() {
@@ -228,7 +229,7 @@ export async function shcSetSession(base, ownerUid, active = true) {
   if (!(await shcEnsureToken())) return false;
   const url = shcCoasterUrl(base);
   if (!url || !shcToken()) return false;
-  const res = await fetch(url + '/session.json' + shcAuthSuffix(), {
+  const res = await fetch(url + '/session.json' + shcAuthSuffix(true), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ owner: ownerUid || '', active: !!active, at: Date.now() })

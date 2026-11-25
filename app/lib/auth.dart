@@ -87,6 +87,10 @@ class AuthSession {
 
   String get suffix => token.isEmpty ? '' : '?auth=${Uri.encodeComponent(token)}';
 
+  String get silentSuffix => token.isEmpty
+      ? '?print=silent'
+      : '?auth=${Uri.encodeComponent(token)}&print=silent';
+
   /// Node data milik alat. Kalau alat belum ditautkan, jatuh ke node akun supaya
   /// instalasi lama tetap berfungsi; [AuthSession.hasDevice] membedakan keduanya
   /// bagi pemanggil yang perlu tahu.

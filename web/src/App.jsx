@@ -152,6 +152,7 @@ export default function App() {
   const sseTlmRef = useRef(null);
   const sseCfgRef = useRef(null);
   const sseRetryTimerRef = useRef(null);
+  const initialPollTimerRef = useRef(null);
   const sseRetryAttemptRef = useRef(0);
   const streamGenRef = useRef(0);
   const lastStreamTlmAtRef = useRef(0);
@@ -266,7 +267,7 @@ export default function App() {
       getConnMode: () => connModeRef.current,
       getCoasterUrl: () => shcCoasterUrl(getCleanFbUrl()),
       ensureToken: () => shcEnsureToken(),
-      getAuthSuffix: () => shcAuthSuffix(),
+      getAuthSuffix: () => shcAuthSuffix(true),
       getTodayDelta: () =>
         todayDelta(
           Math.round(fsm.totalDrank),
@@ -297,13 +298,13 @@ export default function App() {
     lastStreamCfgAtRef.current = Date.now();
     try {
       if (!(await shcEnsureToken())) return false;
-      let res = await fetchWithTimeout(url + '/config.json' + shcAuthSuffix(), {
+      let res = await fetchWithTimeout(url + '/config.json' + shcAuthSuffix(true), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch)
       });
       if (res.status === 401 && (await shcEnsureToken(true))) {
-        res = await fetchWithTimeout(url + '/config.json' + shcAuthSuffix(), {
+        res = await fetchWithTimeout(url + '/config.json' + shcAuthSuffix(true), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patch)
@@ -460,6 +461,10 @@ export default function App() {
       clearTimeout(sseRetryTimerRef.current);
       sseRetryTimerRef.current = null;
     }
+    if (initialPollTimerRef.current) {
+      clearTimeout(initialPollTimerRef.current);
+      initialPollTimerRef.current = null;
+    }
     if (sseTlmRef.current) {
       sseTlmRef.current.close();
       sseTlmRef.current = null;
@@ -614,6 +619,7 @@ export default function App() {
         }, delayMs);
       };
 
+      let sseStarted = false;
       if (typeof window !== 'undefined' && typeof window.EventSource !== 'undefined') {
         try {
           const authSuffix = shcAuthSuffix();
@@ -626,6 +632,10 @@ export default function App() {
               const payload = JSON.parse(e.data);
               const { changed, next } = applySseEvent(cloudTlmCacheRef.current, type, payload);
               if (!changed) return;
+              if (initialPollTimerRef.current) {
+                clearTimeout(initialPollTimerRef.current);
+                initialPollTimerRef.current = null;
+              }
               sseRetryAttemptRef.current = 0;
               lastStreamTlmAtRef.current = Date.now();
               if (next) {
@@ -662,10 +672,25 @@ export default function App() {
           esCfg.addEventListener('cancel', () => scheduleReconnect(true));
           esCfg.onerror = () => scheduleReconnect(true);
           sseCfgRef.current = esCfg;
+          sseStarted = true;
         } catch (_) {}
       }
 
-      pollCloudOnce();
+      if (sseStarted) {
+        const openedAt = Date.now();
+        initialPollTimerRef.current = setTimeout(() => {
+          initialPollTimerRef.current = null;
+          if (
+            gen === streamGenRef.current &&
+            connModeRef.current === 'cloud' &&
+            lastStreamTlmAtRef.current < openedAt
+          ) {
+            pollCloudOnce();
+          }
+        }, 1800);
+      } else {
+        pollCloudOnce();
+      }
       fetchCloudDailyHistory(url);
     },
     [closeSseSockets, pollCloudOnce, fetchCloudDailyHistory, applyCloudTelemetry, applyCloudConfig]
@@ -682,7 +707,7 @@ export default function App() {
     const safetyPoll = setInterval(pollCloudOnce, 20000);
     const countdownTick = setInterval(() => {
       const tlm = cloudParsedTlmRef.current;
-      if (!tlm || tlm.standby || tlm.state !== 'TIMING') return;
+      if (!tlm || tlm.standby || simParamsRef.current.standby || tlm.state !== 'TIMING') return;
       const nextRem = computeLiveRemainingSec(tlm, cloudAnchorMsRef.current, Date.now());
       setRemSec((prev) => (prev === nextRem ? prev : nextRem));
     }, 1000);
@@ -980,22 +1005,32 @@ export default function App() {
     setSessionBusy(true);
     try {
       syncSessionHistoryIfActive();
+      const prevDemo = demo;
+      const prevAuto = autoDht;
+      const prevStandby = standby;
       const nextDemo = chosenMode === 'DEMO';
       const nextAuto = chosenMode === 'DEMO' ? autoDht : chosenMode === 'AUTO_DHT';
       setDemo(nextDemo);
       if (chosenMode !== 'DEMO') setAutoDht(nextAuto);
+      setStandby(false);
+      setSessionModalOpen(false);
 
       if (connMode === 'cloud') {
         const base = getCleanFbUrl();
-        await pushCloudConfig({ timerMode: chosenMode });
-        await shcSetSession(base, shcUid(), true);
+        const cfgOk = await pushCloudConfig({ timerMode: chosenMode });
+        const sessOk = await shcSetSession(base, shcUid(), true);
+        if (!cfgOk || !sessOk) {
+          setDemo(prevDemo);
+          setAutoDht(prevAuto);
+          setStandby(prevStandby);
+          addLog('Sesi', 'Gagal memulai sesi online. Periksa jaringan lalu coba lagi.');
+          return;
+        }
       } else if (connMode === 'usb') {
         sendSerialCmd('x\n');
       } else {
         fsm.toIdle(simClockRef.current);
       }
-      setStandby(false);
-      setSessionModalOpen(false);
       const label = chosenMode === 'DEMO' ? 'Demo 15 detik' : chosenMode === 'AUTO_DHT' ? 'Otomatis sesuai suhu' : 'Jadwal tetap';
       addLog('Sesi', `Sesi minum baru dimulai dengan mode ${label}.`);
     } finally {
@@ -1007,17 +1042,26 @@ export default function App() {
     setSessionBusy(true);
     try {
       syncSessionHistoryIfActive();
+      const prevStandby = standby;
+      const prevState = stateString;
+      setStandby(true);
+      setStateString('IDLE');
+      setRemSec(null);
       if (connMode === 'cloud') {
         const base = getCleanFbUrl();
-        await shcSetSession(base, shcUid(), false);
+        const ok = await shcSetSession(base, '', false);
+        if (!ok) {
+          setStandby(prevStandby);
+          setStateString(prevState);
+          addLog('Sesi', 'Gagal mengistirahatkan tatakan secara online.');
+          pollCloudOnce();
+          return;
+        }
       } else if (connMode === 'usb') {
         sendSerialCmd('z\n');
       } else {
         fsm.toIdle(simClockRef.current);
       }
-      setStandby(true);
-      setStateString('IDLE');
-      setRemSec(null);
       addLog('Sesi', 'Tatakan masuk ke mode istirahat.');
     } finally {
       setSessionBusy(false);

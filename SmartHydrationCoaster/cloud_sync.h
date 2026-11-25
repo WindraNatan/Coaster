@@ -42,6 +42,7 @@ struct CloudSnapshot {
 };
 
 static volatile bool cloudTaskRunning = false;
+static TaskHandle_t cloudTaskHandle = nullptr;
 static CloudSnapshot snap = {};
 static PendingCloudUpdate pendingCloud = {};
 static portMUX_TYPE snapMux = portMUX_INITIALIZER_UNLOCKED;
@@ -234,6 +235,11 @@ static String authSuffix() {
     return idToken.length() > 0 ? "?auth=" + idToken : String("");
 }
 
+static String authSuffixSilent() {
+    return idToken.length() > 0 ? "?auth=" + idToken + "&print=silent"
+                                : String("?print=silent");
+}
+
 extern bool demoMode;
 extern bool autoDhtTimerMode;
 extern bool buzzerMuted;
@@ -292,6 +298,7 @@ static void cloudTask(void*) {
     WiFiClientSecure tls;
     tls.setInsecure();
     tls.setTimeout(8);
+    tls.setNoDelay(true);
     // Satu HTTPClient untuk semua request RTDB. Destruktor HTTPClient memanggil
     // client->stop(), jadi objek ini harus hidup selama loop, bukan per blok.
     HTTPClient rtdb;
@@ -441,7 +448,7 @@ static void cloudTask(void*) {
             lastStandby = local.standby;
             lastPushMs = now;
 
-            String url = userNode() + "/telemetry.json" + authSuffix();
+            String url = userNode() + "/telemetry.json" + authSuffixSilent();
             if (rtdb.begin(tls, url)) {
                 rtdb.addHeader("Content-Type", "application/json");
                 char body[400];
@@ -455,8 +462,9 @@ static void cloudTask(void*) {
                     local.totalMl, local.drinkCnt, local.refillCnt, local.cheatCnt,
                     local.muted ? "true" : "false", local.standby ? "true" : "false",
                     (unsigned)(++hbCounter));
-                rtdb.PATCH((uint8_t*)body, strlen(body));
+                int pushCode = rtdb.PATCH((uint8_t*)body, strlen(body));
                 rtdb.end();
+                if (pushCode == 401) tokenExpiryMs = 0;
             }
         }
 
@@ -467,7 +475,7 @@ static void cloudTask(void*) {
         if (configDirty) {
             configDirty = false;
             bool patchOk = false;
-            String cfgUrl = userNode() + "/config.json" + authSuffix();
+            String cfgUrl = userNode() + "/config.json" + authSuffixSilent();
             if (rtdb.begin(tls, cfgUrl)) {
                 rtdb.addHeader("Content-Type", "application/json");
                 char cfgBody[160];
@@ -486,6 +494,7 @@ static void cloudTask(void*) {
                 int code = rtdb.PATCH((uint8_t*)cfgBody, strlen(cfgBody));
                 patchOk = (code >= 200 && code < 300);
                 rtdb.end();
+                if (code == 401) tokenExpiryMs = 0;
             }
             // PATCH gagal: pasang lagi flag-nya supaya nilai lokal tidak hilang
             // pada GET berikutnya, tetapi beri jeda agar jaringan mati tidak
@@ -503,77 +512,86 @@ static void cloudTask(void*) {
             }
         }
 
-        // 1 dtk: config adalah perintah (saklar mute, mode timer). Ini setengah
-        // dari anggaran latensi kontrol, dan dengan TLS yang dipakai ulang biayanya
-        // hanya satu GET kecil. Sebelumnya 15 dtk, lalu 3 dtk — keduanya masih
-        // terasa mati dibanding SSE di sisi klien.
+        // 1 dtk: config adalah perintah (saklar mute, mode timer). Dipisah dari
+        // GET session supaya dua poll tidak memblokir PATCH telemetry di iterasi yang sama.
+        bool polledConfigThisIter = false;
         if (now - lastPollMs >= 1000UL) {
             lastPollMs = now;
+            polledConfigThisIter = true;
             String url = userNode() + "/config.json" + authSuffix();
-            if (rtdb.begin(tls, url) && rtdb.GET() == 200) {
-                String cfg = rtdb.getString();
-                // Perintah serial lokal (q/m/i/e/c) bisa jatuh selama GET ini
-                // berjalan (1-3 dtk). Saat itu nilai cloud yang baru dibaca basi:
-                // lewati penerapan seluruhnya, biarkan flag terpasang supaya tick
-                // berikut mengunggah nilai lokal. Tanpa gerbang ini, setelan lokal
-                // tertimpa nilai lama dan NVS-nya ikut ditulis basi.
-                if (!configDirty) {
-                    CloudConfigState st = {
-                        local.demoMode,
-                        local.autoDhtTimerMode,
-                        local.muted,
-                        local.customBaseIntervalMs,
-                        local.emptyCupWeightG
-                    };
-                    if (parseCloudConfigJson(cfg.c_str(), st)) {
-                        portENTER_CRITICAL(&snapMux);
-                        if (!configDirty) {
-                            pendingCloud.cfg = st;
-                            pendingCloud.hasConfig = true;
-                        }
-                        portEXIT_CRITICAL(&snapMux);
-                    }
-                }
-            }
-            rtdb.end();
-
-            // Sesi bergiliran: web menulis session.owner. Begitu nilainya berbeda dari
-            // pemilik terakhir, antrekan reset statistik ke core 1 supaya orang
-            // berikutnya tidak mewarisi angka orang sebelumnya.
-            bool alertNow = strncmp(local.stateStr, "ALERT_", 6) == 0;
-            uint32_t sessPeriodMs = (local.standby || alertNow) ? 1000UL : 10000UL;
-            if (now - lastSessMs >= sessPeriodMs) {
-            lastSessMs = now;
-            String sessUrl = userNode() + "/session.json" + authSuffix();
-            if (rtdb.begin(tls, sessUrl) && rtdb.GET() == 200) {
-                String sess = rtdb.getString();
-                bool wantSleep = sess.indexOf("\"active\":false") >= 0;
-                portENTER_CRITICAL(&snapMux);
-                sessionGate.fromCloud(wantSleep);
-                portEXIT_CRITICAL(&snapMux);
-                int oi = sess.indexOf("\"owner\":\"");
-                if (oi >= 0) {
-                    oi += 9;
-                    int oe = sess.indexOf('"', oi);
-                    if (oe > oi) {
-                        String owner = sess.substring(oi, oe);
-                        if (owner.length() > 0 && strncmp(owner.c_str(), sessionOwner, sizeof(sessionOwner)) != 0) {
-                            strncpy(sessionOwner, owner.c_str(), sizeof(sessionOwner) - 1);
-                            sessionOwner[sizeof(sessionOwner) - 1] = '\0';
+            int cfgCode = 0;
+            if (rtdb.begin(tls, url)) {
+                cfgCode = rtdb.GET();
+                if (cfgCode == 200) {
+                    String cfg = rtdb.getString();
+                    // Perintah serial lokal (q/m/i/e/c) bisa jatuh selama GET ini
+                    // berjalan (1-3 dtk). Saat itu nilai cloud yang baru dibaca basi:
+                    // lewati penerapan seluruhnya, biarkan flag terpasang supaya tick
+                    // berikut mengunggah nilai lokal. Tanpa gerbang ini, setelan lokal
+                    // tertimpa nilai lama dan NVS-nya ikut ditulis basi.
+                    if (!configDirty) {
+                        CloudConfigState st = {
+                            local.demoMode,
+                            local.autoDhtTimerMode,
+                            local.muted,
+                            local.customBaseIntervalMs,
+                            local.emptyCupWeightG
+                        };
+                        if (parseCloudConfigJson(cfg.c_str(), st)) {
                             portENTER_CRITICAL(&snapMux);
-                            strncpy(pendingCloud.newSessionOwner, sessionOwner, sizeof(pendingCloud.newSessionOwner) - 1);
-                            pendingCloud.newSessionOwner[sizeof(pendingCloud.newSessionOwner) - 1] = '\0';
-                            pendingCloud.hasNewSessionOwner = true;
+                            if (!configDirty) {
+                                pendingCloud.cfg = st;
+                                pendingCloud.hasConfig = true;
+                            }
                             portEXIT_CRITICAL(&snapMux);
                         }
                     }
                 }
+                rtdb.end();
             }
-            rtdb.end();
-            }
+            if (cfgCode == 401) tokenExpiryMs = 0;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(250));
+        // Sesi bergiliran: cek tiap 2 dtk saat aktif (1 dtk saat standby/alert)
+        // pada iterasi yang tidak menarik config.json supaya respon Istirahatkan cepat.
+        bool alertNow = strncmp(local.stateStr, "ALERT_", 6) == 0;
+        uint32_t sessPeriodMs = (local.standby || alertNow) ? 1000UL : 2000UL;
+        if (!polledConfigThisIter && (now - lastSessMs >= sessPeriodMs)) {
+            lastSessMs = now;
+            String sessUrl = userNode() + "/session.json" + authSuffix();
+            int sessCode = 0;
+            if (rtdb.begin(tls, sessUrl)) {
+                sessCode = rtdb.GET();
+                if (sessCode == 200) {
+                    String sess = rtdb.getString();
+                    bool wantSleep = sess.indexOf("\"active\":false") >= 0;
+                    portENTER_CRITICAL(&snapMux);
+                    sessionGate.fromCloud(wantSleep);
+                    portEXIT_CRITICAL(&snapMux);
+                    int oi = sess.indexOf("\"owner\":\"");
+                    if (oi >= 0) {
+                        oi += 9;
+                        int oe = sess.indexOf('"', oi);
+                        if (oe > oi) {
+                            String owner = sess.substring(oi, oe);
+                            if (owner.length() > 0 && strncmp(owner.c_str(), sessionOwner, sizeof(sessionOwner)) != 0) {
+                                strncpy(sessionOwner, owner.c_str(), sizeof(sessionOwner) - 1);
+                                sessionOwner[sizeof(sessionOwner) - 1] = '\0';
+                                portENTER_CRITICAL(&snapMux);
+                                strncpy(pendingCloud.newSessionOwner, sessionOwner, sizeof(pendingCloud.newSessionOwner) - 1);
+                                pendingCloud.newSessionOwner[sizeof(pendingCloud.newSessionOwner) - 1] = '\0';
+                                pendingCloud.hasNewSessionOwner = true;
+                                portEXIT_CRITICAL(&snapMux);
+                            }
+                        }
+                    }
+                }
+                rtdb.end();
+            }
+            if (sessCode == 401) tokenExpiryMs = 0;
+        }
+
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
     }
 }
 
@@ -738,7 +756,7 @@ inline void startCloudIfNeeded() {
     }
     if (!cloudTaskRunning) {
         cloudTaskRunning = true;
-        xTaskCreatePinnedToCore(cloudTask, "cloudSync", 8192, nullptr, 1, nullptr, 0);
+        xTaskCreatePinnedToCore(cloudTask, "cloudSync", 8192, nullptr, 1, &cloudTaskHandle, 0);
     }
 }
 
@@ -814,18 +832,31 @@ inline void setCloudFirebaseUrl(const String& url) {
 
 inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bool muted) {
     if (!cloudTaskRunning) return;
+    const char* nextState = fsm.getStateString();
+    uint16_t dCnt = fsm.getDrinkCount();
+    uint16_t rCnt = fsm.getRefillCount();
+    uint16_t cCnt = fsm.getCheatCount();
+    bool wake = false;
     portENTER_CRITICAL(&snapMux);
+    wake = (strcmp(snap.stateStr, nextState) != 0) ||
+           fabsf(w - snap.weightG) > 0.5f ||
+           (snap.standby != sessionGate.sleep) ||
+           (snap.muted != muted) ||
+           (snap.drinkCnt != dCnt) ||
+           (snap.refillCnt != rCnt) ||
+           (snap.cheatCnt != cCnt);
     snap.weightG = w;
     snap.waterMl = fsm.getWaterVolumeMl(w);
     snap.tempC = tC;
     snap.humPct = hum;
-    strncpy(snap.stateStr, fsm.getStateString(), sizeof(snap.stateStr) - 1);
+    strncpy(snap.stateStr, nextState, sizeof(snap.stateStr) - 1);
+    snap.stateStr[sizeof(snap.stateStr) - 1] = '\0';
     snap.remSec = fsm.getRemainingTimeMs(nowMs) / 1000;
     snap.targetMin = fsm.getTargetIntervalMs() / 60000.0f;
     snap.totalMl = fsm.getTotalDrank();
-    snap.drinkCnt = fsm.getDrinkCount();
-    snap.refillCnt = fsm.getRefillCount();
-    snap.cheatCnt = fsm.getCheatCount();
+    snap.drinkCnt = dCnt;
+    snap.refillCnt = rCnt;
+    snap.cheatCnt = cCnt;
     snap.muted = muted;
     snap.standby = sessionGate.sleep;
     snap.demoMode = demoMode;
@@ -833,6 +864,9 @@ inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bo
     snap.customBaseIntervalMs = customBaseIntervalMs;
     snap.emptyCupWeightG = fsm.getEmptyCupWeight();
     portEXIT_CRITICAL(&snapMux);
+    if (wake && cloudTaskHandle != nullptr) {
+        xTaskNotifyGive(cloudTaskHandle);
+    }
 }
 #else
 inline void initCloudSync(const String&, const String&, const String&) {}

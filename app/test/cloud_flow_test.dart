@@ -890,4 +890,40 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('00:12'), findsOneWidget);
   });
+
+  testWidgets('PATCH config dan PUT session mengirim print=silent dan menerima HTTP 204',
+      (tester) async {
+    final writeUris = <Uri>[];
+    final client = MockClient((req) async {
+      if (req.method == 'PATCH' || req.method == 'PUT') {
+        writeUris.add(req.url);
+        return Response('', 204);
+      }
+      return Response(
+          req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200);
+    });
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    final buzzerSwitch = find.descendant(
+        of: find.ancestor(of: find.text('Buzzer'), matching: find.byType(Row)).first,
+        matching: find.byType(Switch));
+    await tester.ensureVisible(buzzerSwitch);
+    await tester.pump();
+    await tester.tap(buzzerSwitch);
+    await tester.pump();
+
+    final endBtn = find.text('Akhiri sesi');
+    await tester.ensureVisible(endBtn);
+    await tester.pump();
+    await tester.tap(endBtn);
+    await tester.pump();
+
+    expect(writeUris, hasLength(2));
+    expect(writeUris[0].path, endsWith('/config.json'));
+    expect(writeUris[0].queryParameters['print'], 'silent');
+    expect(writeUris[1].path, endsWith('/session.json'));
+    expect(writeUris[1].queryParameters['print'], 'silent');
+    expect(find.textContaining('Gagal'), findsNothing);
+  });
 }
