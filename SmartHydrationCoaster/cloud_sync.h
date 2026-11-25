@@ -298,7 +298,6 @@ static void cloudTask(void*) {
     WiFiClientSecure tls;
     tls.setInsecure();
     tls.setTimeout(8);
-    tls.setNoDelay(true);
     // Satu HTTPClient untuk semua request RTDB. Destruktor HTTPClient memanggil
     // client->stop(), jadi objek ini harus hidup selama loop, bukan per blok.
     HTTPClient rtdb;
@@ -308,6 +307,15 @@ static void cloudTask(void*) {
     uint16_t lastDrinkCnt = 0xFFFF, lastRefillCnt = 0xFFFF, lastCheatCnt = 0xFFFF;
     bool lastMuted = false;
     bool lastStandby = false;
+    bool noDelayApplied = false;
+    auto syncNoDelay = [&]() {
+        if (!tls.connected()) {
+            noDelayApplied = false;
+        } else if (!noDelayApplied) {
+            tls.setNoDelay(true);
+            noDelayApplied = true;
+        }
+    };
     uint16_t hbCounter = 0;
     uint8_t cfgPatchFails = 0;
 
@@ -343,6 +351,7 @@ static void cloudTask(void*) {
             vTaskDelay(pdMS_TO_TICKS(30000));
             continue;
         }
+        if (!tls.connected()) noDelayApplied = false;
 
         uint32_t now = millis();
         CloudSnapshot local;
@@ -464,6 +473,7 @@ static void cloudTask(void*) {
                     (unsigned)(++hbCounter));
                 int pushCode = rtdb.PATCH((uint8_t*)body, strlen(body));
                 rtdb.end();
+                syncNoDelay();
                 if (pushCode == 401) tokenExpiryMs = 0;
             }
         }
@@ -494,6 +504,7 @@ static void cloudTask(void*) {
                 int code = rtdb.PATCH((uint8_t*)cfgBody, strlen(cfgBody));
                 patchOk = (code >= 200 && code < 300);
                 rtdb.end();
+                syncNoDelay();
                 if (code == 401) tokenExpiryMs = 0;
             }
             // PATCH gagal: pasang lagi flag-nya supaya nilai lokal tidak hilang
@@ -548,6 +559,7 @@ static void cloudTask(void*) {
                     }
                 }
                 rtdb.end();
+                syncNoDelay();
             }
             if (cfgCode == 401) tokenExpiryMs = 0;
         }
@@ -587,6 +599,7 @@ static void cloudTask(void*) {
                     }
                 }
                 rtdb.end();
+                syncNoDelay();
             }
             if (sessCode == 401) tokenExpiryMs = 0;
         }
