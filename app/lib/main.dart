@@ -586,6 +586,8 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   final _intervalCtrl = TextEditingController();
   final _emptyCupCtrl = TextEditingController();
+  final _intervalFocus = FocusNode();
+  final _emptyCupFocus = FocusNode();
 
   int? _lastHb;
   DateTime? _lastHbAt;
@@ -758,7 +760,20 @@ class _DashboardScreenState extends State<DashboardScreen>
       ..clear()
       ..addAll(_cfgState.json);
     _cfgFrameAt = DateTime.now();
-    setState(() => _cfg = CloudConfig.fromJson(Map<String, dynamic>.from(_cfgCache)));
+    final nextCfg = CloudConfig.fromJson(Map<String, dynamic>.from(_cfgCache));
+    _syncConfigControllers(nextCfg);
+    setState(() => _cfg = nextCfg);
+  }
+
+  void _syncConfigControllers(CloudConfig c) {
+    if (!_intervalFocus.hasFocus) {
+      _intervalCtrl.text = c.manualIntervalMin.toString();
+    }
+    if (!_emptyCupFocus.hasFocus) {
+      _emptyCupCtrl.text = (c.emptyCupWeightG % 1 == 0)
+          ? c.emptyCupWeightG.toStringAsFixed(0)
+          : c.emptyCupWeightG.toStringAsFixed(1);
+    }
   }
 
   void _onStreamLine(String line) {
@@ -830,6 +845,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     _client.close();
     _intervalCtrl.dispose();
     _emptyCupCtrl.dispose();
+    _intervalFocus.dispose();
+    _emptyCupFocus.dispose();
     super.dispose();
   }
 
@@ -861,10 +878,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           if (cRaw is Map) {
             cMap = Map<String, dynamic>.from(cRaw);
             c = CloudConfig.fromJson(cMap);
-            if (_cfg == null) {
-              _intervalCtrl.text = c.manualIntervalMin.toString();
-              _emptyCupCtrl.text = c.emptyCupWeightG.toStringAsFixed(0);
-            }
+            _syncConfigControllers(c);
           }
         }
         if (!mounted) return;
@@ -1068,6 +1082,78 @@ class _DashboardScreenState extends State<DashboardScreen>
     _patchConfig({'empty_cup_weight_g': v});
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Berat gelas kosong (${v.toStringAsFixed(0)} g) disimpan.')),
+    );
+  }
+
+  void _useCurrentWeightAsEmptyCup() {
+    final w = _t?.weightG;
+    if (w == null || w < 35.0 || w > 300.0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Taruh gelas kosong 35 sampai 300 g terlebih dulu.')),
+      );
+      return;
+    }
+    final v = double.parse(w.toStringAsFixed(1));
+    _emptyCupCtrl.text = v.toStringAsFixed(1);
+    setState(() => _cfg = (_cfg ?? _defaultCfg).copyWith(emptyCupWeightG: v));
+    _patchConfig({'empty_cup_weight_g': v});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Berat gelas kosong (${v.toStringAsFixed(1)} g) disimpan.')),
+    );
+  }
+
+  Future<void> _confirmAndSendTare() async {
+    final w = _t?.weightG ?? 0.0;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ShcPalette.surface,
+        title: Text(
+          'Nolkan timbangan?',
+          style: shcSans(16, color: ShcPalette.ink, weight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pastikan tatakan benar-benar kosong tanpa gelas sebelum menolkan.',
+              style: shcSans(13, color: ShcPalette.inkSoft, height: 1.4),
+            ),
+            if (w >= kCupOnThresholdG) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: ShcPalette.dangerBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: ShcPalette.dangerBorder),
+                ),
+                child: Text(
+                  'Timbangan masih membaca ${w.toStringAsFixed(1)} g. Angkat gelas dulu agar titik nol tidak meleset.',
+                  style: shcSans(12, color: ShcPalette.danger, weight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Nolkan'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _patchConfig({'tare_at': _now().millisecondsSinceEpoch});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Perintah nolkan timbangan dikirim ke alat.')),
     );
   }
 
@@ -2152,6 +2238,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                             '${t.waterMl.toStringAsFixed(0)} ml',
                             style: shcMono(18, color: ShcPalette.accent, weight: FontWeight.w600),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Gelas kosong: ${(_cfg?.emptyCupWeightG ?? 130).toStringAsFixed(0)} g',
+                            style: shcSans(11, color: ShcPalette.muted),
+                          ),
                         ],
                       ),
                     ),
@@ -2564,6 +2655,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 Expanded(
                   child: TextField(
                     controller: _intervalCtrl,
+                    focusNode: _intervalFocus,
                     enabled: !stale,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.done,
@@ -2590,6 +2682,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               Expanded(
                 child: TextField(
                   controller: _emptyCupCtrl,
+                  focusNode: _emptyCupFocus,
                   enabled: !stale,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textInputAction: TextInputAction.done,
@@ -2608,6 +2701,20 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: const Text('Simpan'),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: (!stale && _t != null && _t!.weightG >= 35.0 && _t!.weightG <= 300.0)
+                  ? _useCurrentWeightAsEmptyCup
+                  : null,
+              child: Text(
+                (_t != null && _t!.weightG >= 35.0 && _t!.weightG <= 300.0)
+                    ? 'Pakai berat sekarang (${_t!.weightG.toStringAsFixed(1)} g)'
+                    : 'Pakai berat sekarang (taruh gelas 35-300 g)',
+              ),
+            ),
           ),
           if (_hintTargetLama != null) ...[
             const SizedBox(height: 10),
@@ -2660,8 +2767,17 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
           const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: stale ? null : _confirmAndSendTare,
+              icon: const Icon(Icons.restart_alt, size: 18),
+              label: const Text('Nolkan timbangan'),
+            ),
+          ),
+          const SizedBox(height: 10),
           Text(
-            'Kalibrasi bobot gelas kosong bisa langsung disimpan lewat cloud.',
+            'Nolkan timbangan hanya saat tatakan kosong tanpa gelas.',
             style: shcSans(11, color: ShcPalette.muted),
           ),
           if (widget.onClaimDevice != null) ...[

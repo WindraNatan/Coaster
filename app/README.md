@@ -12,14 +12,14 @@ Identitas visual mengikuti sistem desain Mineral Stoneware (`#F4F6F5`/`#FBFCFB`)
 - `lib/project_config.dart`: konfigurasi build `--dart-define` (`FB_URL`, `FB_API_KEY`) beserta nilai bawaan proyek.
 - `lib/reminder.dart`: penjadwalan pengingat minum lokal Android dengan foreground service audio.
 - `lib/theme.dart` & `lib/painters.dart`: token warna, tipografi, cincin hidrasi, dan visual gelas.
-- `test/`: 74 pengujian otomatis (`cloud_flow_test.dart`, `connect_screen_test.dart`, `claim_device_test.dart`, `telemetry_test.dart`, `auth_keystore_test.dart`).
+- `test/`: 77 pengujian otomatis (`cloud_flow_test.dart`, `connect_screen_test.dart`, `claim_device_test.dart`, `telemetry_test.dart`, `auth_keystore_test.dart`).
 
 ## Kontrol yang tersedia di app
 
 - Mulai/akhiri sesi (`session.json`), klaim kode tatakan 8 karakter, dan atur target harian.
 - Mode jadwal: `AUTO_DHT` (sesuai suhu ruangan), `MANUAL` (1-180 menit via `manual_interval_min`), dan `DEMO` (15 detik).
-- Suara pengingat (`muted`) serta bobot gelas kosong (`empty_cup_weight_g`).
-- Kalibrasi faktor timbangan (`c`), nolkan timbangan (`t`), dan reset statistik alat (`r`) hanya tersedia lewat koneksi USB Serial di Web PWA.
+- Suara pengingat (`muted`), bobot gelas kosong (`empty_cup_weight_g`, manual atau 1-klik dari berat sekarang), dan nolkan timbangan jarak jauh (`tare_at`).
+- Kalibrasi faktor timbangan (`c`) dan reset statistik alat (`r`) hanya tersedia lewat koneksi USB Serial di Web PWA.
 
 ## Menjalankan & Menguji
 
@@ -30,7 +30,7 @@ cd app
 flutter pub get
 flutter run          # jalankan di perangkat atau emulator aktif
 flutter analyze      # cek statis
-flutter test         # 74 pengujian unit dan widget
+flutter test         # 77 pengujian unit dan widget
 ```
 
 Untuk membangun dan mengunggah APK rilis ke GitHub Releases, jalankan dari root repo:

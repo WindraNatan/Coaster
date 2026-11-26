@@ -953,8 +953,17 @@ export default function App() {
     }
   };
 
-  const handleTare = () => {
-    if (connMode === 'cloud') return;
+  const handleTare = async () => {
+    if (connMode === 'cloud') {
+      const ok = await pushCloudConfig({ tareAt: Date.now() });
+      addLog(
+        'Pengaturan',
+        ok
+          ? 'Perintah menolkan timbangan dikirim ke tatakan online.'
+          : 'Gagal mengirim perintah menolkan timbangan secara online.'
+      );
+      return;
+    }
     if (connMode === 'usb') {
       sendSerialCmd('t\n');
       addLog('Pengaturan', 'Perintah menolkan timbangan dikirim lewat kabel USB.');
@@ -1573,6 +1582,7 @@ export default function App() {
               connMode={connMode}
               controlsDisabled={controlsDisabled}
               deviceOffline={deviceOffline}
+              weight={weight}
               emptyCup={emptyCup}
               onCalibrateCup={handleCalibrateCup}
               onTare={handleTare}

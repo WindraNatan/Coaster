@@ -121,12 +121,14 @@ class CloudConfig {
   final int manualIntervalMin;
   final double emptyCupWeightG;
   final bool muted;
+  final int? tareAt;
 
   const CloudConfig({
     required this.timerMode,
     required this.manualIntervalMin,
     required this.emptyCupWeightG,
     required this.muted,
+    this.tareAt,
   });
 
   factory CloudConfig.fromJson(Map<String, dynamic> j) => CloudConfig(
@@ -134,6 +136,7 @@ class CloudConfig {
         manualIntervalMin: _int(j['manual_interval_min'], 30),
         emptyCupWeightG: _num(j['empty_cup_weight_g'], 130.0),
         muted: j['muted'] == true,
+        tareAt: j['tare_at'] is num ? (j['tare_at'] as num).toInt() : null,
       );
 
   CloudConfig copyWith({
@@ -141,12 +144,14 @@ class CloudConfig {
     int? manualIntervalMin,
     double? emptyCupWeightG,
     bool? muted,
+    int? tareAt,
   }) =>
       CloudConfig(
         timerMode: timerMode ?? this.timerMode,
         manualIntervalMin: manualIntervalMin ?? this.manualIntervalMin,
         emptyCupWeightG: emptyCupWeightG ?? this.emptyCupWeightG,
         muted: muted ?? this.muted,
+        tareAt: tareAt ?? this.tareAt,
       );
 
   Map<String, dynamic> toPatch() => {
@@ -154,6 +159,7 @@ class CloudConfig {
         'manual_interval_min': manualIntervalMin,
         'empty_cup_weight_g': emptyCupWeightG,
         'muted': muted,
+        if (tareAt != null) 'tare_at': tareAt,
       };
 }
 

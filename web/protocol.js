@@ -76,6 +76,8 @@ function parseCloudConfig(c) {
     ? emptyG
     : null;
   const muted = typeof c.muted === 'boolean' ? c.muted : null;
+  const tareNum = Number(c.tare_at);
+  const tareAt = (Number.isFinite(tareNum) && tareNum >= 0) ? Math.trunc(tareNum) : null;
 
   return {
     timerMode: mode,
@@ -83,7 +85,8 @@ function parseCloudConfig(c) {
     autoDht: mode ? (mode === 'DEMO' ? null : mode === 'AUTO_DHT') : null,
     manualIntervalMin,
     emptyCupWeightG,
-    muted
+    muted,
+    tareAt
   };
 }
 
@@ -111,6 +114,12 @@ function buildConfigPatch(partial) {
   }
   if (typeof partial.muted === 'boolean') {
     out.muted = partial.muted;
+  }
+  if (partial.tareAt !== undefined) {
+    const ts = Math.trunc(Number(partial.tareAt));
+    if (Number.isFinite(ts) && ts > 0) {
+      out.tare_at = ts;
+    }
   }
   return out;
 }

@@ -102,6 +102,9 @@
             "muted": {
               ".validate": "newData.isBoolean()"
             },
+            "tare_at": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
             "$other": {
               ".validate": false
             }

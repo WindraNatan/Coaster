@@ -125,6 +125,16 @@ void main() {
       });
     });
 
+    test('tare_at terparsing dan disertakan di toPatch hanya saat ada', () {
+      final c = CloudConfig.fromJson({'tare_at': 1795671417133});
+      expect(c.tareAt, 1795671417133);
+      expect(c.toPatch()['tare_at'], 1795671417133);
+
+      final tanpa = CloudConfig.fromJson({});
+      expect(tanpa.tareAt, isNull);
+      expect(tanpa.toPatch().containsKey('tare_at'), isFalse);
+    });
+
     test('copyWith hanya mengubah field yang diminta', () {
       const c = CloudConfig(
           timerMode: 'AUTO_DHT',

@@ -55,7 +55,7 @@ python test_simulation.py                 # 24 skenario FSM (Python)
 cd web && npm test                        # fsm, daily-history, daily-cloud, protocol
 python tools/cad_check/verify_stackup.py  # 60 pemeriksaan tata letak sasis
 python tools/cek_aturan_berkas.py         # berkas aturan Firebase
-cd app && flutter analyze && flutter test # 74 tes Flutter
+cd app && flutter analyze && flutter test # 77 tes Flutter
 
 # Harness FSM (C++): dikompilasi dulu, binernya tidak disimpan di repo.
 cd tools/uji_fsm

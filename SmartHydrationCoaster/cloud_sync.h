@@ -35,6 +35,7 @@ struct CloudSnapshot {
     bool autoDhtTimerMode;
     uint32_t customBaseIntervalMs;
     float emptyCupWeightG;
+    uint64_t tareAt;
 };
 
 static volatile bool cloudTaskRunning = false;
@@ -221,6 +222,7 @@ extern bool buzzerMuted;
 extern volatile bool configDirty;
 extern uint32_t customBaseIntervalMs;
 extern CoasterFSM fsm;
+extern uint64_t lastHandledTareAt;
 
 
 // Kode klaim 8 karakter tanpa karakter mirip (0/O, 1/I/L), terpisah dari UID.
@@ -270,7 +272,7 @@ static void cloudTask(void*) {
     HTTPClient rtdb;
     rtdb.setReuse(true);
     rtdb.setTimeout(8000);
-    float lastWeightG = -999, lastTempC = -999, lastHumPct = -999, lastTargetMin = -1;
+    float lastWeightG = -999, lastWaterMl = -999, lastTempC = -999, lastHumPct = -999, lastTargetMin = -1;
     uint16_t lastDrinkCnt = 0xFFFF, lastRefillCnt = 0xFFFF, lastCheatCnt = 0xFFFF;
     bool lastMuted = false;
     bool lastStandby = false;
@@ -381,6 +383,7 @@ static void cloudTask(void*) {
         bool dataChanged =
             stateChanged ||
             fabsf(local.weightG - lastWeightG) > 0.5f ||
+            fabsf(local.waterMl - lastWaterMl) > 0.5f ||
             local.drinkCnt != lastDrinkCnt ||
             local.refillCnt != lastRefillCnt ||
             local.cheatCnt != lastCheatCnt ||
@@ -395,6 +398,7 @@ static void cloudTask(void*) {
             strncpy(lastState, local.stateStr, sizeof(lastState) - 1);
             lastState[sizeof(lastState) - 1] = '\0';
             lastWeightG = local.weightG;
+            lastWaterMl = local.waterMl;
             lastDrinkCnt = local.drinkCnt;
             lastRefillCnt = local.refillCnt;
             lastCheatCnt = local.cheatCnt;
@@ -483,7 +487,8 @@ static void cloudTask(void*) {
                             local.autoDhtTimerMode,
                             local.muted,
                             local.customBaseIntervalMs,
-                            local.emptyCupWeightG
+                            local.emptyCupWeightG,
+                            local.tareAt
                         };
                         if (parseCloudConfigJson(cfg.c_str(), st)) {
                             portENTER_CRITICAL(&snapMux);
@@ -726,6 +731,7 @@ inline void initCloudSync(const String& nvsSsid, const String& nvsPass, const St
     snap.autoDhtTimerMode = autoDhtTimerMode;
     snap.customBaseIntervalMs = customBaseIntervalMs;
     snap.emptyCupWeightG = fsm.getEmptyCupWeight();
+    snap.tareAt = lastHandledTareAt;
     snap.muted = buzzerMuted;
     startCloudIfNeeded();
 }
@@ -745,6 +751,7 @@ inline void setCloudFirebaseUrl(const String& url) {
 inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bool muted) {
     if (!cloudTaskRunning) return;
     const char* nextState = fsm.getStateString();
+    float waterMl = fsm.getWaterVolumeMl(w);
     uint16_t dCnt = fsm.getDrinkCount();
     uint16_t rCnt = fsm.getRefillCount();
     uint16_t cCnt = fsm.getCheatCount();
@@ -752,13 +759,14 @@ inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bo
     portENTER_CRITICAL(&snapMux);
     wake = (strcmp(snap.stateStr, nextState) != 0) ||
            fabsf(w - snap.weightG) > 0.5f ||
+           fabsf(waterMl - snap.waterMl) > 0.5f ||
            (snap.standby != sessionGate.sleep) ||
            (snap.muted != muted) ||
            (snap.drinkCnt != dCnt) ||
            (snap.refillCnt != rCnt) ||
            (snap.cheatCnt != cCnt);
     snap.weightG = w;
-    snap.waterMl = fsm.getWaterVolumeMl(w);
+    snap.waterMl = waterMl;
     snap.tempC = tC;
     snap.humPct = hum;
     strncpy(snap.stateStr, nextState, sizeof(snap.stateStr) - 1);
@@ -775,6 +783,7 @@ inline void updateCloudSnapshot(float w, uint32_t nowMs, float tC, float hum, bo
     snap.autoDhtTimerMode = autoDhtTimerMode;
     snap.customBaseIntervalMs = customBaseIntervalMs;
     snap.emptyCupWeightG = fsm.getEmptyCupWeight();
+    snap.tareAt = lastHandledTareAt;
     portEXIT_CRITICAL(&snapMux);
     if (wake && cloudTaskHandle != nullptr) {
         xTaskNotifyGive(cloudTaskHandle);

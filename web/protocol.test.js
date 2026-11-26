@@ -67,7 +67,8 @@ const cfg = parseCloudConfig({
   timer_mode: 'DEMO',
   manual_interval_min: 25,
   empty_cup_weight_g: 145.5,
-  muted: true
+  muted: true,
+  tare_at: 1795671417133
 });
 assert.strictEqual(cfg.timerMode, 'DEMO');
 assert.strictEqual(cfg.demo, true);
@@ -75,6 +76,7 @@ assert.strictEqual(cfg.autoDht, null, 'saat DEMO, autoDht dipertahankan (null)')
 assert.strictEqual(cfg.manualIntervalMin, 25);
 assert.strictEqual(cfg.emptyCupWeightG, 145.5);
 assert.strictEqual(cfg.muted, true);
+assert.strictEqual(cfg.tareAt, 1795671417133);
 
 assert.deepStrictEqual(buildConfigPatch({ muted: true }), { muted: true },
   'PATCH parsial hanya mengirim field yang diubah');
@@ -83,7 +85,11 @@ assert.deepStrictEqual(
   { timer_mode: 'MANUAL', manual_interval_min: 20, empty_cup_weight_g: 140.0 }
 );
 assert.deepStrictEqual(
-  buildConfigPatch({ manualIntervalMin: 999, emptyCupWeightG: 10 }),
+  buildConfigPatch({ tareAt: 1795671417133 }),
+  { tare_at: 1795671417133 }
+);
+assert.deepStrictEqual(
+  buildConfigPatch({ manualIntervalMin: 999, emptyCupWeightG: 10, tareAt: 0 }),
   {},
   'nilai di luar rentang [1,180] menit dan [35,300] gram ditolak'
 );

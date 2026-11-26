@@ -66,8 +66,8 @@ def main():
           telem.get('$other', {}).get('.validate') is False)
 
     cfg = pengguna.get('config', {})
-    perlu('config memvalidasi timer_mode, manual_interval_min, empty_cup_weight_g, muted, dan $other',
-          all(k in cfg for k in ('timer_mode', 'manual_interval_min', 'empty_cup_weight_g', 'muted')) and
+    perlu('config memvalidasi timer_mode, manual_interval_min, empty_cup_weight_g, muted, tare_at, dan $other',
+          all(k in cfg for k in ('timer_mode', 'manual_interval_min', 'empty_cup_weight_g', 'muted', 'tare_at')) and
           cfg.get('$other', {}).get('.validate') is False)
 
     daily_date = pengguna.get('daily', {}).get('$date', {})

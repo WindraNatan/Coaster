@@ -937,4 +937,95 @@ void main() {
         find.widgetWithText(FilledButton, 'Mulai sesi'));
     expect(recoveredStart.onPressed, isNotNull);
   });
+
+  testWidgets('config poll mengisi kolom berat gelas kosong dan tombol pakai berat sekarang mengirim PATCH',
+      (tester) async {
+    final patches = <Map<String, dynamic>>[];
+    final client = MockClient((req) async {
+      if (req.method == 'PATCH' && req.url.path.endsWith('/config.json')) {
+        patches.add(jsonDecode(req.body) as Map<String, dynamic>);
+        return Response('', 204);
+      }
+      if (req.url.path.endsWith('/telemetry.json')) {
+        return Response(
+            jsonEncode({
+              'weight_g': 182.4,
+              'water_ml': 0,
+              'temp_c': 27,
+              'humidity_pct': 60,
+              'remaining_sec': 0,
+              'target_interval_min': 30,
+              'total_ml': 0,
+              'drink_count': 0,
+              'refill_count': 0,
+              'cheat_count': 0,
+              'muted': false,
+              'standby': false,
+              'fsm_state': 'TIMING',
+              'hb': 2,
+            }),
+            200);
+      }
+      if (req.url.path.endsWith('/config.json')) {
+        return Response(
+            jsonEncode({
+              'timer_mode': 'AUTO_DHT',
+              'manual_interval_min': 30,
+              'empty_cup_weight_g': 165,
+              'muted': false,
+            }),
+            200);
+      }
+      return Response('{}', 200);
+    });
+
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    final emptyField = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Berat gelas kosong (g)'));
+    expect(emptyField.controller?.text, '165');
+
+    final useBtn = find.text('Pakai berat sekarang (182.4 g)');
+    expect(useBtn, findsOneWidget);
+    await tester.ensureVisible(useBtn);
+    await tester.pump();
+    await tester.tap(useBtn);
+    await tester.pump();
+
+    expect(patches, hasLength(1));
+    expect(patches.first['empty_cup_weight_g'], 182.4);
+  });
+
+  testWidgets('tombol Nolkan timbangan menampilkan konfirmasi lalu PATCH tare_at',
+      (tester) async {
+    final patches = <Map<String, dynamic>>[];
+    final client = MockClient((req) async {
+      if (req.method == 'PATCH' && req.url.path.endsWith('/config.json')) {
+        patches.add(jsonDecode(req.body) as Map<String, dynamic>);
+        return Response('', 204);
+      }
+      return Response(
+          req.url.path.endsWith('/config.json') ? _configBody : _telemetryBody, 200);
+    });
+
+    await _pumpApp(tester, client);
+    await tester.pump();
+
+    final tareBtn = find.text('Nolkan timbangan');
+    await tester.ensureVisible(tareBtn);
+    await tester.pump();
+    await tester.tap(tareBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nolkan timbangan?'), findsOneWidget);
+    expect(find.textContaining('Timbangan masih membaca 315.0 g'), findsOneWidget);
+
+    await tester.tap(find.text('Nolkan'));
+    await tester.pumpAndSettle();
+
+    expect(patches, hasLength(1));
+    expect(patches.first['tare_at'], isA<int>());
+    expect(patches.first['tare_at'] as int, greaterThan(0));
+  });
 }

@@ -34,6 +34,7 @@ bool buzzerMuted = false;
 volatile bool configDirty = false;
 bool standbyActive = false;
 uint32_t customBaseIntervalMs = BASE_INTERVAL_MS;
+uint64_t lastHandledTareAt = 0ULL;
 
 uint16_t prevDrinkCnt = 0;
 uint16_t prevRefillCnt = 0;
@@ -79,6 +80,7 @@ void loadFromNvs(String& outSsid, String& outPass, String& outUrl) {
     demoMode = prefs.getBool("demo", false);
     autoDhtTimerMode = prefs.getBool("autoDht", true);
     buzzerMuted = prefs.getBool("muted", false);
+    lastHandledTareAt = prefs.getULong64("lastTareAt", 0ULL);
 
     float totalMl = prefs.getFloat("totalMl", 0.0f);
     uint16_t dCnt = prefs.getUShort("drinkCnt", 0);
@@ -331,6 +333,20 @@ void loop() {
             updateAdaptiveInterval();
             saveConfigToNvs();
             configDirty = false;
+            if (cloudUpd.cfg.tareAt > 0ULL && cloudUpd.cfg.tareAt != lastHandledTareAt) {
+                lastHandledTareAt = cloudUpd.cfg.tareAt;
+#if defined(ESP32)
+                prefs.begin("shc", false);
+                prefs.putULong64("lastTareAt", lastHandledTareAt);
+                prefs.end();
+#endif
+                scale.tare(20);
+                weightFilter.reset();
+                fsm.toIdle(nowMs);
+                Serial.println(F("[CLOUD] Perintah tare dijalankan, timbangan dinolkan."));
+                lastCloudSnapTime = nowMs;
+                updateCloudSnapshot(0.0f, nowMs, roomTempC, roomHumidity, buzzerMuted);
+            }
         }
         if (cloudUpd.hasNewSessionOwner) {
 #if defined(ESP32)

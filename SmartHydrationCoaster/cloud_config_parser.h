@@ -13,6 +13,7 @@ struct CloudConfigState {
     bool buzzerMuted;
     uint32_t customBaseIntervalMs;
     float emptyCupWeightG;
+    uint64_t tareAt;
 };
 
 struct PendingCloudUpdate {
@@ -57,6 +58,17 @@ inline float parseCloudJsonFloat(const char* s, const char* key, float fallback,
     if (!v) return fallback;
     char* endPtr = nullptr;
     float val = strtof(v, &endPtr);
+    if (endPtr == v) return fallback;
+    if (foundOut) *foundOut = true;
+    return val;
+}
+
+inline uint64_t parseCloudJsonUint64(const char* s, const char* key, uint64_t fallback, bool* foundOut = nullptr) {
+    if (foundOut) *foundOut = false;
+    const char* v = findCloudJsonValue(s, key);
+    if (!v || *v < '0' || *v > '9') return fallback;
+    char* endPtr = nullptr;
+    uint64_t val = strtoull(v, &endPtr, 10);
     if (endPtr == v) return fallback;
     if (foundOut) *foundOut = true;
     return val;
@@ -116,6 +128,13 @@ inline bool parseCloudConfigJson(const char* json, CloudConfigState& st) {
     if (foundEmpty && emptyG >= CUP_ON_THRESHOLD && emptyG <= MAX_EMPTY_CUP_G &&
         fabsf(emptyG - st.emptyCupWeightG) > 0.5f) {
         st.emptyCupWeightG = emptyG;
+        changed = true;
+    }
+
+    bool foundTare = false;
+    uint64_t tareAt = parseCloudJsonUint64(json, "\"tare_at\"", 0ULL, &foundTare);
+    if (foundTare && tareAt > 0ULL && tareAt != st.tareAt) {
+        st.tareAt = tareAt;
         changed = true;
     }
 

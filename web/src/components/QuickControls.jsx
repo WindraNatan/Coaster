@@ -5,6 +5,7 @@ export default React.memo(function QuickControls({
   connMode = 'sim',
   controlsDisabled = false,
   deviceOffline = false,
+  weight = 0,
   emptyCup = 130,
   onCalibrateCup,
   onTare,
@@ -23,6 +24,7 @@ export default React.memo(function QuickControls({
   const [inputEmpty, setInputEmpty] = useState(emptyCup);
   const [inputBaseMin, setInputBaseMin] = useState(baseMin);
   const [inputGoal, setInputGoal] = useState(dailyGoal);
+  const [confirmTareOpen, setConfirmTareOpen] = useState(false);
 
   useEffect(() => {
     setInputEmpty(emptyCup);
@@ -36,7 +38,12 @@ export default React.memo(function QuickControls({
     setInputGoal(dailyGoal);
   }, [dailyGoal]);
 
+  useEffect(() => {
+    setConfirmTareOpen(false);
+  }, [connMode, controlsDisabled]);
+
   const activeTimerMode = demo ? 'DEMO' : (autoDht ? 'AUTO_DHT' : 'MANUAL');
+  const canUseCurrentWeight = !controlsDisabled && weight >= 35 && weight <= 300;
 
   const handleSaveEmpty = (e) => {
     e.preventDefault();
@@ -261,16 +268,70 @@ export default React.memo(function QuickControls({
           </div>
         </form>
 
+        <button
+          type="button"
+          onClick={() => onCalibrateCup(Number(weight.toFixed(1)))}
+          disabled={!canUseCurrentWeight}
+          className="w-full px-3 py-2 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold transition-colors duration-150"
+        >
+          {weight >= 35 && weight <= 300
+            ? `Pakai berat sekarang (${weight.toFixed(1)} g)`
+            : 'Pakai berat sekarang (taruh gelas 35-300 g)'}
+        </button>
+
         <div className="pt-1 space-y-2">
           <button
             type="button"
-            onClick={onTare}
-            disabled={connMode === 'cloud' || controlsDisabled}
+            onClick={() => {
+              if (connMode === 'cloud') {
+                setConfirmTareOpen((prev) => !prev);
+              } else {
+                onTare();
+              }
+            }}
+            disabled={controlsDisabled}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-control bg-surface hover:bg-subtle disabled:opacity-50 disabled:cursor-not-allowed text-ink text-xs font-semibold whitespace-nowrap transition-colors duration-150"
           >
             <RotateCcw className="w-3.5 h-3.5 text-ink-soft" strokeWidth={1.75} aria-hidden="true" />
             <span>Nolkan timbangan</span>
           </button>
+
+          {connMode === 'cloud' && confirmTareOpen && (
+            <div
+              className="p-3 rounded-xl border border-warn-border bg-warn-bg space-y-2"
+              role="region"
+              aria-label="Konfirmasi nolkan timbangan"
+            >
+              <p className="text-xs text-warn font-medium leading-relaxed">
+                Pastikan tatakan benar-benar kosong tanpa gelas sebelum menolkan.
+              </p>
+              {weight >= 35 && (
+                <p className="text-xs text-danger bg-danger-bg border border-danger-border rounded-lg px-2.5 py-1.5 font-medium">
+                  Timbangan masih membaca {weight.toFixed(1)} g. Angkat gelas dulu agar titik nol tidak meleset.
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={controlsDisabled}
+                  onClick={() => {
+                    setConfirmTareOpen(false);
+                    onTare();
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-ink text-xs font-semibold transition-colors duration-150"
+                >
+                  Ya, nolkan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmTareOpen(false)}
+                  className="px-3 py-1.5 rounded-lg border border-control bg-surface hover:bg-subtle text-ink text-xs font-semibold transition-colors duration-150"
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          )}
 
           <button
             type="button"
@@ -283,7 +344,7 @@ export default React.memo(function QuickControls({
 
           {connMode === 'cloud' && (
             <p className="text-xs text-ink-muted leading-relaxed">
-              Penyetelan nol timbangan tersedia lewat kabel USB. Untuk memulai catatan baru secara online, gunakan tombol Mulai sesi.
+              Untuk memulai catatan sesi baru secara online, gunakan tombol Mulai sesi.
             </p>
           )}
         </div>

@@ -228,7 +228,7 @@ int main(){
     }
 
     {
-        CloudConfigState st = { false, true, false, BASE_INTERVAL_MS, DEFAULT_EMPTY_CUP_G };
+        CloudConfigState st = { false, true, false, BASE_INTERVAL_MS, DEFAULT_EMPTY_CUP_G, 0ULL };
         bool c1 = parseCloudConfigJson("{\"muted\": true}", st);
         CHECK(c1 && st.buzzerMuted, "26a. config.json muted:true mengubah buzzerMuted");
         bool c1b = parseCloudConfigJson("{\"muted\":false}", st);
@@ -246,6 +246,18 @@ int main(){
         bool c4 = parseCloudConfigJson("{\"manual_interval_min\":999,\"empty_cup_weight_g\":10.0}", st);
         CHECK(!c4 && st.customBaseIntervalMs == 1500000u && fabsf(st.emptyCupWeightG - 150.0f) < 0.01f,
               "26e. nilai di luar rentang (interval 999, gelas 10g) ditolak tanpa mutasi");
+
+        bool c5 = parseCloudConfigJson("{\"tare_at\":1795671417133}", st);
+        CHECK(c5 && st.tareAt == 1795671417133ULL,
+              "26f. tare_at 13-digit terbaca sebagai token one-shot");
+
+        bool c6 = parseCloudConfigJson("{\"tare_at\":1795671417133}", st);
+        CHECK(!c6 && st.tareAt == 1795671417133ULL,
+              "26g. tare_at duplikat tidak memicu ulang");
+
+        bool c7 = parseCloudConfigJson("{\"tare_at\":-5}", st) || parseCloudConfigJson("{\"tare_at\":0}", st);
+        CHECK(!c7 && st.tareAt == 1795671417133ULL,
+              "26h. tare_at negatif atau nol ditolak tanpa mutasi");
     }
 
     printf("\n%s (%d gagal)\n", fails ? "ADA YANG GAGAL" : "SEMUA LULUS", fails);
